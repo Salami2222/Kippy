@@ -24,8 +24,17 @@ def main() -> int:
     find.add_argument("query", help="Food name substring")
     find.add_argument("--file", type=Path, required=True, help="Saved JSON file")
     find.add_argument("--hall", choices=list(HALLS), help="Restrict results to one hall")
+    web = sub.add_parser("web", help="Launch the local nutrition data inspector")
+    web.add_argument("--port", type=int, default=8000, help="Local port; defaults to 8000")
+    web.add_argument("--data-dir", type=Path, help="Directory of retrieved JSON files; defaults to this repository's data directory")
+    web.add_argument("--no-browser", action="store_true", help="Start the server without opening a browser tab")
 
     args = parser.parse_args()
+    if args.command == "web":
+        if not 1 <= args.port <= 65535:
+            parser.error("--port must be between 1 and 65535")
+        from .web import serve
+        return serve(args.port, args.data_dir, open_browser=not args.no_browser)
     if args.command == "fetch":
         try:
             menu_date = date.fromisoformat(args.date)

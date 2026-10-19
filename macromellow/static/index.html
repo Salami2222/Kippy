@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MacroMellow · UMD nutrition inspector</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">M</span><span>MacroMellow</span></div>
+      <span class="local-tag">Local prototype</span>
+    </header>
+
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">UMD DINING · NUTRITION DATA</p>
+        <h1 id="page-title">Find what’s on the menu.</h1>
+        <p class="intro">Search actual UMD dining hall menu data and inspect the nutrition label behind every result.</p>
+      </div>
+      <div class="source-card">
+        <span class="source-dot" aria-hidden="true"></span>
+        <div><strong>Official UMD source</strong><span>Values are per listed serving.</span></div>
+      </div>
+    </section>
+
+    <section class="controls" aria-label="Search and filters">
+      <div class="field search-field">
+        <label for="search">Food name</label>
+        <input id="search" type="search" placeholder="Try chicken, tofu, or French toast" autocomplete="off">
+      </div>
+      <div class="field hall-field">
+        <label for="hall">Dining hall</label>
+        <select id="hall">
+          <option value="">All dining halls</option>
+          <option value="Yahentamitsi (The Y)">The Y</option>
+          <option value="South Campus Dining Hall">South Campus</option>
+          <option value="251 North">251 North</option>
+        </select>
+      </div>
+      <div class="field date-field">
+        <label for="menu-date">Menu date</label>
+        <input id="menu-date" type="date">
+      </div>
+      <button id="refresh" class="refresh-button" type="button"><span class="button-spinner" aria-hidden="true"></span><span class="button-label">Refresh UMD data</span></button>
+    </section>
+
+    <div id="refresh-status" class="status" role="status" aria-live="polite" hidden></div>
+    <div id="load-errors" class="status error" role="alert" hidden></div>
+
+    <section class="results" aria-labelledby="results-title">
+      <div class="results-top">
+        <div>
+          <p class="eyebrow">SAVED MENU DATA</p>
+          <h2 id="results-title">Nutrition results</h2>
+          <p id="dataset-meta" class="dataset-meta">Loading saved UMD data…</p>
+        </div>
+        <span id="result-count" class="count-pill" aria-live="polite">—</span>
+      </div>
+      <div id="empty" class="empty-state" hidden></div>
+      <div id="table-wrap" class="table-wrap" hidden>
+        <table>
+          <thead><tr>
+            <th scope="col">Food</th><th scope="col">Dining hall</th><th scope="col">Serving</th>
+            <th scope="col">Calories</th><th scope="col">Protein</th><th scope="col">Carbs</th><th scope="col">Fat</th><th scope="col">Source</th>
+          </tr></thead>
+          <tbody id="food-rows"></tbody>
+        </table>
+      </div>
+      <div class="results-footer"><span id="shown-count"></span><button id="show-more" type="button" hidden>Show more results</button></div>
+    </section>
+
+    <footer>Nutrition can vary with ingredients and preparation. Check the linked UMD label for the source details.</footer>
+  </main>
+</body>
+</html>

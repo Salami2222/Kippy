@@ -1,8 +1,26 @@
 # MacroMellow: UMD nutrition retrieval prototype
 
-This Python prototype retrieves current menu items and per-serving nutrition facts from the [official UMD Dining nutrition site](https://nutrition.umd.edu/). It covers South Campus Dining Hall, Yahentamitsi (The Y), and 251 North. It does not estimate missing values.
+This Python prototype retrieves current menu items and per-serving nutrition facts from the [official UMD Dining nutrition site](https://nutrition.umd.edu/). It covers South Campus Dining Hall, Yahentamitsi (The Y), and 251 North. It does not estimate missing values. A small local web interface lets you inspect saved data.
 
-## Run
+## Launch the local web interface
+
+From the repository directory, use Python 3.10+:
+
+```bash
+python3 -m macromellow web
+```
+
+The server opens [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser. If a browser tab does not open automatically, visit that address yourself. Press `Ctrl+C` in the terminal to stop the server. The interface searches actual JSON files in this repository's `data/` directory. Data is not committed to Git, so a fresh clone starts empty: choose today's menu date and click **Refresh UMD data** to retrieve all three halls. A complete refresh can take several minutes; the page shows a loading state and any retrieval error. Existing saved data is kept if a refresh is incomplete. Dates outside UMD's current seven-day menu window cannot be refreshed, although older saved JSON can still be viewed.
+
+You can change the local port or data directory:
+
+```bash
+python3 -m macromellow web --port 8001 --data-dir /path/to/your/json-directory
+```
+
+Use `--no-browser` if you only want to start the server. The server listens on `127.0.0.1` only. It uses Python's standard library and needs no installation step.
+
+## Command line retrieval and search
 
 Python 3.10+ is required. There are no third-party Python dependencies.
 
