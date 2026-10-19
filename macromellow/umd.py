@@ -7,9 +7,10 @@ import re
 import time
 from datetime import date, datetime
 from html.parser import HTMLParser
+from http.client import HTTPException
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urljoin, urlparse
+from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 from urllib.robotparser import RobotFileParser
 from zoneinfo import ZoneInfo
@@ -221,6 +222,13 @@ def menu_url(hall_code: str, menu_date: date) -> str:
     return BASE_URL + "?" + urlencode({"locationNum": hall_code, "dtdate": f"{menu_date.month}/{menu_date.day}/{menu_date.year}"})
 
 
+def label_url(href: str) -> str:
+    """Encode UMD's occasionally unescaped serving multiplier in a label link."""
+    absolute = urlsplit(urljoin(BASE_URL, href))
+    query = urlencode(parse_qsl(absolute.query, keep_blank_values=True), quote_via=quote)
+    return urlunsplit((absolute.scheme, absolute.netloc, absolute.path, query, absolute.fragment))
+
+
 def retrieve(menu_date: date, hall_keys: list[str], delay: float = 0.25, max_labels: int | None = None) -> dict:
     robots = check_robots()
     timestamp = datetime.now(ZoneInfo("America/New_York")).isoformat(timespec="seconds")
@@ -243,14 +251,14 @@ def retrieve(menu_date: date, hall_keys: list[str], delay: float = 0.25, max_lab
             if not menu_items:
                 result["errors"].append({"dining_hall": hall_name, "url": source_menu_url, "error": "No menu items found for this date"})
                 continue
-        except (HTTPError, URLError, TimeoutError, ValueError, PermissionError) as exc:
+        except (HTTPError, URLError, HTTPException, TimeoutError, ValueError, PermissionError) as exc:
             result["errors"].append({"dining_hall": hall_name, "url": source_menu_url, "error": str(exc)})
             if isinstance(exc, PermissionError) or (isinstance(exc, HTTPError) and exc.code in (403, 429)):
                 break
             continue
 
         for item in menu_items:
-            label_url = urljoin(BASE_URL, item["href"])
+            source_label_url = label_url(item["href"])
             food = {
                 "dining_hall": hall_name,
                 "menu_date": menu_date.isoformat(),
@@ -263,29 +271,32 @@ def retrieve(menu_date: date, hall_keys: list[str], delay: float = 0.25, max_lab
                 "carbohydrates_g": None,
                 "fat_g": None,
                 "menu_url": source_menu_url,
-                "source_url": label_url,
+                "source_url": source_label_url if item["href"] else None,
                 "retrieved_at": None,
             }
             if not item["href"]:
                 result["errors"].append({"dining_hall": hall_name, "food": item["name"], "url": source_menu_url, "error": "Missing nutrition label link"})
-            elif label_url in label_cache:
-                cached = label_cache[label_url]
+            elif source_label_url in label_cache:
+                cached = label_cache[source_label_url]
                 if isinstance(cached, dict):
                     food.update(cached)
                 else:
-                    result["errors"].append({"dining_hall": hall_name, "food": item["name"], "url": label_url, "error": cached})
+                    result["errors"].append({"dining_hall": hall_name, "food": item["name"], "url": source_label_url, "error": cached})
             elif max_labels is not None and len(label_cache) >= max_labels:
-                result["errors"].append({"dining_hall": hall_name, "food": item["name"], "url": label_url, "error": "Label skipped by --max-labels"})
+                result["errors"].append({"dining_hall": hall_name, "food": item["name"], "url": source_label_url, "error": "Label skipped by --max-labels"})
             else:
                 try:
-                    values = parse_label(paced_fetch(label_url, 200_000))
-                    label_cache[label_url] = values
+                    label_html = paced_fetch(source_label_url, 200_000)
+                    values = parse_label(label_html)
+                    label_cache[source_label_url] = values
                     food.update(values)
                     if all(value is None for value in values.values()):
-                        result["errors"].append({"dining_hall": hall_name, "food": item["name"], "url": label_url, "error": "No nutrition fields found"})
-                except (HTTPError, URLError, TimeoutError, ValueError, PermissionError) as exc:
-                    label_cache[label_url] = str(exc)
-                    result["errors"].append({"dining_hall": hall_name, "food": item["name"], "url": label_url, "error": str(exc)})
+                        message = ("UMD states nutrition information is not available for this recipe"
+                                   if "labelnotavailable" in label_html.lower() else "No nutrition fields found")
+                        result["errors"].append({"dining_hall": hall_name, "food": item["name"], "url": source_label_url, "error": message})
+                except (HTTPError, URLError, HTTPException, TimeoutError, ValueError, PermissionError) as exc:
+                    label_cache[source_label_url] = str(exc)
+                    result["errors"].append({"dining_hall": hall_name, "food": item["name"], "url": source_label_url, "error": str(exc)})
                     if isinstance(exc, PermissionError) or (isinstance(exc, HTTPError) and exc.code in (403, 429)):
                         food["retrieved_at"] = datetime.now(ZoneInfo("America/New_York")).isoformat(timespec="seconds")
                         result["foods"].append(food)

@@ -1,6 +1,6 @@
 import unittest
 
-from macromellow.umd import parse_label, parse_menu
+from macromellow.umd import label_url, parse_label, parse_menu
 
 
 class UMDParsingTests(unittest.TestCase):
@@ -39,6 +39,12 @@ class UMDParsingTests(unittest.TestCase):
             "serving_size": None, "calories": None, "fat_g": None,
             "carbohydrates_g": None, "protein_g": None,
         })
+
+    def test_unescaped_space_in_official_label_link_is_encoded(self):
+        self.assertEqual(
+            label_url("label.aspx?RecNumAndPort=040065*4 1/2"),
+            "https://nutrition.umd.edu/label.aspx?RecNumAndPort=040065%2A4%201%2F2",
+        )
 
 
 if __name__ == "__main__":

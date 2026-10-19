@@ -7,9 +7,9 @@ This Python prototype retrieves current menu items and per-serving nutrition fac
 Python 3.10+ is required. There are no third-party Python dependencies.
 
 ```bash
-python3 -m macromellow fetch --date 2026-10-19 --hall all
-python3 -m macromellow search "chicken" --file data/umd-2026-10-19.json
-python3 -m macromellow search "tofu" --file data/umd-2026-10-19.json --hall yahentamitsi
+python3 -m macromellow fetch --hall all --output data/latest.json
+python3 -m macromellow search "chicken" --file data/latest.json
+python3 -m macromellow search "tofu" --file data/latest.json --hall yahentamitsi
 ```
 
 Omit `--date` to use today's date in Maryland. `--hall` accepts `all`, `south`, `yahentamitsi`, or `251-north`. The default output is `data/umd-YYYY-MM-DD.json`; use `--output` to choose another path. A full fetch follows all linked nutrition labels and may take several minutes. For a quick connectivity check, `--max-labels 3` fetches all requested menus but only three unique labels; skipped labels remain `null` and are recorded as errors. The command returns exit status 2 when the saved result has any errors, and 1 if it cannot start (for example, robots.txt cannot be checked).
@@ -36,5 +36,6 @@ The JSON file contains `schema_version`, `source`, `menu_date`, `retrieved_at`, 
 
 - UMD's date picker offers today plus six days. Other dates may have no menu; the program reports an empty menu instead of assuming one.
 - UMD notes that its nutritional analysis is approximate and can vary with ingredients and preparation. See an [official label](https://nutrition.umd.edu/label.aspx?RecNumAndPort=119370%2A1).
-- The parser depends on UMD's current HTML structure. If UMD changes it, fields may become `null` and appear in `errors`; verify against the site before using the data in another product.
+- The parser depends on UMD's current HTML structure. If UMD changes it, fields may become `null`; whole-label parsing failures appear in `errors`. Verify against the site before using the data in another product.
 - A partial file may be saved when a request fails. Inspect `errors` before treating a dataset as complete.
+- On October 19, 2026, six distinct official labels explicitly said nutrition information was unavailable. They account for 14 menu appearances with `null` nutrition fields in the saved test dataset.
