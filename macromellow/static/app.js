@@ -37,6 +37,13 @@ const els = {
     carbohydrates_g: document.getElementById('tracker-input-carbs'), fat_g: document.getElementById('tracker-input-fat')},
   trackerReset: document.getElementById('tracker-reset'),
   trackerStatus: document.getElementById('tracker-status'),
+  mealList: document.getElementById('meal-list'),
+  memoryList: document.getElementById('memory-list'),
+  memoryForm: document.getElementById('memory-form'),
+  memoryCategory: document.getElementById('memory-category'),
+  memoryKey: document.getElementById('memory-key'),
+  memoryValue: document.getElementById('memory-value'),
+  memoryCancel: document.getElementById('memory-cancel'),
   search: document.getElementById('search'),
   hall: document.getElementById('hall'),
   date: document.getElementById('menu-date'),
@@ -58,6 +65,7 @@ let polling = null;
 let wasRefreshing = false;
 let lastRefreshState = null;
 let conversationId = null;
+try { conversationId = window.localStorage.getItem('macromellow.conversation.v1'); } catch { /* Browser storage is optional. */ }
 let chatBusy = false;
 let trackerStorage;
 let trackerPersists = true;
@@ -71,6 +79,118 @@ try {
 }
 let tracker = MacroTracker.createTracker(trackerStorage);
 let trackerTimer = null;
+let backendEntries = [];
+let savedMemories = [];
+let memoryEditingId = null;
+
+async function stateRequest(path, payload) {
+  return request(path, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-MacroMellow-Request': 'state'},
+    body: JSON.stringify(payload)});
+}
+
+function applyBackendTracker(snapshot) {
+  backendEntries = snapshot.entries || [];
+  const stateJSON = JSON.stringify({date: snapshot.date, totals: snapshot.totals,
+    addedResultIds: snapshot.addedResultIds || []});
+  const goalsJSON = JSON.stringify(snapshot.goals);
+  if (trackerStorage.getItem(MacroTracker.KEY) !== stateJSON) trackerStorage.setItem(MacroTracker.KEY, stateJSON);
+  if (trackerStorage.getItem(MacroTracker.GOALS_KEY) !== goalsJSON) trackerStorage.setItem(MacroTracker.GOALS_KEY, goalsJSON);
+  tracker.reload();
+  tracker.reloadGoals();
+  renderTracker();
+  renderMealList();
+}
+
+async function loadBackendTracker() {
+  const migrationFlag = 'macromellow.backend-migrated.v1';
+  const previous = trackerStorage.getItem(MacroTracker.KEY);
+  if (!trackerStorage.getItem(migrationFlag) && previous) {
+    try {
+      const goalBackup = trackerStorage.getItem(MacroTracker.GOALS_KEY);
+      trackerStorage.setItem('macromellow.browser-backup.v1', JSON.stringify({state: JSON.parse(previous),
+        goals: goalBackup ? JSON.parse(goalBackup) : null}));
+      const migrationIdKey = 'macromellow.migration-id.v1';
+      let migrationId = trackerStorage.getItem(migrationIdKey);
+      if (!migrationId) {
+        migrationId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `browser-${Date.now()}`;
+        trackerStorage.setItem(migrationIdKey, migrationId);
+      }
+      const imported = await stateRequest('/api/tracker/import', {migration_key: migrationId,
+        state: JSON.parse(previous), goals: goalBackup ? JSON.parse(goalBackup) : {}});
+      if (imported.conflict) showToast('Backend totals already exist. Your earlier browser totals remain in a local backup for review.', 'info');
+      trackerStorage.setItem(migrationFlag, '1');
+      applyBackendTracker(imported.tracker);
+      return;
+    } catch (error) {
+      renderTracker();
+      trackerMessage(`Could not import saved browser totals: ${error.message}`, true);
+      return;
+    }
+  }
+  const snapshot = await request('/api/tracker');
+  applyBackendTracker(snapshot);
+  trackerStorage.setItem(migrationFlag, '1');
+}
+
+function renderMealList() {
+  els.mealList.replaceChildren();
+  const replaced = new Set(backendEntries.filter(entry => entry.kind === 'meal' && entry.status === 'active')
+    .map(entry => entry.replaces_id).filter(Boolean));
+  const meals = backendEntries.filter(entry => entry.kind === 'meal' && !replaced.has(entry.id));
+  if (!meals.length) {
+    const empty = document.createElement('p'); empty.className = 'list-empty';
+    empty.textContent = 'No meals logged today.'; els.mealList.append(empty); return;
+  }
+  for (const meal of meals) {
+    const item = document.createElement('div'); item.className = 'personal-item';
+    const title = document.createElement('strong'); title.textContent = meal.label;
+    const detail = document.createElement('span');
+    detail.textContent = `${meal.status === 'removed' ? 'Removed · ' : ''}${meal.cards.map(card => `${card.quantity} × ${card.name}`).join(', ')} · ${trackerNumber(meal.delta.calories)} kcal`;
+    const actions = document.createElement('div'); actions.className = 'personal-actions';
+    const remove = document.createElement('button'); remove.type = 'button';
+    remove.textContent = meal.status === 'active' ? 'Remove meal' : 'Restore meal';
+    remove.addEventListener('click', async () => {
+      try { const updated = await stateRequest(meal.status === 'active' ? '/api/meal/remove' : '/api/meal/restore',
+        {entry_id: meal.id});
+        applyBackendTracker(updated.tracker); trackerMessage(meal.status === 'active' ? 'Logged meal removed. You can restore it here.' : 'Logged meal restored.'); }
+      catch (error) { trackerMessage(error.message, true); }
+    });
+    actions.append(remove); item.append(title, detail);
+    for (const card of meal.cards) {
+      const url = safeSource(card.source_url);
+      if (!url) continue;
+      const link = document.createElement('a'); link.className = 'source-link'; link.href = url;
+      link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = `${card.name} · UMD label ↗`;
+      item.append(link);
+    }
+    item.append(actions); els.mealList.append(item);
+  }
+}
+
+function renderMemoryList() {
+  els.memoryList.replaceChildren();
+  if (!savedMemories.length) {
+    const empty = document.createElement('p'); empty.className = 'list-empty';
+    empty.textContent = 'No saved preferences or favorites.'; els.memoryList.append(empty); return;
+  }
+  for (const memory of savedMemories) {
+    const item = document.createElement('div'); item.className = 'personal-item';
+    const title = document.createElement('strong'); title.textContent = memory.key;
+    const detail = document.createElement('span'); detail.textContent = `${memory.category.replaceAll('_', ' ')} · ${memory.value}`;
+    const actions = document.createElement('div'); actions.className = 'personal-actions';
+    const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = 'Edit';
+    edit.addEventListener('click', () => { memoryEditingId = memory.id; els.memoryCategory.value = memory.category;
+      els.memoryKey.value = memory.key; els.memoryValue.value = memory.value;
+      els.memoryCancel.hidden = false; els.memoryKey.focus(); });
+    const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Delete';
+    remove.addEventListener('click', async () => {
+      try { const updated = await stateRequest('/api/memory/delete', {id: memory.id});
+        savedMemories = updated.memories; renderMemoryList(); trackerMessage('Personal memory deleted.'); }
+      catch (error) { trackerMessage(error.message, true); }
+    });
+    actions.append(edit, remove); item.append(title, detail, actions); els.memoryList.append(item);
+  }
+}
 
 function trackerMessage(message, error = false) {
   els.trackerStatus.textContent = message;
@@ -153,14 +273,14 @@ function renderTracker() {
   });
 }
 
-function checkTrackerDay() {
+async function checkTrackerDay() {
   try {
     if (tracker.checkDay()) {
-      renderTracker();
+      await loadBackendTracker();
       trackerMessage('New York day changed. Today’s totals started at zero.');
       scheduleTrackerRollover();
     }
-  } catch (error) { trackerMessage(`Could not save daily totals: ${error.message}`, true); }
+  } catch (error) { trackerMessage(`Could not load daily totals: ${error.message}`, true); }
 }
 
 function scheduleTrackerRollover() {
@@ -305,6 +425,12 @@ function appendDebug(bubble, debug) {
   requestSection.append(debugRow('Original request', debug.user_request));
   requestSection.append(debugRow('Model', debug.model));
   requestSection.append(debugRow('Action', debug.model_interpretation?.action));
+  requestSection.append(debugRow('Backend operation', debug.model_interpretation?.operation || 'lookup'));
+  if (debug.model_interpretation?.target) requestSection.append(debugRow('Target meal', debug.model_interpretation.target));
+  if (debug.model_interpretation?.label) requestSection.append(debugRow('Meal label', debug.model_interpretation.label));
+  if (debug.model_interpretation?.log_date) requestSection.append(debugRow('Log date', debug.model_interpretation.log_date));
+  if (debug.model_interpretation?.memory_key) requestSection.append(debugRow('Memory',
+    `${debug.model_interpretation.memory_category || 'unspecified'} · ${debug.model_interpretation.memory_key}: ${debug.model_interpretation.memory_value || ''}`));
   const extracted = debug.model_interpretation?.foods || [];
   if (extracted.length) extracted.forEach((food, index) => requestSection.append(debugRow(`Extracted food ${index + 1}`, debugFood(food))));
   else requestSection.append(debugRow('Extracted foods', 'None'));
@@ -346,6 +472,7 @@ function appendDebug(bubble, debug) {
     'No complete meal total because a match or menu is unresolved.'));
 
   const flags = debugSection(body, 'Accuracy notes and timing');
+  if (debug.tool_action) flags.append(debugRow('Tool result', JSON.stringify(debug.tool_action)));
   if (debug.warnings?.length) debug.warnings.forEach(note => {
     const warning = debugRow('Check', note);
     warning.classList.add('debug-alert');
@@ -399,6 +526,35 @@ function appendResult(data) {
     total.append(title, nutritionGrid(data.total));
     bubble.append(total);
   }
+  if (data.kind === 'tracker' && data.total) {
+    const total = document.createElement('div'); total.className = 'total-card';
+    const title = document.createElement('strong'); title.textContent = 'Today’s tracked totals';
+    total.append(title, nutritionGrid(data.total)); bubble.append(total);
+    const goals = document.createElement('p'); goals.className = 'result-note';
+    goals.textContent = `Goals: calories ${data.tracker.goals.calories ?? 'not set'} kcal · protein ${data.tracker.goals.protein_g ?? 'not set'} g · carbs ${data.tracker.goals.carbohydrates_g ?? 'not set'} g · fat ${data.tracker.goals.fat_g ?? 'not set'} g`;
+    bubble.append(goals);
+  }
+  if (data.kind === 'history' && data.meals?.length) {
+    for (const meal of data.meals.slice(0, 8)) {
+      const line = document.createElement('p'); line.className = 'result-note';
+      line.textContent = `${meal.date} · ${meal.label} · ${meal.status} · ${trackerNumber(meal.delta.calories)} kcal`;
+      bubble.append(line);
+      for (const card of meal.cards || []) {
+        const url = safeSource(card.source_url);
+        if (!url) continue;
+        const link = document.createElement('a'); link.className = 'source-link';
+        link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+        link.textContent = `${card.name} · UMD label ↗`; bubble.append(link);
+      }
+    }
+  }
+  if (data.kind === 'memories' && data.memories?.length) {
+    for (const memory of data.memories.slice(0, 12)) {
+      const line = document.createElement('p'); line.className = 'result-note';
+      line.textContent = `${memory.category.replaceAll('_', ' ')} · ${memory.key}: ${memory.value}`;
+      bubble.append(line);
+    }
+  }
   if (data.kind === 'result' && data.total) {
     const complete = MacroTracker.FIELDS.every(field => typeof data.total[field] === 'number' && Number.isFinite(data.total[field]));
     if (complete) {
@@ -406,14 +562,16 @@ function appendResult(data) {
       button.type = 'button';
       button.className = 'inline-button add-result-button';
       button.dataset.trackerDate = tracker.getState().date;
-      button.dataset.resultId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+      button.dataset.resultId = data.result_id || '';
       button.textContent = 'Add result to today';
-      button.addEventListener('click', () => {
+      button.addEventListener('click', async () => {
         try {
-          const update = tracker.addResult(button.dataset.resultId, data.total);
-          renderTracker();
+          button.disabled = true;
+          const update = await stateRequest('/api/tracker/add-result', {result_id: button.dataset.resultId,
+            conversation_id: conversationId});
+          applyBackendTracker(update.tracker);
           trackerMessage(update.added ? 'AI result added to today’s editable totals.' : 'This result was already added.');
-        } catch (error) { trackerMessage(error.message, true); }
+        } catch (error) { button.disabled = false; trackerMessage(error.message, true); }
       });
       bubble.append(button);
     } else {
@@ -481,6 +639,9 @@ async function sendMessage(message) {
       body: JSON.stringify({message: message.trim(), conversation_id: conversationId})
     });
     conversationId = data.conversation_id;
+    try { window.localStorage.setItem('macromellow.conversation.v1', conversationId); } catch { /* Optional. */ }
+    if (data.tracker) applyBackendTracker(data.tracker);
+    if (data.memories) { savedMemories = data.memories; renderMemoryList(); }
     appendResult(data);
   } catch (error) {
     const bubble = appendBubble('assistant', error.message);
@@ -669,7 +830,7 @@ async function syncStatus() {
 }
 
 els.search.addEventListener('input', () => { visibleLimit = 100; render(); });
-els.trackerForm.addEventListener('submit', event => {
+els.trackerForm.addEventListener('submit', async event => {
   event.preventDefault();
   const values = {};
   for (const field of MacroTracker.FIELDS) {
@@ -677,14 +838,14 @@ els.trackerForm.addEventListener('submit', event => {
     if (raw !== '') values[field] = Number(raw);
   }
   try {
-    tracker.adjust(els.trackerMode.value, values);
+    const updated = await stateRequest('/api/tracker/adjust', {mode: els.trackerMode.value, values});
     els.trackerForm.reset();
-    renderTracker();
+    applyBackendTracker(updated);
     trackerMessage('Today’s totals updated.');
   } catch (error) { trackerMessage(error.message, true); }
 });
 els.goalControls.addEventListener('toggle', () => { if (els.goalControls.open) populateGoalInputs(); });
-els.goalForm.addEventListener('submit', event => {
+els.goalForm.addEventListener('submit', async event => {
   event.preventDefault();
   const changes = {};
   for (const field of MacroTracker.FIELDS) {
@@ -692,29 +853,41 @@ els.goalForm.addEventListener('submit', event => {
     changes[field] = raw === '' ? null : Number(raw);
   }
   try {
-    tracker.setGoals(changes);
-    renderTracker();
+    const updated = await stateRequest('/api/tracker/goals', {goals: changes});
+    applyBackendTracker(updated);
     trackerMessage('Daily goals saved. They will stay when today’s totals reset.');
   } catch (error) { trackerMessage(error.message, true); }
 });
-els.trackerReset.addEventListener('click', () => {
+els.trackerReset.addEventListener('click', async () => {
   try {
-    tracker.reset();
+    const updated = await stateRequest('/api/tracker/reset', {});
     els.trackerForm.reset();
-    renderTracker();
+    applyBackendTracker(updated);
     trackerMessage('Today’s totals reset to zero.');
   } catch (error) { trackerMessage(error.message, true); }
 });
-window.addEventListener('storage', event => {
-  if (event.key === MacroTracker.KEY) { tracker.reload(); renderTracker(); trackerMessage('Totals updated in another tab.'); }
-  if (event.key === MacroTracker.GOALS_KEY) { tracker.reloadGoals(); renderTracker(); trackerMessage('Goals updated in another tab.'); }
+els.memoryCancel.addEventListener('click', () => { memoryEditingId = null; els.memoryForm.reset(); els.memoryCancel.hidden = true; });
+els.memoryForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  try {
+    const payload = {category: els.memoryCategory.value, key: els.memoryKey.value, value: els.memoryValue.value};
+    const updated = await stateRequest(memoryEditingId ? '/api/memory/update' : '/api/memory/save',
+      memoryEditingId ? {...payload, id: memoryEditingId} : payload);
+    savedMemories = updated.memories;
+    renderMemoryList();
+    memoryEditingId = null; els.memoryForm.reset(); els.memoryCancel.hidden = true;
+    trackerMessage('Personal memory saved. It does not log a meal.');
+  } catch (error) { trackerMessage(error.message, true); }
 });
-window.addEventListener('focus', () => { checkTrackerDay(); scheduleTrackerRollover(); });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkTrackerDay(); scheduleTrackerRollover(); } });
+window.addEventListener('storage', event => {
+  if (event.key === MacroTracker.KEY || event.key === MacroTracker.GOALS_KEY)
+    loadBackendTracker().catch(error => trackerMessage(error.message, true));
+});
+window.addEventListener('focus', () => { checkTrackerDay(); loadBackendTracker().catch(error => trackerMessage(error.message, true)); scheduleTrackerRollover(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkTrackerDay(); loadBackendTracker().catch(error => trackerMessage(error.message, true)); scheduleTrackerRollover(); } });
 setInterval(checkTrackerDay, 60000);
-renderTracker();
 scheduleTrackerRollover();
-if (!trackerPersists) trackerMessage('Browser storage is unavailable; totals will disappear when this tab closes.', true);
+if (!trackerPersists) trackerMessage('Browser storage is unavailable; SQLite still saves totals and goals locally.', true);
 els.chatTab.addEventListener('click', () => switchView('chat'));
 els.trackerTab.addEventListener('click', () => switchView('tracker'));
 els.browseTab.addEventListener('click', () => switchView('browse'));
@@ -722,6 +895,7 @@ els.trackerExpand.addEventListener('click', () => setTrackerExpanded(els.tracker
 els.newChat.addEventListener('click', () => {
   if (chatBusy) return;
   conversationId = null;
+  try { window.localStorage.removeItem('macromellow.conversation.v1'); } catch { /* Optional. */ }
   els.messages.replaceChildren();
   els.welcome.hidden = false;
   els.input.value = '';
@@ -755,7 +929,9 @@ els.refresh.addEventListener('click', async () => {
   }
 });
 
-(async () => { await Promise.all([loadDatasets(false), checkAI()]); await syncStatus(); })().catch(error => {
+(async () => { await Promise.all([loadDatasets(false), checkAI(), loadBackendTracker(),
+  request('/api/memories').then(data => { savedMemories = data.memories; renderMemoryList(); })]); await syncStatus(); })().catch(error => {
+  renderTracker();
   els.meta.textContent = 'Saved data could not be loaded.';
   els.count.textContent = '0 results';
   els.empty.innerHTML = '<strong>Could not load UMD data</strong>Check that the local server is running and the JSON files are readable.';

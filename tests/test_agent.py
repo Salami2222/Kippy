@@ -30,7 +30,7 @@ class StubOllama:
         self.outputs = iter(outputs)
         self.calls = []
 
-    def interpret(self, message, previous, today, dates, last_question=""):
+    def interpret(self, message, previous, today, dates, last_question="", recent=None, memories=None, recent_meals=None):
         self.calls.append((message, previous, last_question))
         return next(self.outputs)
 
@@ -121,7 +121,7 @@ class AgentTests(unittest.TestCase):
         class OfflineOllama:
             model = "qwen3.5:9b"
 
-            def interpret(self, *args):
+            def interpret(self, *args, **kwargs):
                 raise OllamaError("Cannot reach Ollama")
 
         with tempfile.TemporaryDirectory() as directory:
@@ -157,6 +157,9 @@ class AgentTests(unittest.TestCase):
                 payload = request.call_args.args[1]
                 self.assertEqual(payload["model"], "qwen3.5:9b")
                 self.assertEqual(payload["format"]["type"], "object")
+                self.assertIn("operation", payload["format"]["required"])
+                self.assertIn("log_date", payload["format"]["required"])
+                self.assertEqual(json.loads(payload["messages"][1]["content"])["today"], DAY)
                 self.assertFalse(payload["stream"])
 
 

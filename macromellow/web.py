@@ -1,8 +1,10 @@
-"""Dependency-free, localhost-only web inspector for saved UMD nutrition JSON."""
+"""Local web app for UMD data, the nutrition agent, and SQLite memory."""
 
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 import threading
 import time
 import uuid
@@ -14,8 +16,9 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from .umd import HALLS, retrieve, save_json
-from .agent import normalize_intent, resolve
+from .agent import normalize_intent, resolve, tokens
 from .ollama import OllamaClient, OllamaError
+from .memory import MemoryStore
 
 
 STATIC_DIR = Path(__file__).with_name("static")
@@ -36,7 +39,36 @@ class DataApp:
         self.ollama = ollama or OllamaClient()
         self.lock = threading.Lock()
         self.status = {"state": "idle", "message": "", "date": None}
-        self.conversations: dict[str, dict] = {}
+        self.memory = MemoryStore(data_dir / "macromellow.sqlite3")
+
+    def _meal_target(self, target: str, session: dict) -> dict | None:
+        active = [meal for meal in self.memory.meals(30) if meal["status"] == "active"]
+        if target and len(target) == 32:
+            return next((meal for meal in active if meal["id"] == target), None)
+        if target and target.lower() not in {"last", "latest", "recent", "this", "that"}:
+            matches = [meal for meal in active if target.lower() in meal["label"].lower()
+                       or any(target.lower() in card["name"].lower() for card in meal.get("cards", []))]
+            return matches[0] if len(matches) == 1 else None
+        return next((meal for meal in active if meal["id"] == session.get("last_logged_id")), None)
+
+    @staticmethod
+    def _safe_to_log(result: dict, requested: list[dict], day: str) -> str | None:
+        if result["kind"] != "result" or not result.get("cards") or not result.get("total"):
+            return "I need a reliable UMD match for every food before logging it."
+        if any(result["total"].get(key) is None for key in ("calories", "protein_g", "carbohydrates_g", "fat_g")):
+            return "UMD nutrition is incomplete, so I cannot add this meal automatically."
+        if any(card["menu_date"] != day for card in result["cards"]):
+            return "The saved menu date does not match the day you want to log. Which date should I use?"
+        for card, item in zip(result["cards"], requested):
+            if card["match"] != "official name":
+                return f"Please confirm the exact UMD food name for {item['name']} before I log it."
+            if not card.get("serving_size"):
+                return f"UMD has no serving size for {card['name']}; please clarify the portion."
+            if item["unit"].lower() not in {"serving", "servings"}:
+                if not (item["unit"].lower() in {"each", "item", "items"}
+                        and re.match(r"^1\s+(each|ea|item)\b", card["serving_size"].lower())):
+                    return f"How many listed UMD servings of {card['name']} should I log?"
+        return None
 
     def chat(self, message: str, conversation_id: str | None) -> dict:
         started = time.perf_counter()
@@ -44,48 +76,207 @@ class DataApp:
         debug = {"user_request": message, "model": getattr(self.ollama, "model", None),
                  "model_interpretation": None, "resolved_foods": [], "matches": [],
                  "calculations": [], "total": None, "warnings": [], "error": None,
-                 "ai_response_time_ms": None, "response_time_ms": None}
-        if not data["datasets"]:
+                 "ai_response_time_ms": None, "response_time_ms": None, "tool_action": None}
+        if not data["datasets"] and not re.search(r"\b(today|goal|logged|history|remember|favorite|preference|undo|remove|delete|meals|yesterday|macros|totals)\b", message, re.I):
             return {"conversation_id": None, "kind": "needs_data",
-                    "message": "No saved UMD menus yet. Open Browse UMD data and refresh today's menu first.",
+                    "message": "No saved UMD menus yet. Open UMD menu and refresh today's menu first.",
                     "cards": [], "total": None, "options": [],
                     "debug": {**debug, "warnings": ["No saved UMD menu data."],
                               "response_time_ms": round((time.perf_counter() - started) * 1000)}}
-        with self.lock:
-            session = self.conversations.get(conversation_id or "", {"foods": [], "question": ""}).copy()
+        session = self.memory.conversation(conversation_id)
+        if not conversation_id or not session.get("recent"):
+            conversation_id = uuid.uuid4().hex
+        memories = self.memory.memories()
+        recent_meals = [{"id": meal["id"], "date": meal["date"], "label": meal["label"],
+                         "foods": [card["name"] for card in meal.get("cards", [])]}
+                        for meal in self.memory.meals(12) if meal["status"] == "active"]
         stage = "Ollama interpretation"
         ai_started = time.perf_counter()
         try:
             try:
-                intent = self.ollama.interpret(message, session["foods"], data["today"],
-                                               [item["menu_date"] for item in data["datasets"]], session["question"])
+                intent = self.ollama.interpret(
+                    message, session["foods"], data["today"],
+                    [item["menu_date"] for item in data["datasets"]], session["question"],
+                    session.get("recent", []),
+                    [{"category": memory["category"], "key": memory["key"], "value": memory["value"]}
+                     for memory in memories], recent_meals)
             finally:
                 debug["ai_response_time_ms"] = round((time.perf_counter() - ai_started) * 1000)
-            debug["model_interpretation"] = {"action": intent["action"], "foods": intent["foods"],
-                                             "question": intent.get("question", "")}
+            operation = intent.get("operation", "lookup")
+            debug["model_interpretation"] = intent
             stage = "request validation"
-            if intent["action"] == "clarify":
+            requested = session["foods"]
+            if intent["action"] == "clarify" and operation not in {"today", "history", "recall"}:
                 result = {"kind": "clarification", "message": intent.get("question") or "Which food do you mean?",
                           "cards": [], "total": None, "options": []}
-                requested = session["foods"]
                 debug["warnings"].append("The model requested clarification before a UMD label could be selected.")
+            elif operation in {"today", "history", "recall"}:
+                if operation == "today":
+                    tracker = self.memory.tracker()
+                    result = {"kind": "tracker", "message": "Here are today's logged totals and goals.",
+                              "cards": [], "total": tracker["totals"], "tracker": tracker}
+                elif operation == "history":
+                    meals = self.memory.meals()
+                    requested_day = intent.get("log_date", "")
+                    if requested_day:
+                        try:
+                            requested_day = date.fromisoformat(requested_day).isoformat()
+                        except ValueError:
+                            raise ValueError("The requested meal history date is invalid.")
+                        meals = [meal for meal in meals if meal["date"] == requested_day]
+                    result = {"kind": "history", "message": f"I found {len(meals)} recent logged meal(s).",
+                              "cards": [], "total": None, "meals": meals}
+                else:
+                    result = {"kind": "memories", "message": f"I found {len(memories)} saved personal memory item(s).",
+                              "cards": [], "total": None, "memories": memories}
+                debug["tool_action"] = operation
+            elif operation in {"remember", "forget"}:
+                stage = "personal memory"
+                if operation == "remember" and re.search(r"\b(remember|save|favorite|prefer|like)\b", message, re.I):
+                    value = intent.get("memory_value", "")
+                    previous_result = self.memory.result(session.get("last_result_id")) if session.get("last_result_id") else None
+                    evidence = tokens(message)
+                    if previous_result:
+                        evidence |= tokens(" ".join(card["name"] for card in previous_result.get("cards", [])))
+                    if not isinstance(value, str) or not tokens(value) <= evidence:
+                        result = {"kind": "clarification", "message": "Please state the exact preference or favorite to remember.",
+                                  "cards": [], "total": None}
+                    else:
+                        saved = self.memory.save_memory(intent.get("memory_category", ""),
+                                                        intent.get("memory_key", ""), value)
+                        result = {"kind": "memory_saved", "message": f"Saved {saved['key']} as a personal memory. This does not log a meal.",
+                                  "cards": [], "total": None, "memories": self.memory.memories()}
+                        debug["tool_action"] = {"operation": "remember", "memory": saved}
+                elif operation == "forget" and re.search(r"\b(forget|delete|remove)\b", message, re.I):
+                    key = intent.get("memory_key", "").strip().lower()
+                    matches = [memory for memory in memories if memory["key"].lower() == key]
+                    if len(matches) != 1:
+                        result = {"kind": "clarification", "message": "Which saved memory should I delete? Use its exact name.",
+                                  "cards": [], "total": None}
+                    else:
+                        self.memory.delete_memory(matches[0]["id"])
+                        result = {"kind": "memory_deleted", "message": f"Deleted the saved memory {matches[0]['key']}.",
+                                  "cards": [], "total": None, "memories": self.memory.memories()}
+                        debug["tool_action"] = {"operation": "forget", "memory_id": matches[0]["id"]}
+                else:
+                    result = {"kind": "clarification", "message": "Please explicitly say what personal preference to save or forget.",
+                              "cards": [], "total": None}
+            elif operation in {"remove", "undo"}:
+                stage = "meal ledger"
+                if operation == "remove" and re.search(r"\b(remove|delete|undo|take out)\b", message, re.I):
+                    meal = self._meal_target(intent.get("target", ""), session)
+                    if meal:
+                        self.memory.remove_meal(meal["id"])
+                        session["last_action"] = {"type": "remove", "entry_id": meal["id"]}
+                        result = {"kind": "meal_removed", "message": f"Removed {meal['label']} from {meal['date']}. You can undo this.",
+                                  "cards": [], "total": None, "tracker": self.memory.tracker()}
+                        debug["tool_action"] = {"operation": "remove", "entry_id": meal["id"]}
+                    else:
+                        result = {"kind": "clarification", "message": "Which logged meal should I remove? Please give its name or ID.",
+                                  "cards": [], "total": None}
+                elif operation == "undo" and re.search(r"\b(undo|revert)\b", message, re.I):
+                    action = session.get("last_action")
+                    if action and action["type"] == "log":
+                        self.memory.remove_meal(action["entry_id"])
+                    elif action and action["type"] == "remove":
+                        self.memory.restore_meal(action["entry_id"])
+                    elif action and action["type"] == "edit":
+                        self.memory.remove_meal(action["new_id"])
+                        self.memory.restore_meal(action["old_id"])
+                    else:
+                        action = None
+                    if action:
+                        session["last_action"] = None
+                        result = {"kind": "undone", "message": "Undid the last meal change in this conversation.",
+                                  "cards": [], "total": None, "tracker": self.memory.tracker()}
+                        debug["tool_action"] = {"operation": "undo", "action": action}
+                    else:
+                        result = {"kind": "clarification", "message": "There is no recent meal change in this conversation to undo.",
+                                  "cards": [], "total": None}
+                else:
+                    result = {"kind": "clarification", "message": "Please explicitly say which meal to remove or undo.",
+                              "cards": [], "total": None}
+            elif operation in {"log", "edit"} and not intent["foods"] and not (operation == "log" and session.get("last_result_id")):
+                result = {"kind": "clarification", "message": "Which food and listed serving amount should I use for that meal?",
+                          "cards": [], "total": None}
             else:
-                requested = normalize_intent(intent, session["foods"])
-                stage = "UMD matching"
-                result = resolve(requested, data["datasets"], data["today"])
+                reuse = operation == "log" and not intent["foods"] and session.get("last_result_id")
+                if reuse:
+                    result = self.memory.result(session["last_result_id"])
+                    requested = session["foods"]
+                    if not result:
+                        raise ValueError("The earlier nutrition result is unavailable. Please describe the meal again.")
+                    result_id = session["last_result_id"]
+                    debug["matches"] = [{"requested": item, "status": "reused previous verified result",
+                                         "selected": card, "candidates": []}
+                                        for item, card in zip(requested, result["cards"])]
+                else:
+                    requested = normalize_intent(intent, session["foods"])
+                    stage = "UMD matching"
+                    result = resolve(requested, data["datasets"], data["today"])
+                    debug.update(result.pop("debug", {}))
+                if result["kind"] == "result":
+                    if not reuse:
+                        label = intent.get("label", "").strip()[:80] or "Meal"
+                        fingerprint = hashlib.sha256(json.dumps(requested, sort_keys=True).encode()).hexdigest()
+                        result_id = self.memory.save_result(conversation_id, {**result, "fingerprint": fingerprint, "label": label})
+                    result["result_id"] = result_id
+                    session["last_result_id"] = result_id
+                    if operation in {"log", "edit"}:
+                        stage = "meal ledger"
+                        pattern = (r"\b(add|log|track|record)\b" if operation == "log" else
+                                   r"\b(actually|change|correct|edit|replace|instead)\b|make that")
+                        explicit = re.search(pattern, message, re.I)
+                        target_meal = self._meal_target(intent.get("target", ""), session) if operation == "edit" else None
+                        day = intent.get("log_date") or (target_meal["date"] if target_meal else data["today"])
+                        try:
+                            day = date.fromisoformat(day).isoformat()
+                        except (TypeError, ValueError):
+                            raise ValueError("The log date is invalid. Please specify the date.")
+                        caution = self._safe_to_log(result, requested, day)
+                        if operation == "log" and not reuse and not all(
+                                tokens(item["name"]) <= tokens(message) for item in requested):
+                            caution = "Please name each food you want logged, or first ask me to verify the meal's UMD labels."
+                        if not explicit or caution:
+                            result = {"kind": "clarification", "message": caution or "Please explicitly ask me to log or correct this meal.",
+                                      "cards": result["cards"], "total": result["total"], "notes": result.get("notes", []),
+                                      "result_id": result_id}
+                        elif operation == "edit":
+                            meal = target_meal
+                            if not meal:
+                                result = {"kind": "clarification", "message": "Which logged meal should I correct? Please name it.",
+                                          "cards": result["cards"], "total": result["total"]}
+                            else:
+                                updated = self.memory.replace_meal(meal["id"], result_id)
+                                session["last_logged_id"] = updated["id"]
+                                session["last_action"] = {"type": "edit", "new_id": updated["id"], "old_id": meal["id"]}
+                                result["kind"] = "meal_edited"
+                                result["message"] = f"Corrected {updated['label']} on {updated['date']} using the linked UMD labels."
+                                result["tracker"] = self.memory.tracker()
+                                debug["tool_action"] = {"operation": "edit", "entry_id": updated["id"]}
+                        else:
+                            logged, added = self.memory.log_result(result_id, day, conversation_id,
+                                                                   allow_repeat=bool(re.search(r"\b(again|another)\b", message, re.I)),
+                                                                   label_override=intent.get("label") or None)
+                            if added:
+                                session["last_logged_id"] = logged["id"]
+                                session["last_action"] = {"type": "log", "entry_id": logged["id"]}
+                            result["kind"] = "meal_logged" if added else "already_logged"
+                            result["message"] = (f"Logged {logged['label']} for {day} using the linked UMD labels."
+                                                 if added else "That meal is already logged in this conversation; I did not add it twice.")
+                            result["tracker"] = self.memory.tracker()
+                            debug["tool_action"] = {"operation": "log", "entry_id": logged["id"], "added": added}
             debug["resolved_foods"] = requested
-            debug.update(result.pop("debug", {}))
         except (OllamaError, ValueError) as exc:
             debug["error"] = {"stage": stage, "message": str(exc)}
             debug["response_time_ms"] = round((time.perf_counter() - started) * 1000)
             raise ChatError(str(exc), debug, 503 if isinstance(exc, OllamaError) else 400) from exc
-        session = {"foods": requested, "question": result["message"] if result["kind"] == "clarification" else ""}
-        with self.lock:
-            if not conversation_id or conversation_id not in self.conversations:
-                conversation_id = uuid.uuid4().hex
-            self.conversations[conversation_id] = session
-            if len(self.conversations) > 100:
-                self.conversations.pop(next(iter(self.conversations)))
+        session["foods"] = requested
+        session["question"] = result["message"] if result["kind"] == "clarification" else ""
+        session["recent"] = (session.get("recent", []) + [
+            {"role": "user", "text": message[:250]},
+            {"role": "assistant", "text": result["message"][:250]}])[-6:]
+        self.memory.save_conversation(conversation_id, session)
         debug["response_time_ms"] = round((time.perf_counter() - started) * 1000)
         return {"conversation_id": conversation_id, **result, "debug": debug}
 
@@ -173,6 +364,12 @@ class AppHandler(BaseHTTPRequestHandler):
             self._json(200, self.app.get_status())
         elif route == "/api/ollama/status":
             self._json(200, self.app.ollama.status())
+        elif route == "/api/tracker":
+            self._json(200, self.app.memory.tracker())
+        elif route == "/api/meals":
+            self._json(200, {"meals": self.app.memory.meals()})
+        elif route == "/api/memories":
+            self._json(200, {"memories": self.app.memory.memories()})
         elif route in ("/", "/app.css", "/app.js", "/tracker.js"):
             filename = {"/": "index.html", "/app.css": "app.css", "/app.js": "app.js", "/tracker.js": "tracker.js"}[route]
             media_type = {"index.html": "text/html; charset=utf-8", "app.css": "text/css; charset=utf-8", "app.js": "text/javascript; charset=utf-8", "tracker.js": "text/javascript; charset=utf-8"}[filename]
@@ -185,12 +382,15 @@ class AppHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         route = urlsplit(self.path).path
-        if route not in ("/api/refresh", "/api/chat"):
+        actions = {"/api/tracker/adjust", "/api/tracker/goals", "/api/tracker/reset",
+                   "/api/tracker/import", "/api/tracker/add-result", "/api/meal/remove", "/api/meal/restore",
+                   "/api/memory/save", "/api/memory/update", "/api/memory/delete"}
+        if route not in ("/api/refresh", "/api/chat", *actions):
             self._json(404, {"error": "Not found"})
             return
         origin = self.headers.get("Origin")
         expected = f"http://{self.headers.get('Host')}"
-        kind = "refresh" if route == "/api/refresh" else "chat"
+        kind = "refresh" if route == "/api/refresh" else "chat" if route == "/api/chat" else "state"
         if (origin and origin != expected) or self.headers.get("X-MacroMellow-Request") != kind:
             self._json(403, {"error": "This action is only available from the local interface"})
             return
@@ -199,7 +399,7 @@ class AppHandler(BaseHTTPRequestHandler):
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if not 1 <= length <= (256 if kind == "refresh" else 4096):
+            if not 1 <= length <= (256 if kind == "refresh" else 12000):
                 raise ValueError("Invalid request size")
             payload = json.loads(self.rfile.read(length))
             if not isinstance(payload, dict):
@@ -215,6 +415,40 @@ class AppHandler(BaseHTTPRequestHandler):
                     self._json(200, self.app.chat(message.strip(), conversation_id))
                 except ChatError as exc:
                     self._json(exc.status, {"error": str(exc), "debug": exc.debug})
+                return
+            if route in actions:
+                try:
+                    if route == "/api/tracker/adjust":
+                        result = self.app.memory.adjust(payload["mode"], payload["values"])
+                    elif route == "/api/tracker/goals":
+                        result = self.app.memory.set_goals(payload["goals"])
+                    elif route == "/api/tracker/reset":
+                        result = self.app.memory.reset()
+                    elif route == "/api/tracker/import":
+                        result = self.app.memory.import_legacy(payload["migration_key"], payload["state"], payload["goals"])
+                    elif route == "/api/tracker/add-result":
+                        entry, added = self.app.memory.log_result(payload["result_id"], self.app.memory.today(),
+                                                                   payload.get("conversation_id"))
+                        result = {"entry": entry, "added": added, "tracker": self.app.memory.tracker()}
+                    elif route == "/api/meal/remove":
+                        entry = self.app.memory.remove_meal(payload["entry_id"])
+                        result = {"entry": entry, "tracker": self.app.memory.tracker()}
+                    elif route == "/api/meal/restore":
+                        entry = self.app.memory.restore_meal(payload["entry_id"])
+                        result = {"entry": entry, "tracker": self.app.memory.tracker()}
+                    elif route == "/api/memory/save":
+                        result = {"memory": self.app.memory.save_memory(payload["category"], payload["key"], payload["value"]),
+                                  "memories": self.app.memory.memories()}
+                    elif route == "/api/memory/update":
+                        result = {"memory": self.app.memory.update_memory(payload["id"], payload["category"],
+                                                                            payload["key"], payload["value"]),
+                                  "memories": self.app.memory.memories()}
+                    else:
+                        result = {"deleted": self.app.memory.delete_memory(payload["id"]),
+                                  "memories": self.app.memory.memories()}
+                    self._json(200, result)
+                except (ValueError, KeyError, TypeError) as exc:
+                    self._json(400, {"error": str(exc)})
                 return
             menu_date = date.fromisoformat(payload["date"])
         except (ValueError, TypeError, KeyError, json.JSONDecodeError):

@@ -17,6 +17,13 @@ INTENT_SCHEMA = {
     "type": "object",
     "properties": {
         "action": {"type": "string", "enum": ["set", "add", "clarify"]},
+        "operation": {"type": "string", "enum": ["lookup", "log", "edit", "remove", "undo", "today", "history", "remember", "recall", "forget"]},
+        "target": {"type": "string"},
+        "label": {"type": "string"},
+        "log_date": {"type": "string"},
+        "memory_category": {"type": "string"},
+        "memory_key": {"type": "string"},
+        "memory_value": {"type": "string"},
         "foods": {"type": "array", "items": {
             "type": "object",
             "properties": {
@@ -31,7 +38,8 @@ INTENT_SCHEMA = {
         }},
         "question": {"type": "string"},
     },
-    "required": ["action", "foods", "question"],
+    "required": ["action", "operation", "target", "label", "log_date", "memory_category",
+                 "memory_key", "memory_value", "foods", "question"],
     "additionalProperties": False,
 }
 
@@ -78,15 +86,23 @@ class OllamaClient:
             return {"connected": False, "model_available": False, "model": self.model, "message": str(exc)}
 
     def interpret(self, message: str, previous: list[dict], today: str, dates: list[str],
-                  last_question: str = "") -> dict:
+                  last_question: str = "", recent: list[dict] | None = None,
+                  memories: list[dict] | None = None, recent_meals: list[dict] | None = None) -> dict:
         state = self.status()
         if not state["model_available"]:
             raise OllamaError(state["message"])
         system = (
-            "Extract meal lookup intent only. Do not calculate nutrition or claim a UMD food exists. "
-            "Return only the requested JSON schema. Use 'set' for a new meal or a correction: then foods "
+            "Plan a safe nutrition assistant action. Do not calculate nutrition or claim a UMD food exists. "
+            "Return only the requested JSON schema. Operation is lookup for questions, log only when the user "
+            "explicitly asks to add/log a meal, edit for a correction to a logged meal, remove for deletion, "
+            "undo for reversing the last change, today for daily totals/goals, history for logged meals, "
+            "remember/recall/forget for personal memories. Never infer eating from a preference or question. "
+            "Use 'set' for a new meal or a correction: then foods "
             "must be the complete revised meal. Use 'add' only if the user explicitly adds food to the "
             "previous meal. Use 'clarify' only if the user's food request cannot be identified. "
+            "When the user says to log the immediately preceding verified lookup without new food details, "
+            "use operation log with an empty foods array so the backend reuses that result. "
+            "For a correction to an already logged meal use operation edit with the complete revised foods. "
             "Keep food names as the user's words; do not replace them with guessed menu names. "
             "Use numeric quantity; for vague amounts such as 'some' or 'a scoop', use 1 and preserve "
             "the phrase in unit. For omitted amounts use 1 and unit 'unspecified'. "
@@ -95,10 +111,18 @@ class OllamaClient:
             "Date must be YYYY-MM-DD or empty string. Resolve today/yesterday relative to the supplied "
             "Maryland date. Preserve known hall/date on follow-up corrections unless changed. "
             "For a nutrition question about a food, extract that food as a meal lookup. "
+            "Target identifies a logged meal by ID or name; use empty string when absent. "
+            "Label is a meal name such as lunch if stated, otherwise empty. Log_date is the intended date "
+            "YYYY-MM-DD or empty for today. Memory category is preference, favorite_restaurant, "
+            "favorite_meal, favorite_food, common_meal, or frequent_food. Memory fields are plain "
+            "user-provided text, never UMD facts. "
+            "Ask for clarification if a removal, edit, or log target is unclear. "
             "Never put numeric nutrition values in the response."
         )
         context = {"today": today, "saved_dates": dates, "previous_foods": previous,
-                   "last_clarification": last_question, "user_message": message}
+                   "last_clarification": last_question, "recent_interactions": (recent or [])[-6:],
+                   "personal_memories": (memories or [])[:30], "recent_logged_meals": (recent_meals or [])[:12],
+                   "user_message": message}
         response = self._request("/api/chat", {
             "model": self.model, "messages": [{"role": "system", "content": system},
                                           {"role": "user", "content": json.dumps(context)}],
@@ -108,6 +132,9 @@ class OllamaClient:
             intent = json.loads(response["message"]["content"])
             if intent.get("action") not in {"set", "add", "clarify"} or not isinstance(intent.get("foods"), list):
                 raise ValueError("Invalid intent")
+            if intent.get("operation", "lookup") not in {"lookup", "log", "edit", "remove", "undo", "today",
+                                                             "history", "remember", "recall", "forget"}:
+                raise ValueError("Invalid operation")
             if len(intent["foods"]) > 12:
                 raise ValueError("Too many foods")
             return intent

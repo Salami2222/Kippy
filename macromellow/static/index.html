@@ -69,6 +69,20 @@
             <div class="tracker-actions"><button class="tracker-apply" type="submit">Save goals</button></div>
           </form>
         </details>
+        <details class="tracker-controls" id="meal-controls">
+          <summary>Logged meals</summary>
+          <div id="meal-list" class="personal-list"><p class="list-empty">No meals logged today.</p></div>
+        </details>
+        <details class="tracker-controls" id="memory-controls">
+          <summary>Personal memory</summary>
+          <div id="memory-list" class="personal-list"><p class="list-empty">No saved preferences or favorites.</p></div>
+          <form id="memory-form" class="memory-form">
+            <label>Type<select id="memory-category"><option value="preference">Preference</option><option value="favorite_food">Favorite food</option><option value="favorite_meal">Favorite meal</option><option value="favorite_restaurant">Favorite restaurant</option><option value="common_meal">Common meal</option><option value="frequent_food">Frequently chosen food</option></select></label>
+            <label>Name<input id="memory-key" maxlength="100" placeholder="e.g. Usual breakfast" required></label>
+            <label>What to remember<textarea id="memory-value" rows="2" maxlength="500" placeholder="A personal preference, not a meal log" required></textarea></label>
+            <div class="tracker-actions"><button class="tracker-apply" type="submit">Save memory</button><button id="memory-cancel" class="quiet-button" type="button" hidden>Cancel edit</button></div>
+          </form>
+        </details>
         <p id="tracker-status" class="tracker-status" role="status" aria-live="polite"></p>
         <p class="tracker-disclaimer">User-adjustable estimates for testing. Tracked totals are not necessarily official UMD values.</p>
       </section>
