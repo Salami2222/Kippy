@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MacroMellow · UMD nutrition assistant</title>
+  <title>MacroMellow · AI nutrition assistant</title>
   <link rel="stylesheet" href="/app.css">
   <script src="/tracker.js" defer></script>
   <script src="/app.js" defer></script>
@@ -17,9 +17,9 @@
 
     <section class="hero" aria-labelledby="page-title">
       <div>
-        <p class="eyebrow">A CLEARER VIEW OF YOUR DAY</p>
-        <h1 id="page-title">Make sense of every meal.</h1>
-        <p class="intro">Ask about UMD dining, check the original nutrition label, and keep your daily totals in view.</p>
+        <p class="eyebrow">NUTRITION, MADE SIMPLE</p>
+        <h1 id="page-title">Your AI-powered nutrition assistant.</h1>
+        <p class="intro">Tell MacroMellow what you ate. We’ll help with the macros. UMD dining is the first supported source.</p>
       </div>
       <div id="ai-status" class="source-card" role="status" aria-live="polite">
         <span class="source-dot" aria-hidden="true"></span>
@@ -28,13 +28,13 @@
     </section>
 
     <nav class="tabs" aria-label="Views">
-      <button id="chat-tab" class="tab active" type="button" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H7l-3 2v-7.5a7.5 7.5 0 1 1 16-2Z"/></svg> Assistant</button>
+      <button id="chat-tab" class="tab active" type="button" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H7l-3 2v-7.5a7.5 7.5 0 1 1 16-2Z"/></svg> Chat</button>
       <button id="tracker-tab" class="tab" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V9m8 9V5m8 13v-7M2 20h20"/></svg> Daily macros</button>
-      <button id="browse-tab" class="tab" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h8M8 17h5"/></svg> UMD menu</button>
+      <button id="browse-tab" class="tab" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h8M8 17h5"/></svg> Food data</button>
     </nav>
 
     <section id="chat-view" class="chat-view" aria-label="Nutrition assistant">
-      <div class="chat-top"><div><p class="eyebrow">YOUR ASSISTANT</p><h2>Ask about a meal</h2></div><button id="new-chat" class="quiet-button" type="button"><span aria-hidden="true">＋</span> New chat</button></div>
+      <div class="chat-top"><div><p class="eyebrow">NUTRITION CHAT</p><h2>Ask about a meal</h2></div><button id="new-chat" class="quiet-button" type="button"><span aria-hidden="true">＋</span> New chat</button></div>
       <section class="daily-tracker is-collapsed" aria-labelledby="tracker-title">
         <div class="tracker-heading"><div><p class="eyebrow">DAILY OVERVIEW</p><h3 id="tracker-title">Today’s macros <span id="tracker-date"></span></h3></div><div class="tracker-heading-actions"><span class="tracker-timezone">Resets midnight ET</span><button id="tracker-expand" class="tracker-expand" type="button" aria-expanded="false" aria-controls="tracker-totals tracker-controls goal-controls">Show details <span aria-hidden="true">⌄</span></button></div></div>
         <div id="tracker-totals" class="tracker-totals" aria-live="polite">
@@ -90,8 +90,8 @@
       <div id="chat-welcome" class="chat-welcome">
         <div class="welcome-icon" aria-hidden="true">M</div>
         <p class="welcome-kicker">START WITH A MEAL</p>
-        <h3>What did you have today?</h3>
-        <p>Describe a food, amount, and dining hall. I’ll trace the nutrition back to its UMD label.</p>
+        <h3>What did you eat today?</h3>
+        <p>Ask about a meal or log it with a message. Official lookups currently cover UMD dining.</p>
         <div class="prompts">
           <button type="button" class="prompt" data-prompt="I had 2 servings of grilled chicken breast at 251 North.">2 servings of grilled chicken breast at 251 North</button>
           <button type="button" class="prompt" data-prompt="I had rice and chicken at South Campus.">Rice and chicken at South Campus</button>
@@ -137,7 +137,7 @@
       <div class="results-top">
         <div>
           <p class="eyebrow">OFFICIAL UMD DATA</p>
-          <h2 id="results-title">Explore the menu</h2>
+          <h2 id="results-title">Explore UMD dining</h2>
           <p id="dataset-meta" class="dataset-meta">Loading saved UMD data…</p>
         </div>
         <span id="result-count" class="count-pill" aria-live="polite">—</span>
@@ -156,7 +156,7 @@
     </section>
     </section>
 
-    <footer>Nutrition can vary with ingredients and preparation. Check the linked UMD label for the source details.</footer>
+    <footer>Current nutrition source: UMD dining. Check each linked label for official serving details.</footer>
   </main>
   <div id="toast-stack" class="toast-stack" role="status" aria-live="polite" aria-atomic="false"></div>
 </body>
