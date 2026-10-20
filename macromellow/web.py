@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import uuid
 import webbrowser
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -12,6 +13,8 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from .umd import HALLS, retrieve, save_json
+from .agent import normalize_intent, resolve
+from .ollama import OllamaClient, OllamaError
 
 
 STATIC_DIR = Path(__file__).with_name("static")
@@ -20,10 +23,38 @@ UNAVAILABLE_MESSAGE = "UMD states nutrition information is not available for thi
 
 
 class DataApp:
-    def __init__(self, data_dir: Path) -> None:
+    def __init__(self, data_dir: Path, ollama: OllamaClient | None = None) -> None:
         self.data_dir = data_dir
+        self.ollama = ollama or OllamaClient()
         self.lock = threading.Lock()
         self.status = {"state": "idle", "message": "", "date": None}
+        self.conversations: dict[str, dict] = {}
+
+    def chat(self, message: str, conversation_id: str | None) -> dict:
+        data = self.datasets()
+        if not data["datasets"]:
+            return {"conversation_id": None, "kind": "needs_data",
+                    "message": "No saved UMD menus yet. Open Browse UMD data and refresh today's menu first.",
+                    "cards": [], "total": None, "options": []}
+        with self.lock:
+            session = self.conversations.get(conversation_id or "", {"foods": [], "question": ""}).copy()
+        intent = self.ollama.interpret(message, session["foods"], data["today"],
+                                       [item["menu_date"] for item in data["datasets"]], session["question"])
+        if intent["action"] == "clarify":
+            result = {"kind": "clarification", "message": intent.get("question") or "Which food do you mean?",
+                      "cards": [], "total": None, "options": []}
+            requested = session["foods"]
+        else:
+            requested = normalize_intent(intent, session["foods"])
+            result = resolve(requested, data["datasets"], data["today"])
+        session = {"foods": requested, "question": result["message"] if result["kind"] == "clarification" else ""}
+        with self.lock:
+            if not conversation_id or conversation_id not in self.conversations:
+                conversation_id = uuid.uuid4().hex
+            self.conversations[conversation_id] = session
+            if len(self.conversations) > 100:
+                self.conversations.pop(next(iter(self.conversations)))
+        return {"conversation_id": conversation_id, **result}
 
     def datasets(self) -> dict:
         by_date: dict[str, tuple[float, dict]] = {}
@@ -107,6 +138,8 @@ class AppHandler(BaseHTTPRequestHandler):
             self._json(200, self.app.datasets())
         elif route == "/api/status":
             self._json(200, self.app.get_status())
+        elif route == "/api/ollama/status":
+            self._json(200, self.app.ollama.status())
         elif route in ("/", "/app.css", "/app.js"):
             filename = {"/": "index.html", "/app.css": "app.css", "/app.js": "app.js"}[route]
             media_type = {"index.html": "text/html; charset=utf-8", "app.css": "text/css; charset=utf-8", "app.js": "text/javascript; charset=utf-8"}[filename]
@@ -118,25 +151,43 @@ class AppHandler(BaseHTTPRequestHandler):
             self._json(404, {"error": "Not found"})
 
     def do_POST(self) -> None:
-        if urlsplit(self.path).path != "/api/refresh":
+        route = urlsplit(self.path).path
+        if route not in ("/api/refresh", "/api/chat"):
             self._json(404, {"error": "Not found"})
             return
         origin = self.headers.get("Origin")
         expected = f"http://{self.headers.get('Host')}"
-        if (origin and origin != expected) or self.headers.get("X-MacroMellow-Request") != "refresh":
-            self._json(403, {"error": "Refresh is only available from this local interface"})
+        kind = "refresh" if route == "/api/refresh" else "chat"
+        if (origin and origin != expected) or self.headers.get("X-MacroMellow-Request") != kind:
+            self._json(403, {"error": "This action is only available from the local interface"})
             return
         if self.headers.get("Content-Type", "").split(";")[0] != "application/json":
             self._json(415, {"error": "Expected JSON request"})
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if not 1 <= length <= 256:
+            if not 1 <= length <= (256 if kind == "refresh" else 4096):
                 raise ValueError("Invalid request size")
             payload = json.loads(self.rfile.read(length))
+            if not isinstance(payload, dict):
+                raise ValueError("Expected an object")
+            if route == "/api/chat":
+                message = payload["message"]
+                conversation_id = payload.get("conversation_id")
+                if (not isinstance(message, str) or not 1 <= len(message.strip()) <= 1000
+                        or (conversation_id is not None and (not isinstance(conversation_id, str)
+                                                               or len(conversation_id) != 32))):
+                    raise ValueError("Invalid chat request")
+                try:
+                    self._json(200, self.app.chat(message.strip(), conversation_id))
+                except OllamaError as exc:
+                    self._json(503, {"error": str(exc)})
+                except ValueError as exc:
+                    self._json(400, {"error": str(exc)})
+                return
             menu_date = date.fromisoformat(payload["date"])
         except (ValueError, TypeError, KeyError, json.JSONDecodeError):
-            self._json(400, {"error": "Choose a valid menu date"})
+            self._json(400, {"error": "Choose a valid menu date" if kind == "refresh" else "Enter a valid message"})
             return
         today = datetime.now(ZoneInfo("America/New_York")).date()
         if not 0 <= (menu_date - today).days <= 6:

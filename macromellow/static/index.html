@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MacroMellow · UMD nutrition inspector</title>
+  <title>MacroMellow · UMD nutrition assistant</title>
   <link rel="stylesheet" href="/app.css">
   <script src="/app.js" defer></script>
 </head>
@@ -16,15 +16,44 @@
 
     <section class="hero" aria-labelledby="page-title">
       <div>
-        <p class="eyebrow">UMD DINING · NUTRITION DATA</p>
-        <h1 id="page-title">Find what’s on the menu.</h1>
-        <p class="intro">Search actual UMD dining hall menu data and inspect the nutrition label behind every result.</p>
+        <p class="eyebrow">UMD DINING · NUTRITION ASSISTANT</p>
+        <h1 id="page-title">Just tell us what you ate.</h1>
+        <p class="intro">Describe a meal. MacroMellow finds the closest official UMD menu item and does the serving math for you.</p>
       </div>
-      <div class="source-card">
+      <div id="ai-status" class="source-card" role="status" aria-live="polite">
         <span class="source-dot" aria-hidden="true"></span>
-        <div><strong>Official UMD source</strong><span>Values are per listed serving.</span></div>
+        <div><strong id="ai-status-title">Checking AI connection…</strong><span id="ai-status-detail">The manual data browser works offline.</span></div>
       </div>
     </section>
+
+    <nav class="tabs" aria-label="Views">
+      <button id="chat-tab" class="tab active" type="button" aria-current="page">Assistant</button>
+      <button id="browse-tab" class="tab" type="button">Browse UMD data</button>
+    </nav>
+
+    <section id="chat-view" class="chat-view" aria-label="Nutrition assistant">
+      <div class="chat-top"><div><p class="eyebrow">MEAL LOOKUP</p><h2>Your conversation</h2></div><button id="new-chat" class="quiet-button" type="button">New conversation</button></div>
+      <div id="chat-messages" class="chat-messages" role="log" aria-live="polite"></div>
+      <div id="chat-welcome" class="chat-welcome">
+        <div class="welcome-icon" aria-hidden="true">✦</div>
+        <h3>What did you have?</h3>
+        <p>Try a food, an amount, and a dining hall. I’ll show where each number came from.</p>
+        <div class="prompts">
+          <button type="button" class="prompt" data-prompt="I had 2 servings of grilled chicken breast at 251 North.">2 servings of grilled chicken breast at 251 North</button>
+          <button type="button" class="prompt" data-prompt="I had rice and chicken at South Campus.">Rice and chicken at South Campus</button>
+          <button type="button" class="prompt" data-prompt="How much protein is in the rotisserie chicken at The Y?">Protein in rotisserie chicken at The Y</button>
+        </div>
+      </div>
+      <div id="chat-loading" class="chat-loading" role="status" hidden><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span> Reading your meal and matching UMD labels…</div>
+      <form id="chat-form" class="composer">
+        <label class="sr-only" for="chat-input">Describe your meal</label>
+        <textarea id="chat-input" rows="2" placeholder="e.g. I had 2 servings of grilled chicken at 251 North" maxlength="1000" required></textarea>
+        <button id="send" type="submit">Send <span aria-hidden="true">↗</span></button>
+      </form>
+      <p class="chat-footnote">AI finds a match; nutrition comes only from saved UMD labels. Amounts without exact weights are estimates.</p>
+    </section>
+
+    <section id="browse-view" class="browse-view" aria-label="Saved UMD data" hidden>
 
     <section class="controls" aria-label="Search and filters">
       <div class="field search-field">
@@ -70,6 +99,7 @@
         </table>
       </div>
       <div class="results-footer"><span id="shown-count"></span><button id="show-more" type="button" hidden>Show more results</button></div>
+    </section>
     </section>
 
     <footer>Nutrition can vary with ingredients and preparation. Check the linked UMD label for the source details.</footer>
