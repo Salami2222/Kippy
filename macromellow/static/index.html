@@ -37,10 +37,10 @@
       <section class="daily-tracker" aria-labelledby="tracker-title">
         <div class="tracker-heading"><div><p class="eyebrow">PERSONAL TEST TOTALS</p><h3 id="tracker-title">Today’s macros <span id="tracker-date"></span></h3></div><span class="tracker-timezone">Resets at midnight ET</span></div>
         <div class="tracker-totals" aria-live="polite">
-          <div class="tracker-stat"><strong id="tracker-calories">0</strong><span>Calories <small>kcal</small></span></div>
-          <div class="tracker-stat"><strong id="tracker-protein">0</strong><span>Protein <small>g</small></span></div>
-          <div class="tracker-stat"><strong id="tracker-carbs">0</strong><span>Carbs <small>g</small></span></div>
-          <div class="tracker-stat"><strong id="tracker-fat">0</strong><span>Fat <small>g</small></span></div>
+          <div class="tracker-stat"><strong id="tracker-calories">0</strong><span>Calories <small>kcal consumed</small></span><div id="goal-calories" class="tracker-goal-line">No goal set</div><div id="progress-calories" class="tracker-progress" role="progressbar" aria-label="Calories goal progress" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div><div id="balance-calories" class="tracker-balance"></div></div>
+          <div class="tracker-stat"><strong id="tracker-protein">0</strong><span>Protein <small>g consumed</small></span><div id="goal-protein" class="tracker-goal-line">No goal set</div><div id="progress-protein" class="tracker-progress" role="progressbar" aria-label="Protein goal progress" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div><div id="balance-protein" class="tracker-balance"></div></div>
+          <div class="tracker-stat"><strong id="tracker-carbs">0</strong><span>Carbs <small>g consumed</small></span><div id="goal-carbs" class="tracker-goal-line">No goal set</div><div id="progress-carbs" class="tracker-progress" role="progressbar" aria-label="Carbohydrate goal progress" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div><div id="balance-carbs" class="tracker-balance"></div></div>
+          <div class="tracker-stat"><strong id="tracker-fat">0</strong><span>Fat <small>g consumed</small></span><div id="goal-fat" class="tracker-goal-line">No goal set</div><div id="progress-fat" class="tracker-progress" role="progressbar" aria-label="Fat goal progress" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div><div id="balance-fat" class="tracker-balance"></div></div>
         </div>
         <details class="tracker-controls" id="tracker-controls">
           <summary>Adjust totals manually</summary>
@@ -53,6 +53,19 @@
               <label>Fat <small>g</small><input id="tracker-input-fat" type="number" step="any" placeholder="Leave blank" inputmode="decimal"></label>
             </div>
             <div class="tracker-actions"><button class="tracker-apply" type="submit">Apply change</button><button id="tracker-reset" class="quiet-button" type="button">Reset to zero</button></div>
+          </form>
+        </details>
+        <details class="tracker-controls" id="goal-controls">
+          <summary>Edit daily goals</summary>
+          <form id="goal-form">
+            <p class="goal-help">Each goal is independent. Leave a field blank to remove that goal.</p>
+            <div class="tracker-inputs">
+              <label>Calories <small>kcal</small><input id="goal-input-calories" type="number" min="0" step="any" placeholder="No goal" inputmode="decimal"></label>
+              <label>Protein <small>g</small><input id="goal-input-protein" type="number" min="0" step="any" placeholder="No goal" inputmode="decimal"></label>
+              <label>Carbs <small>g</small><input id="goal-input-carbs" type="number" min="0" step="any" placeholder="No goal" inputmode="decimal"></label>
+              <label>Fat <small>g</small><input id="goal-input-fat" type="number" min="0" step="any" placeholder="No goal" inputmode="decimal"></label>
+            </div>
+            <div class="tracker-actions"><button class="tracker-apply" type="submit">Save goals</button></div>
           </form>
         </details>
         <p id="tracker-status" class="tracker-status" role="status" aria-live="polite"></p>

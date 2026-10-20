@@ -43,9 +43,11 @@ Use `--no-browser` if you only want to start the server. The server listens on `
 
 The **Today’s macros** strip stays above the assistant conversation. Open **Adjust totals manually** to add, subtract, or set any combination of calories, protein, carbs, and fat. Leave a field blank to keep it unchanged; zero is a valid direct value. The four totals are independent, and manual entries can be negative for testing corrections. **Reset to zero** clears the current day's totals.
 
+Open **Edit daily goals** to enter your own calorie, protein, carb, and fat goals. Save any combination; a blank field removes that goal, and zero is allowed. Each card shows the consumed amount, its goal, a progress bar, and the amount remaining or exceeded. Goals and consumed totals are independent: changing protein does not recalculate calories or another macro.
+
 Complete AI nutrition results have an **Add result to today** button. Answering a question does not change tracked totals until you press it. Each result button adds only once; an incomplete UMD result cannot be added automatically, but you can enter your own test values manually. A follow-up correction is a new result, so subtract any earlier result you already added before adding the correction.
 
-The tracker stores only the current day's totals and used result IDs in this browser's `localStorage`. It starts at zero on the next **America/New_York** calendar day, including while the page stays open. Browser storage is separate by browser profile and local origin, so use the same browser and port to keep today's totals after refresh or server restart. The tracker has no account or food diary. Its values are **user-adjustable estimates** and may differ from official UMD values.
+The tracker stores the current day's totals and used result IDs in this browser's `localStorage`, with goals in a separate record. Consumed totals start at zero on the next **America/New_York** calendar day, including while the page stays open; goals remain unchanged. Browser storage is separate by browser profile and local origin, so use the same browser and port to keep totals and goals after refresh or server restart. The tracker has no account or food diary. Its values are **user-adjustable estimates** and may differ from official UMD values.
 
 ## Test the assistant
 

@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const {test} = require('node:test');
-const {createTracker, newYorkDate, nextDayBoundary} = require('../macromellow/static/tracker.js');
+const {createTracker, newYorkDate, nextDayBoundary, goalProgress} = require('../macromellow/static/tracker.js');
 
 function memoryStorage() {
   const data = new Map();
@@ -53,4 +53,40 @@ test('a running tracker starts a new zero day and resets duplicate protection', 
   tracker.reset();
   assert.equal(tracker.getState().totals.calories, 0);
   assert.equal(tracker.addResult('turn-1', result).added, true);
+});
+
+test('goals persist independently through daily rollover, reset, and restart', () => {
+  const storage = memoryStorage();
+  let instant = new Date('2026-10-20T03:59:59Z');
+  const now = () => instant;
+  const tracker = createTracker(storage, now);
+  tracker.setGoals({calories: 2000, protein_g: 120});
+  tracker.adjust('set', {calories: 500, protein_g: 50});
+  assert.equal(tracker.getGoals().carbohydrates_g, null);
+  assert.equal(tracker.getGoals().calories, 2000);
+  assert.equal(tracker.getState().totals.protein_g, 50);
+  instant = new Date('2026-10-20T04:00:00Z');
+  assert.equal(tracker.checkDay(), true);
+  assert.equal(tracker.getState().totals.calories, 0);
+  assert.equal(tracker.getGoals().calories, 2000);
+  tracker.reset();
+  assert.equal(tracker.getGoals().protein_g, 120);
+  const restarted = createTracker(storage, now);
+  assert.equal(restarted.getGoals().calories, 2000);
+  restarted.setGoals({protein_g: null, fat_g: 70});
+  assert.deepEqual(restarted.getGoals(), {calories: 2000, protein_g: null, carbohydrates_g: null, fat_g: 70});
+  assert.throws(() => restarted.setGoals({calories: -1}), /zero or positive/);
+  assert.equal(restarted.getGoals().calories, 2000);
+});
+
+test('goal progress reports remaining or exceeded without deriving calories', () => {
+  assert.deepEqual(goalProgress(600, 1000), {remaining: 400, exceeded: 0, percent: 60});
+  assert.deepEqual(goalProgress(1100, 1000), {remaining: 0, exceeded: 100, percent: 100});
+  assert.deepEqual(goalProgress(5, 0), {remaining: 0, exceeded: 5, percent: 100});
+  assert.equal(goalProgress(25, null), null);
+  const tracker = createTracker(memoryStorage(), () => new Date('2026-10-20T16:00:00Z'));
+  tracker.setGoals({protein_g: 100});
+  tracker.adjust('set', {protein_g: 50});
+  assert.equal(tracker.getState().totals.calories, 0);
+  assert.equal(tracker.getGoals().calories, null);
 });

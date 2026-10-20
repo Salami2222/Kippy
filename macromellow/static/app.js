@@ -16,6 +16,16 @@ const els = {
   trackerDate: document.getElementById('tracker-date'),
   trackerValues: {calories: document.getElementById('tracker-calories'), protein_g: document.getElementById('tracker-protein'),
     carbohydrates_g: document.getElementById('tracker-carbs'), fat_g: document.getElementById('tracker-fat')},
+  goalValues: {calories: document.getElementById('goal-calories'), protein_g: document.getElementById('goal-protein'),
+    carbohydrates_g: document.getElementById('goal-carbs'), fat_g: document.getElementById('goal-fat')},
+  goalBars: {calories: document.getElementById('progress-calories'), protein_g: document.getElementById('progress-protein'),
+    carbohydrates_g: document.getElementById('progress-carbs'), fat_g: document.getElementById('progress-fat')},
+  goalBalances: {calories: document.getElementById('balance-calories'), protein_g: document.getElementById('balance-protein'),
+    carbohydrates_g: document.getElementById('balance-carbs'), fat_g: document.getElementById('balance-fat')},
+  goalControls: document.getElementById('goal-controls'),
+  goalForm: document.getElementById('goal-form'),
+  goalInputs: {calories: document.getElementById('goal-input-calories'), protein_g: document.getElementById('goal-input-protein'),
+    carbohydrates_g: document.getElementById('goal-input-carbs'), fat_g: document.getElementById('goal-input-fat')},
   trackerForm: document.getElementById('tracker-form'),
   trackerMode: document.getElementById('tracker-mode'),
   trackerInputs: {calories: document.getElementById('tracker-input-calories'), protein_g: document.getElementById('tracker-input-protein'),
@@ -61,11 +71,41 @@ function trackerMessage(message, error = false) {
   els.trackerStatus.classList.toggle('error', error);
 }
 
+function trackerNumber(value) {
+  return Number(value).toLocaleString(undefined, {maximumFractionDigits: 2});
+}
+
+function populateGoalInputs() {
+  const goals = tracker.getGoals();
+  for (const field of MacroTracker.FIELDS) els.goalInputs[field].value = goals[field] === null ? '' : goals[field];
+}
+
 function renderTracker() {
   const state = tracker.getState();
+  const goals = tracker.getGoals();
   els.trackerDate.textContent = humanDate(state.date);
   for (const field of MacroTracker.FIELDS) {
-    els.trackerValues[field].textContent = Number(state.totals[field]).toLocaleString(undefined, {maximumFractionDigits: 2});
+    const consumed = state.totals[field];
+    const goal = goals[field];
+    const unit = field === 'calories' ? 'kcal' : 'g';
+    els.trackerValues[field].textContent = trackerNumber(consumed);
+    els.goalValues[field].textContent = goal === null ? 'No goal set' : `Goal ${trackerNumber(goal)} ${unit}`;
+    const bar = els.goalBars[field];
+    const balance = els.goalBalances[field];
+    bar.hidden = goal === null;
+    if (goal === null) {
+      balance.textContent = '';
+      balance.classList.remove('exceeded');
+    } else {
+      const progress = MacroTracker.goalProgress(consumed, goal);
+      bar.querySelector('i').style.width = `${progress.percent}%`;
+      bar.setAttribute('aria-valuenow', String(progress.percent));
+      const wording = progress.exceeded > 0 ? `Exceeded by ${trackerNumber(progress.exceeded)} ${unit}` :
+        `${trackerNumber(progress.remaining)} ${unit} remaining`;
+      balance.textContent = wording;
+      balance.classList.toggle('exceeded', progress.exceeded > 0);
+      bar.setAttribute('aria-valuetext', `${trackerNumber(consumed)} of ${trackerNumber(goal)} ${unit} consumed; ${wording}`);
+    }
   }
   document.querySelectorAll('.add-result-button').forEach(button => {
     const old = button.dataset.trackerDate !== state.date;
@@ -572,6 +612,20 @@ els.trackerForm.addEventListener('submit', event => {
     trackerMessage('Today’s totals updated.');
   } catch (error) { trackerMessage(error.message, true); }
 });
+els.goalControls.addEventListener('toggle', () => { if (els.goalControls.open) populateGoalInputs(); });
+els.goalForm.addEventListener('submit', event => {
+  event.preventDefault();
+  const changes = {};
+  for (const field of MacroTracker.FIELDS) {
+    const raw = els.goalInputs[field].value.trim();
+    changes[field] = raw === '' ? null : Number(raw);
+  }
+  try {
+    tracker.setGoals(changes);
+    renderTracker();
+    trackerMessage('Daily goals saved. They will stay when today’s totals reset.');
+  } catch (error) { trackerMessage(error.message, true); }
+});
 els.trackerReset.addEventListener('click', () => {
   try {
     tracker.reset();
@@ -582,6 +636,7 @@ els.trackerReset.addEventListener('click', () => {
 });
 window.addEventListener('storage', event => {
   if (event.key === MacroTracker.KEY) { tracker.reload(); renderTracker(); trackerMessage('Totals updated in another tab.'); }
+  if (event.key === MacroTracker.GOALS_KEY) { tracker.reloadGoals(); renderTracker(); trackerMessage('Goals updated in another tab.'); }
 });
 window.addEventListener('focus', () => { checkTrackerDay(); scheduleTrackerRollover(); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkTrackerDay(); scheduleTrackerRollover(); } });
