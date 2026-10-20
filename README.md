@@ -15,7 +15,7 @@ export OLLAMA_BASE_URL="http://YOUR-WINDOWS-TAILSCALE-IP:11434"
 export OLLAMA_MODEL="qwen3.5:9b"
 ```
 
-Replace the placeholder with the actual Tailscale IP or MagicDNS name. The defaults are `http://localhost:11434` and `qwen3.5:9b`, so set the remote URL for the Windows setup. Ollama runs on the desktop; there is no Ollama installation step on the MacBook. The app's **AI connected** indicator checks `/api/tags` for both reachability and the exact configured model. If it says the model is missing, pull that model on Windows or change `OLLAMA_MODEL` and restart MacroMellow.
+Replace the placeholder with the actual Tailscale IP or MagicDNS name. The defaults are `http://localhost:11434` and `qwen3.5:9b`, so set the remote URL for the Windows setup. Ollama runs on the desktop; there is no Ollama installation step on the MacBook. The app's **Mellow connected** indicator checks `/api/tags` for both reachability and the exact configured model. If it says the model is missing, pull that model on Windows or change `OLLAMA_MODEL` and restart MacroMellow.
 
 These setup steps follow [Ollama's Windows environment variable and network instructions](https://docs.ollama.com/faq), [Ollama's model list API](https://docs.ollama.com/api/tags), and [Tailscale's device connection guide](https://tailscale.com/docs/how-to/connect-to-devices).
 
@@ -38,6 +38,10 @@ python3 -m macromellow web --port 8001 --data-dir /path/to/your/json-directory
 ```
 
 Use `--no-browser` if you only want to start the server. The server listens on `127.0.0.1` only. It uses Python's standard library and needs no Python package installation step. All model requests go from the Python backend to Ollama; the browser never calls Ollama directly.
+
+### Visual design
+
+The interface uses marshmallow surfaces, a warm cream background, and caramel accents with toasted-brown headings. Shared palette tokens live in `macromellow/static/app.css`; error and success feedback retain distinct colors. Rounded controls use a short squish on press and a gentle spring on release. Chat entrances, progress bars, value updates, and expanding panels animate subtly and respect reduced-motion preferences. No external fonts or UI dependencies are needed; the Mellow avatar slot is preserved for future mascot artwork.
 
 ## Daily macro tracker
 
