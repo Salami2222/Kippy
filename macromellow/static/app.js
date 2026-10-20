@@ -333,7 +333,7 @@ function appendBubble(role, text) {
   bubble.className = `message ${role}`;
   const label = document.createElement('span');
   label.className = 'message-label';
-  label.textContent = role === 'user' ? 'You' : 'MacroMellow';
+  label.textContent = role === 'user' ? 'You' : 'Mellow';
   const body = document.createElement('p');
   body.textContent = text;
   bubble.append(label, body);
@@ -421,7 +421,7 @@ function appendDebug(bubble, debug) {
   details.append(summary);
   const body = document.createElement('div');
   body.className = 'debug-body';
-  const requestSection = debugSection(body, 'Request and AI interpretation');
+  const requestSection = debugSection(body, 'Request and Mellow interpretation');
   requestSection.append(debugRow('Original request', debug.user_request));
   requestSection.append(debugRow('Model', debug.model));
   requestSection.append(debugRow('Action', debug.model_interpretation?.action));
@@ -484,7 +484,7 @@ function appendDebug(bubble, debug) {
     error.classList.add('debug-alert');
     flags.append(error);
   }
-  flags.append(debugRow('AI response time', debug.ai_response_time_ms === null ? 'Not called' : `${debug.ai_response_time_ms} ms`));
+  flags.append(debugRow('Mellow response time', debug.ai_response_time_ms === null ? 'Not called' : `${debug.ai_response_time_ms} ms`));
   flags.append(debugRow('Total response time', debug.response_time_ms === null ? 'Unavailable' : `${debug.response_time_ms} ms`));
   details.append(body);
   bubble.append(details);
@@ -570,7 +570,7 @@ function appendResult(data) {
           const update = await stateRequest('/api/tracker/add-result', {result_id: button.dataset.resultId,
             conversation_id: conversationId});
           applyBackendTracker(update.tracker);
-          trackerMessage(update.added ? 'AI result added to today’s editable totals.' : 'This result was already added.');
+          trackerMessage(update.added ? 'Mellow’s result added to today’s editable totals.' : 'This result was already added.');
         } catch (error) { button.disabled = false; trackerMessage(error.message, true); }
       });
       bubble.append(button);
@@ -615,11 +615,11 @@ async function checkAI() {
   try {
     const status = await request('/api/ollama/status');
     els.aiStatus.classList.toggle('offline', !status.model_available);
-    els.aiTitle.textContent = status.model_available ? 'AI connected' : 'AI unavailable';
+    els.aiTitle.textContent = status.model_available ? 'Mellow connected' : 'Mellow unavailable';
     els.aiDetail.textContent = `${status.model} · ${status.message}`;
   } catch (error) {
     els.aiStatus.classList.add('offline');
-    els.aiTitle.textContent = 'AI status unavailable';
+    els.aiTitle.textContent = 'Mellow status unavailable';
     els.aiDetail.textContent = error.message;
   }
 }

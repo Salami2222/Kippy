@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MacroMellow · AI nutrition assistant</title>
+  <title>MacroMellow · Meet Mellow</title>
   <link rel="stylesheet" href="/app.css">
   <script src="/tracker.js" defer></script>
   <script src="/app.js" defer></script>
@@ -11,7 +11,7 @@
 <body>
   <main class="shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark" aria-hidden="true">M</span><span>MacroMellow</span></div>
+      <div class="brand"><span class="brand-mark" aria-hidden="true">M</span><span class="brand-name">Macro<span>Mellow</span></span></div>
       <span class="local-tag"><span class="local-dot" aria-hidden="true"></span> Private local workspace</span>
     </header>
 
@@ -23,7 +23,7 @@
       </div>
       <div id="ai-status" class="source-card" role="status" aria-live="polite">
         <span class="source-dot" aria-hidden="true"></span>
-        <div><strong id="ai-status-title">Checking AI connection…</strong><span id="ai-status-detail">The manual data browser works offline.</span></div>
+        <div><strong id="ai-status-title">Checking Mellow’s connection…</strong><span id="ai-status-detail">The food data browser works offline.</span></div>
       </div>
     </section>
 
@@ -33,8 +33,8 @@
       <button id="browse-tab" class="tab" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h8M8 17h5"/></svg> Food data</button>
     </nav>
 
-    <section id="chat-view" class="chat-view" aria-label="Nutrition assistant">
-      <div class="chat-top"><div><p class="eyebrow">NUTRITION CHAT</p><h2>Ask about a meal</h2></div><button id="new-chat" class="quiet-button" type="button"><span aria-hidden="true">＋</span> New chat</button></div>
+    <section id="chat-view" class="chat-view" aria-label="Mellow nutrition chat">
+      <div class="chat-top"><div class="chat-identity"><span class="mellow-avatar" aria-hidden="true">m</span><div><p class="eyebrow">YOUR NUTRITION COMPANION</p><h2>Mellow</h2></div></div><button id="new-chat" class="quiet-button" type="button"><span aria-hidden="true">＋</span> New chat</button></div>
       <section class="daily-tracker is-collapsed" aria-labelledby="tracker-title">
         <div class="tracker-heading"><div><p class="eyebrow">DAILY OVERVIEW</p><h3 id="tracker-title">Today’s macros <span id="tracker-date"></span></h3></div><div class="tracker-heading-actions"><span class="tracker-timezone">Resets midnight ET</span><button id="tracker-expand" class="tracker-expand" type="button" aria-expanded="false" aria-controls="tracker-totals tracker-controls goal-controls">Show details <span aria-hidden="true">⌄</span></button></div></div>
         <div id="tracker-totals" class="tracker-totals" aria-live="polite">
@@ -88,20 +88,20 @@
       </section>
       <div id="chat-messages" class="chat-messages" role="log" aria-live="polite"></div>
       <div id="chat-welcome" class="chat-welcome">
-        <div class="welcome-icon" aria-hidden="true">M</div>
-        <p class="welcome-kicker">START WITH A MEAL</p>
+        <div class="welcome-icon mellow-avatar" aria-hidden="true">m</div>
+        <p class="welcome-kicker">MEET MELLOW</p>
         <h3>What did you eat today?</h3>
-        <p>Ask about a meal or log it with a message. Official lookups currently cover UMD dining.</p>
+        <p>Tell Mellow about a meal or ask a nutrition question. Official lookups currently cover UMD dining.</p>
         <div class="prompts">
           <button type="button" class="prompt" data-prompt="I had 2 servings of grilled chicken breast at 251 North.">2 servings of grilled chicken breast at 251 North</button>
           <button type="button" class="prompt" data-prompt="I had rice and chicken at South Campus.">Rice and chicken at South Campus</button>
           <button type="button" class="prompt" data-prompt="How much protein is in the rotisserie chicken at The Y?">Protein in rotisserie chicken at The Y</button>
         </div>
       </div>
-      <div id="chat-loading" class="chat-loading" role="status" hidden><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>Checking your meal against saved UMD labels…</span></div>
+      <div id="chat-loading" class="chat-loading" role="status" hidden><span class="mellow-avatar" aria-hidden="true">m</span><span>Mellow is checking saved UMD labels</span><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
       <form id="chat-form" class="composer">
-        <label class="sr-only" for="chat-input">Describe your meal</label>
-        <textarea id="chat-input" rows="2" placeholder="e.g. I had 2 servings of grilled chicken at 251 North" maxlength="1000" required></textarea>
+        <label class="sr-only" for="chat-input">Ask Mellow about your meal</label>
+        <textarea id="chat-input" rows="2" placeholder="Tell Mellow what you ate…" maxlength="1000" required></textarea>
         <button id="send" type="submit">Send <span aria-hidden="true">↗</span></button>
       </form>
       <p class="chat-footnote">Nutrition comes from saved UMD labels. Portions and tracked totals are estimates.</p>
