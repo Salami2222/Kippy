@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MacroMellow · UMD nutrition assistant</title>
   <link rel="stylesheet" href="/app.css">
+  <script src="/tracker.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -33,6 +34,30 @@
 
     <section id="chat-view" class="chat-view" aria-label="Nutrition assistant">
       <div class="chat-top"><div><p class="eyebrow">MEAL LOOKUP</p><h2>Your conversation</h2></div><button id="new-chat" class="quiet-button" type="button">New conversation</button></div>
+      <section class="daily-tracker" aria-labelledby="tracker-title">
+        <div class="tracker-heading"><div><p class="eyebrow">PERSONAL TEST TOTALS</p><h3 id="tracker-title">Today’s macros <span id="tracker-date"></span></h3></div><span class="tracker-timezone">Resets at midnight ET</span></div>
+        <div class="tracker-totals" aria-live="polite">
+          <div class="tracker-stat"><strong id="tracker-calories">0</strong><span>Calories <small>kcal</small></span></div>
+          <div class="tracker-stat"><strong id="tracker-protein">0</strong><span>Protein <small>g</small></span></div>
+          <div class="tracker-stat"><strong id="tracker-carbs">0</strong><span>Carbs <small>g</small></span></div>
+          <div class="tracker-stat"><strong id="tracker-fat">0</strong><span>Fat <small>g</small></span></div>
+        </div>
+        <details class="tracker-controls" id="tracker-controls">
+          <summary>Adjust totals manually</summary>
+          <form id="tracker-form">
+            <label class="tracker-mode">Change<select id="tracker-mode"><option value="add">Add</option><option value="subtract">Subtract</option><option value="set">Set totals to</option></select></label>
+            <div class="tracker-inputs">
+              <label>Calories <small>kcal</small><input id="tracker-input-calories" type="number" step="any" placeholder="Leave blank" inputmode="decimal"></label>
+              <label>Protein <small>g</small><input id="tracker-input-protein" type="number" step="any" placeholder="Leave blank" inputmode="decimal"></label>
+              <label>Carbs <small>g</small><input id="tracker-input-carbs" type="number" step="any" placeholder="Leave blank" inputmode="decimal"></label>
+              <label>Fat <small>g</small><input id="tracker-input-fat" type="number" step="any" placeholder="Leave blank" inputmode="decimal"></label>
+            </div>
+            <div class="tracker-actions"><button class="tracker-apply" type="submit">Apply change</button><button id="tracker-reset" class="quiet-button" type="button">Reset to zero</button></div>
+          </form>
+        </details>
+        <p id="tracker-status" class="tracker-status" role="status" aria-live="polite"></p>
+        <p class="tracker-disclaimer">User-adjustable estimates for testing. Tracked totals are not necessarily official UMD values.</p>
+      </section>
       <div id="chat-messages" class="chat-messages" role="log" aria-live="polite"></div>
       <div id="chat-welcome" class="chat-welcome">
         <div class="welcome-icon" aria-hidden="true">✦</div>

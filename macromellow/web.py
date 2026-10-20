@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 import uuid
 import webbrowser
 from datetime import date, datetime
@@ -22,6 +23,13 @@ DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 UNAVAILABLE_MESSAGE = "UMD states nutrition information is not available for this recipe"
 
 
+class ChatError(RuntimeError):
+    def __init__(self, message: str, debug: dict, status: int) -> None:
+        super().__init__(message)
+        self.debug = debug
+        self.status = status
+
+
 class DataApp:
     def __init__(self, data_dir: Path, ollama: OllamaClient | None = None) -> None:
         self.data_dir = data_dir
@@ -31,22 +39,46 @@ class DataApp:
         self.conversations: dict[str, dict] = {}
 
     def chat(self, message: str, conversation_id: str | None) -> dict:
+        started = time.perf_counter()
         data = self.datasets()
+        debug = {"user_request": message, "model": getattr(self.ollama, "model", None),
+                 "model_interpretation": None, "resolved_foods": [], "matches": [],
+                 "calculations": [], "total": None, "warnings": [], "error": None,
+                 "ai_response_time_ms": None, "response_time_ms": None}
         if not data["datasets"]:
             return {"conversation_id": None, "kind": "needs_data",
                     "message": "No saved UMD menus yet. Open Browse UMD data and refresh today's menu first.",
-                    "cards": [], "total": None, "options": []}
+                    "cards": [], "total": None, "options": [],
+                    "debug": {**debug, "warnings": ["No saved UMD menu data."],
+                              "response_time_ms": round((time.perf_counter() - started) * 1000)}}
         with self.lock:
             session = self.conversations.get(conversation_id or "", {"foods": [], "question": ""}).copy()
-        intent = self.ollama.interpret(message, session["foods"], data["today"],
-                                       [item["menu_date"] for item in data["datasets"]], session["question"])
-        if intent["action"] == "clarify":
-            result = {"kind": "clarification", "message": intent.get("question") or "Which food do you mean?",
-                      "cards": [], "total": None, "options": []}
-            requested = session["foods"]
-        else:
-            requested = normalize_intent(intent, session["foods"])
-            result = resolve(requested, data["datasets"], data["today"])
+        stage = "Ollama interpretation"
+        ai_started = time.perf_counter()
+        try:
+            try:
+                intent = self.ollama.interpret(message, session["foods"], data["today"],
+                                               [item["menu_date"] for item in data["datasets"]], session["question"])
+            finally:
+                debug["ai_response_time_ms"] = round((time.perf_counter() - ai_started) * 1000)
+            debug["model_interpretation"] = {"action": intent["action"], "foods": intent["foods"],
+                                             "question": intent.get("question", "")}
+            stage = "request validation"
+            if intent["action"] == "clarify":
+                result = {"kind": "clarification", "message": intent.get("question") or "Which food do you mean?",
+                          "cards": [], "total": None, "options": []}
+                requested = session["foods"]
+                debug["warnings"].append("The model requested clarification before a UMD label could be selected.")
+            else:
+                requested = normalize_intent(intent, session["foods"])
+                stage = "UMD matching"
+                result = resolve(requested, data["datasets"], data["today"])
+            debug["resolved_foods"] = requested
+            debug.update(result.pop("debug", {}))
+        except (OllamaError, ValueError) as exc:
+            debug["error"] = {"stage": stage, "message": str(exc)}
+            debug["response_time_ms"] = round((time.perf_counter() - started) * 1000)
+            raise ChatError(str(exc), debug, 503 if isinstance(exc, OllamaError) else 400) from exc
         session = {"foods": requested, "question": result["message"] if result["kind"] == "clarification" else ""}
         with self.lock:
             if not conversation_id or conversation_id not in self.conversations:
@@ -54,7 +86,8 @@ class DataApp:
             self.conversations[conversation_id] = session
             if len(self.conversations) > 100:
                 self.conversations.pop(next(iter(self.conversations)))
-        return {"conversation_id": conversation_id, **result}
+        debug["response_time_ms"] = round((time.perf_counter() - started) * 1000)
+        return {"conversation_id": conversation_id, **result, "debug": debug}
 
     def datasets(self) -> dict:
         by_date: dict[str, tuple[float, dict]] = {}
@@ -140,9 +173,9 @@ class AppHandler(BaseHTTPRequestHandler):
             self._json(200, self.app.get_status())
         elif route == "/api/ollama/status":
             self._json(200, self.app.ollama.status())
-        elif route in ("/", "/app.css", "/app.js"):
-            filename = {"/": "index.html", "/app.css": "app.css", "/app.js": "app.js"}[route]
-            media_type = {"index.html": "text/html; charset=utf-8", "app.css": "text/css; charset=utf-8", "app.js": "text/javascript; charset=utf-8"}[filename]
+        elif route in ("/", "/app.css", "/app.js", "/tracker.js"):
+            filename = {"/": "index.html", "/app.css": "app.css", "/app.js": "app.js", "/tracker.js": "tracker.js"}[route]
+            media_type = {"index.html": "text/html; charset=utf-8", "app.css": "text/css; charset=utf-8", "app.js": "text/javascript; charset=utf-8", "tracker.js": "text/javascript; charset=utf-8"}[filename]
             try:
                 self._send(200, (STATIC_DIR / filename).read_bytes(), media_type)
             except OSError:
@@ -180,10 +213,8 @@ class AppHandler(BaseHTTPRequestHandler):
                     raise ValueError("Invalid chat request")
                 try:
                     self._json(200, self.app.chat(message.strip(), conversation_id))
-                except OllamaError as exc:
-                    self._json(503, {"error": str(exc)})
-                except ValueError as exc:
-                    self._json(400, {"error": str(exc)})
+                except ChatError as exc:
+                    self._json(exc.status, {"error": str(exc), "debug": exc.debug})
                 return
             menu_date = date.fromisoformat(payload["date"])
         except (ValueError, TypeError, KeyError, json.JSONDecodeError):

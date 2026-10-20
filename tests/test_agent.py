@@ -8,7 +8,7 @@ from urllib.error import URLError
 from macromellow.agent import choose_food, normalize_intent, resolve
 from macromellow.ollama import OllamaClient, OllamaError
 from macromellow.umd import save_json
-from macromellow.web import DataApp
+from macromellow.web import ChatError, DataApp
 
 
 DAY = "2026-10-19"
@@ -54,6 +54,13 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(result["total"], {"calories": 900, "protein_g": 160, "carbohydrates_g": 0, "fat_g": 25})
         self.assertEqual(result["cards"][0]["source_url"], self.dataset["foods"][0]["source_url"])
         self.assertIn("Assumed", result["notes"][0])
+        match = result["debug"]["matches"][0]
+        self.assertEqual(match["selected"]["source_url"], self.dataset["foods"][0]["source_url"])
+        self.assertEqual(match["selected"]["name_score"], 1)
+        calculation = result["debug"]["calculations"][0]
+        self.assertEqual(calculation["per_serving"]["calories"], 180)
+        self.assertEqual(calculation["quantity"], 5)
+        self.assertEqual(calculation["result"]["calories"], 900)
 
     def test_multiple_foods_sum_in_python(self):
         result = resolve([item("grilled chicken breast", 2), item("brown rice", 1.5)], [self.dataset], DAY)
@@ -67,6 +74,9 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(result["kind"], "clarification")
         self.assertGreaterEqual(len(result["options"]), 2)
         self.assertIsNone(result["total"])
+        self.assertEqual(result["debug"]["matches"][0]["status"], "ambiguous or low name score")
+        self.assertIsNone(result["debug"]["matches"][0]["selected"])
+        self.assertTrue(all(candidate["source_url"] for candidate in result["debug"]["matches"][0]["candidates"]))
 
     def test_same_food_across_halls_needs_hall(self):
         self.dataset["foods"].append(food("Grilled Chicken Breast", hall="251 North"))
@@ -86,6 +96,8 @@ class AgentTests(unittest.TestCase):
         self.assertIsNone(result["cards"][0]["nutrition"]["protein_g"])
         self.assertIsNone(result["total"]["protein_g"])
         self.assertEqual(result["total"]["calories"], 360)
+        self.assertIsNone(result["debug"]["calculations"][0]["per_serving"]["protein_g"])
+        self.assertTrue(any("missing nutrition" in note for note in result["debug"]["warnings"]))
 
     def test_follow_up_correction_replaces_previous_quantity(self):
         ollama = StubOllama([
@@ -100,6 +112,26 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(first["total"]["calories"], 900)
         self.assertEqual(second["total"]["calories"], 720)
         self.assertEqual(ollama.calls[1][1][0]["quantity"], 5)
+        self.assertEqual(second["debug"]["user_request"], "Actually make that 4")
+        self.assertEqual(second["debug"]["model_interpretation"]["foods"][0]["quantity"], 4)
+        self.assertIsInstance(second["debug"]["ai_response_time_ms"], int)
+        self.assertIsInstance(second["debug"]["response_time_ms"], int)
+
+    def test_ai_failure_has_debug_error_and_timing(self):
+        class OfflineOllama:
+            model = "qwen3.5:9b"
+
+            def interpret(self, *args):
+                raise OllamaError("Cannot reach Ollama")
+
+        with tempfile.TemporaryDirectory() as directory:
+            save_json(self.dataset, Path(directory) / "menu.json")
+            with self.assertRaises(ChatError) as raised:
+                DataApp(Path(directory), OfflineOllama()).chat("chicken", None)
+        self.assertEqual(raised.exception.status, 503)
+        self.assertEqual(raised.exception.debug["user_request"], "chicken")
+        self.assertEqual(raised.exception.debug["error"]["stage"], "Ollama interpretation")
+        self.assertIsInstance(raised.exception.debug["ai_response_time_ms"], int)
 
     def test_missing_saved_data_is_reported_without_ollama(self):
         ollama = StubOllama([])

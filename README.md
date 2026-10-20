@@ -39,16 +39,31 @@ python3 -m macromellow web --port 8001 --data-dir /path/to/your/json-directory
 
 Use `--no-browser` if you only want to start the server. The server listens on `127.0.0.1` only. It uses Python's standard library and needs no Python package installation step. All model requests go from the Python backend to Ollama; the browser never calls Ollama directly.
 
+## Daily macro tracker
+
+The **Today’s macros** strip stays above the assistant conversation. Open **Adjust totals manually** to add, subtract, or set any combination of calories, protein, carbs, and fat. Leave a field blank to keep it unchanged; zero is a valid direct value. The four totals are independent, and manual entries can be negative for testing corrections. **Reset to zero** clears the current day's totals.
+
+Complete AI nutrition results have an **Add result to today** button. Answering a question does not change tracked totals until you press it. Each result button adds only once; an incomplete UMD result cannot be added automatically, but you can enter your own test values manually. A follow-up correction is a new result, so subtract any earlier result you already added before adding the correction.
+
+The tracker stores only the current day's totals and used result IDs in this browser's `localStorage`. It starts at zero on the next **America/New_York** calendar day, including while the page stays open. Browser storage is separate by browser profile and local origin, so use the same browser and port to keep today's totals after refresh or server restart. The tracker has no account or food diary. Its values are **user-adjustable estimates** and may differ from official UMD values.
+
 ## Test the assistant
 
 With a saved menu and the Windows Ollama server connected, try `I had 2 servings of grilled chicken breast at 251 North on 2026-10-19.` Substitute a date you have saved. Try a second message such as `Actually, make that 4 servings.` The displayed values should scale from the linked UMD label. Try `chicken at The Y` to see how the assistant handles a broad match. If the AI indicator is offline, the manual browser still works.
 
 The assistant sends a constrained JSON schema to [Ollama's chat endpoint](https://docs.ollama.com/api/chat) and validates the response. The model extracts requested names, amounts, halls, and dates only. Python searches local saved menus, checks match confidence, multiplies official per-serving values, and sums nutrients. If a food description has multiple plausible menu matches, it asks for a specific name. If a counted or vague amount lacks a measured serving size, it assumes one listed UMD serving per count and displays that assumption. Missing official nutrient fields stay blank, including in the corresponding total. Conversations live in server memory only and reset when the server stops.
 
+### Developer debugging
+
+Open **Developer debugging** below any assistant response to inspect that turn. It shows the original request, the model's structured interpretation, the effective meal items after any follow-up correction, the saved date and hall used for each lookup, selected UMD label links, and ranked alternative records. The displayed name score is a **heuristic similarity score, not a probability** that the food is correct. A low score or a close competing record prevents automatic selection and asks for clarification. A different selected menu name or an assumed portion is called out in the normal response as well as the debug panel.
+
+For each selected food, the panel shows UMD values per listed serving multiplied by the number of assumed servings, then the final total. Missing official values remain unavailable in both places. The panel also lists accuracy notes, the Ollama response time (including its model availability check), the full request time, and any error stage. Errors return a debug panel too. These diagnostics are sent only to the local browser for the current turn; they are not saved to the UMD JSON files.
+
 Run the automated tests without a live Ollama server:
 
 ```bash
 python3 -m unittest discover -s tests -v
+node --test tests/test_tracker.cjs
 ```
 
 ## Command line retrieval and search
