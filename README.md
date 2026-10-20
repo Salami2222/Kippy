@@ -27,9 +27,9 @@ From the repository directory, use Python 3.10+:
 python3 -m macromellow web
 ```
 
-The server opens [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser. If a browser tab does not open automatically, visit that address yourself. Press `Ctrl+C` in the terminal to stop the server. Type a meal in the **Assistant** view and press Send. Enter sends; Shift+Enter adds a line. Use **New conversation** to clear the current context. The **Browse UMD data** tab provides the original manual search and source labels.
+The server opens [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser. If a browser tab does not open automatically, visit that address yourself. Press `Ctrl+C` in the terminal to stop the server. Use **Assistant** for a meal conversation, **Daily macros** to focus the tracker, and **UMD menu** to search saved foods and open original labels. Enter sends a chat message; Shift+Enter adds a line. **New chat** clears the current conversation context.
 
-The app reads actual JSON files in this repository's `data/` directory. Data is not committed to Git, so a fresh clone starts empty: open **Browse UMD data**, choose today's date, and click **Refresh UMD data** to retrieve all three halls. A complete refresh can take several minutes; the page shows a loading state and any retrieval error. Existing saved data is kept if a refresh is incomplete. Dates outside UMD's current seven-day menu window cannot be refreshed, although older saved JSON can still be viewed. After a refresh, return to **Assistant** and ask about that date.
+The app reads actual JSON files in this repository's `data/` directory. Data is not committed to Git, so a fresh clone starts empty: open **UMD menu**, choose today's date, and click **Refresh UMD data** to retrieve all three halls. A complete refresh can take several minutes; the page shows a loading state and any retrieval error. Existing saved data is kept if a refresh is incomplete. Dates outside UMD's current seven-day menu window cannot be refreshed, although older saved JSON can still be viewed. After a refresh, return to **Assistant** and ask about that date.
 
 You can change the local port or data directory:
 
@@ -41,7 +41,7 @@ Use `--no-browser` if you only want to start the server. The server listens on `
 
 ## Daily macro tracker
 
-The **Today’s macros** strip stays above the assistant conversation. Open **Adjust totals manually** to add, subtract, or set any combination of calories, protein, carbs, and fat. Leave a field blank to keep it unchanged; zero is a valid direct value. The four totals are independent, and manual entries can be negative for testing corrections. **Reset to zero** clears the current day's totals.
+**Today’s macros** stays beside the assistant conversation on desktop. On smaller screens, a compact four-number summary sits above chat; tap **Show details** or **Daily macros** to open goals and adjustments. Open **Adjust totals manually** to add, subtract, or set any combination of calories, protein, carbs, and fat. Leave a field blank to keep it unchanged; zero is a valid direct value. The four totals are independent, and manual entries can be negative for testing corrections. **Reset to zero** clears the current day's totals.
 
 Open **Edit daily goals** to enter your own calorie, protein, carb, and fat goals. Save any combination; a blank field removes that goal, and zero is allowed. Each card shows the consumed amount, its goal, a progress bar, and the amount remaining or exceeded. Goals and consumed totals are independent: changing protein does not recalculate calories or another macro.
 

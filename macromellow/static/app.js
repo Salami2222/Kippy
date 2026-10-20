@@ -1,8 +1,13 @@
 const els = {
   chatTab: document.getElementById('chat-tab'),
+  trackerTab: document.getElementById('tracker-tab'),
   browseTab: document.getElementById('browse-tab'),
   chatView: document.getElementById('chat-view'),
+  chatTop: document.querySelector('.chat-top'),
+  trackerPanel: document.querySelector('.daily-tracker'),
+  trackerExpand: document.getElementById('tracker-expand'),
   browseView: document.getElementById('browse-view'),
+  toastStack: document.getElementById('toast-stack'),
   messages: document.getElementById('chat-messages'),
   welcome: document.getElementById('chat-welcome'),
   loading: document.getElementById('chat-loading'),
@@ -51,6 +56,7 @@ let datasets = new Map();
 let visibleLimit = 100;
 let polling = null;
 let wasRefreshing = false;
+let lastRefreshState = null;
 let conversationId = null;
 let chatBusy = false;
 let trackerStorage;
@@ -69,6 +75,31 @@ let trackerTimer = null;
 function trackerMessage(message, error = false) {
   els.trackerStatus.textContent = message;
   els.trackerStatus.classList.toggle('error', error);
+  showToast(message, error ? 'error' : 'success');
+}
+
+function showToast(message, kind = 'success') {
+  const toast = document.createElement('div');
+  toast.className = `toast ${kind}`;
+  const icon = document.createElement('span');
+  icon.className = 'toast-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = kind === 'error' ? '!' : kind === 'info' ? 'i' : '✓';
+  const content = document.createElement('span');
+  content.textContent = message;
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Dismiss notification');
+  close.textContent = '×';
+  close.addEventListener('click', () => toast.remove());
+  toast.append(icon, content, close);
+  els.toastStack.append(toast);
+  while (els.toastStack.children.length > 3) els.toastStack.firstElementChild.remove();
+  setTimeout(() => {
+    if (!toast.isConnected) return;
+    toast.classList.add('leaving');
+    setTimeout(() => toast.remove(), 190);
+  }, 3900);
 }
 
 function trackerNumber(value) {
@@ -88,7 +119,14 @@ function renderTracker() {
     const consumed = state.totals[field];
     const goal = goals[field];
     const unit = field === 'calories' ? 'kcal' : 'g';
-    els.trackerValues[field].textContent = trackerNumber(consumed);
+    const value = els.trackerValues[field];
+    const nextText = trackerNumber(consumed);
+    if (value.textContent !== nextText) {
+      value.textContent = nextText;
+      value.classList.remove('value-change');
+      void value.offsetWidth;
+      value.classList.add('value-change');
+    }
     els.goalValues[field].textContent = goal === null ? 'No goal set' : `Goal ${trackerNumber(goal)} ${unit}`;
     const bar = els.goalBars[field];
     const balance = els.goalBalances[field];
@@ -131,15 +169,31 @@ function scheduleTrackerRollover() {
     Math.max(1, MacroTracker.nextDayBoundary(new Date()) - Date.now() + 25));
 }
 
+function setTrackerExpanded(expanded) {
+  els.trackerPanel.classList.toggle('is-collapsed', !expanded);
+  els.trackerExpand.setAttribute('aria-expanded', String(expanded));
+  els.trackerExpand.firstChild.textContent = expanded ? 'Hide details ' : 'Show details ';
+}
+
 function switchView(view) {
   const browsing = view === 'browse';
   els.chatView.hidden = browsing;
   els.browseView.hidden = !browsing;
-  els.chatTab.classList.toggle('active', !browsing);
+  els.chatTab.classList.toggle('active', view === 'chat');
+  els.trackerTab.classList.toggle('active', view === 'tracker');
   els.browseTab.classList.toggle('active', browsing);
-  els.chatTab.toggleAttribute('aria-current', !browsing);
+  els.chatTab.toggleAttribute('aria-current', view === 'chat');
+  els.trackerTab.toggleAttribute('aria-current', view === 'tracker');
   els.browseTab.toggleAttribute('aria-current', browsing);
-  if (browsing) els.search.focus(); else els.input.focus();
+  if (window.matchMedia('(max-width: 900px)').matches) {
+    if (view === 'tracker') setTrackerExpanded(true);
+    if (view === 'chat') setTrackerExpanded(false);
+  }
+  const target = browsing ? els.browseView : view === 'tracker' ? els.trackerPanel : els.chatTop;
+  const scrollBehavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+  requestAnimationFrame(() => target.scrollIntoView({block: 'start', behavior: scrollBehavior}));
+  if (browsing) els.search.focus({preventScroll: true});
+  else if (view === 'chat') els.input.focus({preventScroll: true});
 }
 
 function formatAmount(value, unit = '') {
@@ -154,6 +208,7 @@ function safeSource(url) {
 }
 
 function appendBubble(role, text) {
+  const shouldScroll = role === 'user' || nearMessagesBottom();
   const bubble = document.createElement('div');
   bubble.className = `message ${role}`;
   const label = document.createElement('span');
@@ -163,8 +218,12 @@ function appendBubble(role, text) {
   body.textContent = text;
   bubble.append(label, body);
   els.messages.append(bubble);
-  els.messages.scrollTop = els.messages.scrollHeight;
+  if (shouldScroll) requestAnimationFrame(() => { els.messages.scrollTop = els.messages.scrollHeight; });
   return bubble;
+}
+
+function nearMessagesBottom() {
+  return els.messages.scrollHeight - els.messages.scrollTop - els.messages.clientHeight < 100;
 }
 
 function nutritionGrid(values) {
@@ -305,7 +364,9 @@ function appendDebug(bubble, debug) {
 }
 
 function appendResult(data) {
+  const shouldScroll = nearMessagesBottom();
   const bubble = appendBubble('assistant', data.message);
+  if (data.kind === 'clarification') bubble.classList.add('clarification');
   for (const card of data.cards || []) {
     const panel = document.createElement('article');
     panel.className = 'nutrition-card';
@@ -389,7 +450,7 @@ function appendResult(data) {
     bubble.append(button);
   }
   appendDebug(bubble, data.debug);
-  els.messages.scrollTop = els.messages.scrollHeight;
+  if (shouldScroll) requestAnimationFrame(() => { els.messages.scrollTop = els.messages.scrollHeight; });
 }
 
 async function checkAI() {
@@ -423,7 +484,9 @@ async function sendMessage(message) {
     appendResult(data);
   } catch (error) {
     const bubble = appendBubble('assistant', error.message);
+    bubble.classList.add('error');
     appendDebug(bubble, error.debug);
+    showToast(error.message, 'error');
     await checkAI();
   } finally {
     chatBusy = false;
@@ -534,6 +597,9 @@ function row(food) {
     } else source.textContent = '—';
   } catch { source.textContent = '—'; }
   tr.append(source);
+  ['Food', 'Dining hall', 'Serving', 'Calories', 'Protein', 'Carbs', 'Fat', 'Source'].forEach((label, index) => {
+    tr.children[index].dataset.label = label;
+  });
   return tr;
 }
 
@@ -582,6 +648,10 @@ async function syncStatus() {
     const running = status.state === 'running';
     setRefreshing(running);
     if (status.state !== 'idle') showStatus(status.message, status.state === 'running' || status.state === 'success' ? '' : status.state);
+    if (lastRefreshState !== null && status.state !== lastRefreshState && ['success', 'warning', 'error'].includes(status.state)) {
+      showToast(status.message, status.state === 'success' ? 'success' : status.state === 'warning' ? 'info' : 'error');
+    }
+    lastRefreshState = status.state;
     if (running) {
       if (!wasRefreshing && status.date) { els.date.value = status.date; render(); }
       wasRefreshing = true;
@@ -592,6 +662,7 @@ async function syncStatus() {
     }
   } catch (error) {
     showStatus(`Could not check refresh status: ${error.message}`, 'error');
+    showToast(`Could not check refresh status: ${error.message}`, 'error');
     setRefreshing(false);
     if (polling) { clearInterval(polling); polling = null; }
   }
@@ -645,7 +716,9 @@ renderTracker();
 scheduleTrackerRollover();
 if (!trackerPersists) trackerMessage('Browser storage is unavailable; totals will disappear when this tab closes.', true);
 els.chatTab.addEventListener('click', () => switchView('chat'));
+els.trackerTab.addEventListener('click', () => switchView('tracker'));
 els.browseTab.addEventListener('click', () => switchView('browse'));
+els.trackerExpand.addEventListener('click', () => setTrackerExpanded(els.trackerPanel.classList.contains('is-collapsed')));
 els.newChat.addEventListener('click', () => {
   if (chatBusy) return;
   conversationId = null;
@@ -663,9 +736,10 @@ els.hall.addEventListener('change', () => { visibleLimit = 100; render(); });
 els.date.addEventListener('change', () => { visibleLimit = 100; render(); });
 els.more.addEventListener('click', () => { visibleLimit += 100; render(); });
 els.refresh.addEventListener('click', async () => {
-  if (!els.date.value) { showStatus('Choose a menu date before refreshing.', 'error'); return; }
+  if (!els.date.value) { showStatus('Choose a menu date before refreshing.', 'error'); showToast('Choose a menu date before refreshing.', 'error'); return; }
   setRefreshing(true);
   showStatus('Starting UMD refresh…');
+  showToast('Refreshing the selected UMD menu. This can take a few minutes.', 'info');
   try {
     await request('/api/refresh', {
       method: 'POST',
@@ -677,6 +751,7 @@ els.refresh.addEventListener('click', async () => {
   } catch (error) {
     setRefreshing(false);
     showStatus(error.message, 'error');
+    showToast(error.message, 'error');
   }
 });
 
