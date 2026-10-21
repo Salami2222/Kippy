@@ -53,7 +53,7 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(result["kind"], "result")
         self.assertEqual(result["total"], {"calories": 900, "protein_g": 160, "carbohydrates_g": 0, "fat_g": 25})
         self.assertEqual(result["cards"][0]["source_url"], self.dataset["foods"][0]["source_url"])
-        self.assertIn("Assumed", result["notes"][0])
+        self.assertTrue(any("Assumed" in note for note in result["notes"]))
         match = result["debug"]["matches"][0]
         self.assertEqual(match["selected"]["source_url"], self.dataset["foods"][0]["source_url"])
         self.assertEqual(match["selected"]["name_score"], 1)
@@ -133,12 +133,12 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(raised.exception.debug["error"]["stage"], "Ollama interpretation")
         self.assertIsInstance(raised.exception.debug["ai_response_time_ms"], int)
 
-    def test_missing_saved_data_is_reported_without_ollama(self):
-        ollama = StubOllama([])
+    def test_missing_saved_data_is_reported_after_interpreting_food_request(self):
+        ollama = StubOllama([{"action": "set", "operation": "lookup", "foods": [item("chicken")]}])
         with tempfile.TemporaryDirectory() as directory:
             result = DataApp(Path(directory), ollama).chat("chicken", None)
         self.assertEqual(result["kind"], "needs_data")
-        self.assertEqual(ollama.calls, [])
+        self.assertEqual(len(ollama.calls), 1)
 
     def test_offline_ollama_and_missing_model(self):
         client = OllamaClient("http://127.0.0.1:11434", "qwen3.5:9b")

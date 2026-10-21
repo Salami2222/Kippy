@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -17,7 +18,13 @@ INTENT_SCHEMA = {
     "type": "object",
     "properties": {
         "action": {"type": "string", "enum": ["set", "add", "clarify"]},
-        "operation": {"type": "string", "enum": ["lookup", "log", "edit", "remove", "undo", "today", "history", "remember", "recall", "forget"]},
+        "operation": {"type": "string", "enum": ["lookup", "log", "edit", "remove", "undo", "today", "history", "remember", "recall", "forget", "converse", "adjust"]},
+        "response_type": {"type": "string", "enum": ["acknowledgment", "message", "clarification", "action"]},
+        "response_text": {"type": "string"},
+        "adjustment_mode": {"type": "string", "enum": ["", "add", "subtract", "set"]},
+        "adjustment_values": {"type": "object", "properties": {
+            key: {"type": ["number", "null"]} for key in ("calories", "protein_g", "carbohydrates_g", "fat_g")
+        }, "required": ["calories", "protein_g", "carbohydrates_g", "fat_g"], "additionalProperties": False},
         "target": {"type": "string"},
         "label": {"type": "string"},
         "log_date": {"type": "string"},
@@ -39,7 +46,8 @@ INTENT_SCHEMA = {
         "question": {"type": "string"},
     },
     "required": ["action", "operation", "target", "label", "log_date", "memory_category",
-                 "memory_key", "memory_value", "foods", "question"],
+                 "memory_key", "memory_value", "foods", "question", "response_type", "response_text",
+                 "adjustment_mode", "adjustment_values"],
     "additionalProperties": False,
 }
 
@@ -92,6 +100,19 @@ class OllamaClient:
         if not state["model_available"]:
             raise OllamaError(state["message"])
         system = (
+            "You are Mellow, a warm, concise nutrition companion. Handle every message, including conversation. "
+            "Use operation converse for greetings, thanks, confirmations with no pending action, or general conversation. "
+            "response_type is acknowledgment only when no information or explanation is expected; otherwise message. "
+            "For questions always provide a message or route to a factual backend tool. Use clarification if uncertain. "
+            "For converse, response_text is a brief conversational reply; never claim an action occurred, invent "
+            "nutrition facts, or give numerical nutrition values. Explain unsupported requests honestly. "
+            "For backend operations response_type is action or message; the backend supplies factual text. "
+            "Use adjust only for explicitly requested manual macro changes with literal user-provided amounts. "
+            "Extract adjustment_mode add/subtract/set and adjustment_values (unspecified nutrients null). "
+            "Never calculate calories from macros. Only today's manual adjustments are supported through chat. "
+            "A reaction references only its message_id; never use it as blanket permission or as approval for "
+            "removals, resets, memory deletion, or unrelated actions. Reaction events marked inactive are withdrawn. "
+            "Meal reaction approvals are executed by the backend; never execute them again. "
             "Plan a safe nutrition assistant action. Do not calculate nutrition or claim a UMD food exists. "
             "Return only the requested JSON schema. Operation is lookup for questions, log only when the user "
             "explicitly asks to add/log a meal, edit for a correction to a logged meal, remove for deletion, "
@@ -117,7 +138,7 @@ class OllamaClient:
             "favorite_meal, favorite_food, common_meal, or frequent_food. Memory fields are plain "
             "user-provided text, never UMD facts. "
             "Ask for clarification if a removal, edit, or log target is unclear. "
-            "Never put numeric nutrition values in the response."
+            "Only adjustment_values may contain literal nutrition numbers supplied by the user."
         )
         context = {"today": today, "saved_dates": dates, "previous_foods": previous,
                    "last_clarification": last_question, "recent_interactions": (recent or [])[-6:],
@@ -130,13 +151,36 @@ class OllamaClient:
         }, timeout=90)
         try:
             intent = json.loads(response["message"]["content"])
-            if intent.get("action") not in {"set", "add", "clarify"} or not isinstance(intent.get("foods"), list):
-                raise ValueError("Invalid intent")
-            if intent.get("operation", "lookup") not in {"lookup", "log", "edit", "remove", "undo", "today",
-                                                             "history", "remember", "recall", "forget"}:
-                raise ValueError("Invalid operation")
-            if len(intent["foods"]) > 12:
-                raise ValueError("Too many foods")
+            validate_response(intent)
             return intent
         except (KeyError, TypeError, ValueError) as exc:
             raise OllamaError("Ollama could not interpret that request. Please rephrase it.") from exc
+
+
+def validate_response(intent: dict) -> None:
+    """Validate presentation fields even for injected/local planner implementations."""
+    if not isinstance(intent, dict) or intent.get("action") not in {"set", "add", "clarify"}:
+        raise ValueError("Invalid agent plan. Please rephrase your request.")
+    if not isinstance(intent.get("foods"), list) or len(intent["foods"]) > 12:
+        raise ValueError("Invalid food request.")
+    if intent.get("operation", "lookup") not in {"lookup", "log", "edit", "remove", "undo", "today", "history", "remember", "recall", "forget", "converse", "adjust"}:
+        raise ValueError("Unsupported agent operation.")
+    for key in ("target", "label", "log_date", "memory_category", "memory_key", "memory_value"):
+        if not isinstance(intent.get(key, ""), str) or len(intent.get(key, "")) > 500:
+            raise ValueError("Invalid agent action field.")
+    if intent.get("response_type", "message") not in {"acknowledgment", "message", "clarification", "action"}:
+        raise ValueError("Invalid structured response type. Please rephrase your request.")
+    for key in ("response_text", "question"):
+        value = intent.get(key, "")
+        if not isinstance(value, str) or len(value) > 2000:
+            raise ValueError("Invalid response text. Please rephrase your request.")
+    if intent.get("operation") == "converse":
+        if intent.get("response_type") not in {"acknowledgment", "message", "clarification"}:
+            raise ValueError("Invalid conversational response.")
+        if intent["response_type"] == "message" and not intent.get("response_text", "").strip():
+            raise ValueError("Mellow returned an empty answer. Please try again.")
+        text = intent.get("response_text", "")
+        if re.search(r"\b(logged|added|updated|removed|deleted|saved|reset|recorded|changed|tracked)\b", text, re.I):
+            raise ValueError("Mellow returned an unverified action claim. No action was executed; please rephrase your request.")
+        if re.search(r"\d", text) and re.search(r"\b(calories|kcal|protein|carbs|carbohydrates|fat|grams)\b", text, re.I):
+            raise ValueError("Nutrition numbers must come from a verified lookup or tracker tool. Please ask about a specific food or your totals.")

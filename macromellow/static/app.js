@@ -67,6 +67,7 @@ let lastRefreshState = null;
 let conversationId = null;
 try { conversationId = window.localStorage.getItem('macromellow.conversation.v1'); } catch { /* Browser storage is optional. */ }
 let chatBusy = false;
+let historyLoading = Promise.resolve();
 let trackerStorage;
 let trackerPersists = true;
 try {
@@ -425,7 +426,9 @@ function appendDebug(bubble, debug) {
   requestSection.append(debugRow('Original request', debug.user_request));
   requestSection.append(debugRow('Model', debug.model));
   requestSection.append(debugRow('Action', debug.model_interpretation?.action));
-  requestSection.append(debugRow('Backend operation', debug.model_interpretation?.operation || 'lookup'));
+  requestSection.append(debugRow('Backend operation', debug.model_interpretation?.operation || debug.tool_action?.operation || 'None'));
+  requestSection.append(debugRow('Response type', debug.response_type || debug.model_interpretation?.response_type));
+  if (debug.reaction_target) requestSection.append(debugRow('Reaction target message', debug.reaction_target));
   if (debug.model_interpretation?.target) requestSection.append(debugRow('Target meal', debug.model_interpretation.target));
   if (debug.model_interpretation?.label) requestSection.append(debugRow('Meal label', debug.model_interpretation.label));
   if (debug.model_interpretation?.log_date) requestSection.append(debugRow('Log date', debug.model_interpretation.log_date));
@@ -469,7 +472,7 @@ function appendDebug(bubble, debug) {
   }
   math.append(debugRow('Final total', debug.total ?
     `Calories ${formatAmount(debug.total.calories)} · Protein ${formatAmount(debug.total.protein_g, ' g')} · Carbs ${formatAmount(debug.total.carbohydrates_g, ' g')} · Fat ${formatAmount(debug.total.fat_g, ' g')}` :
-    'No complete meal total because a match or menu is unresolved.'));
+    'No complete meal total calculated for this response.'));
 
   const flags = debugSection(body, 'Accuracy notes and timing');
   if (debug.tool_action) flags.append(debugRow('Tool result', JSON.stringify(debug.tool_action)));
@@ -484,8 +487,8 @@ function appendDebug(bubble, debug) {
     error.classList.add('debug-alert');
     flags.append(error);
   }
-  flags.append(debugRow('Mellow response time', debug.ai_response_time_ms === null ? 'Not called' : `${debug.ai_response_time_ms} ms`));
-  flags.append(debugRow('Total response time', debug.response_time_ms === null ? 'Unavailable' : `${debug.response_time_ms} ms`));
+  flags.append(debugRow('Mellow response time', debug.ai_response_time_ms == null ? 'Not called' : `${debug.ai_response_time_ms} ms`));
+  flags.append(debugRow('Total response time', debug.response_time_ms == null ? 'Unavailable' : `${debug.response_time_ms} ms`));
   details.append(body);
   bubble.append(details);
 }
@@ -494,6 +497,7 @@ function appendResult(data) {
   const shouldScroll = nearMessagesBottom();
   const bubble = appendBubble('assistant', data.message);
   if (data.kind === 'clarification') bubble.classList.add('clarification');
+  if (data.kind === 'error') bubble.classList.add('error');
   for (const card of data.cards || []) {
     const panel = document.createElement('article');
     panel.className = 'nutrition-card';
@@ -608,7 +612,9 @@ function appendResult(data) {
     bubble.append(button);
   }
   appendDebug(bubble, data.debug);
+  if (data.message_id) attachReactionButton(bubble, data);
   if (shouldScroll) requestAnimationFrame(() => { els.messages.scrollTop = els.messages.scrollHeight; });
+  return bubble;
 }
 
 async function checkAI() {
@@ -624,35 +630,118 @@ async function checkAI() {
   }
 }
 
+function setChatBusy(busy) {
+  chatBusy = busy;
+  els.loading.hidden = !busy;
+  els.send.disabled = busy;
+  els.messages.querySelectorAll('.reaction-button').forEach(button => { button.disabled = busy; });
+}
+
+function attachReactionButton(bubble, data) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'reaction-button';
+  const active = Boolean(data.user_reaction);
+  button.classList.toggle('is-selected', active);
+  button.setAttribute('aria-pressed', String(active));
+  button.setAttribute('aria-label', active ? 'Remove your thumbs-up reaction (does not undo actions)' :
+    data.approval ? `Approve logging this meal for ${data.approval.date} with a thumbs-up` : 'React thumbs-up to this Mellow message');
+  button.title = button.getAttribute('aria-label');
+  button.textContent = active ? '👍 You' : '👍';
+  button.disabled = chatBusy;
+  button.addEventListener('click', async () => {
+    if (chatBusy) return;
+    setChatBusy(true);
+    try {
+      const update = await stateRequest('/api/reaction', {conversation_id: conversationId,
+        message_id: data.message_id, active: !active});
+      if (update.tracker) applyBackendTracker(update.tracker);
+      await loadConversation();
+      if (update.response?.kind === 'error') showToast(update.response.message, 'error');
+      else showToast(active ? 'Reaction removed. Logged meals are unchanged.' :
+        update.response?.message || 'Reaction saved.', 'info');
+    } catch (error) { showToast(error.message, 'error'); }
+    finally { setChatBusy(false); }
+  });
+  bubble.append(button);
+}
+
+function mellowReaction(bubble) {
+  const badge = document.createElement('span');
+  badge.className = 'reaction-badge mellow-reaction';
+  badge.textContent = '👍 Mellow';
+  badge.title = 'Mellow understood this message. This acknowledgment is not proof of successful execution.';
+  badge.setAttribute('aria-label', badge.title);
+  bubble.append(badge);
+}
+
+async function loadConversation() {
+  if (!conversationId) return;
+  const id = conversationId;
+  const history = await request(`/api/conversation?id=${encodeURIComponent(id)}`);
+  if (id !== conversationId) return;
+  const atBottom = nearMessagesBottom();
+  const scrollTop = els.messages.scrollTop;
+  const previous = new Set([...els.messages.children].map(node => node.dataset.messageId));
+  els.messages.replaceChildren();
+  els.welcome.hidden = history.messages.length > 0;
+  const bubbles = new Map();
+  for (const entry of history.messages) {
+    const data = entry.payload;
+    let bubble;
+    if (entry.role === 'user') {
+      bubble = appendBubble('user', data.message);
+      if (entry.reactions.mellow) mellowReaction(bubble);
+    } else if (data.response_type === 'acknowledgment' || data.acknowledgment_only) {
+      // No empty assistant bubble: keep diagnostic details attached to the understood request.
+      const parent = bubbles.get(data.reply_to);
+      if (parent?.classList.contains('user') && data.debug) appendDebug(parent, data.debug);
+      else if (parent?.querySelector('.reaction-button[aria-pressed="true"]')) {
+        const receipt = document.createElement('span');
+        receipt.className = 'reaction-receipt';
+        receipt.textContent = '👍 Mellow acknowledged your reaction';
+        parent.append(receipt);
+      }
+      continue;
+    } else {
+      bubble = appendResult({...data, message_id: entry.id, user_reaction: entry.reactions.user});
+    }
+    bubble.dataset.messageId = entry.id;
+    if (previous.has(entry.id)) bubble.classList.add('restored-message');
+    bubbles.set(entry.id, bubble);
+  }
+  // Rendered history never applies old tracker snapshots to today's dashboard.
+  requestAnimationFrame(() => { els.messages.scrollTop = atBottom ? els.messages.scrollHeight : scrollTop; });
+}
+
 async function sendMessage(message) {
+  await historyLoading;
   if (chatBusy || !message.trim()) return;
-  chatBusy = true;
+  setChatBusy(true);
   els.welcome.hidden = true;
   appendBubble('user', message.trim());
   els.input.value = '';
-  els.loading.hidden = false;
-  els.send.disabled = true;
+  if (!conversationId) conversationId = crypto.randomUUID().replaceAll('-', '');
+  try { window.localStorage.setItem('macromellow.conversation.v1', conversationId); } catch { /* Optional. */ }
+  const requestId = crypto.randomUUID().replaceAll('-', '');
   try {
     const data = await request('/api/chat', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-MacroMellow-Request': 'chat'},
-      body: JSON.stringify({message: message.trim(), conversation_id: conversationId})
+      body: JSON.stringify({message: message.trim(), conversation_id: conversationId, request_id: requestId})
     });
-    conversationId = data.conversation_id;
-    try { window.localStorage.setItem('macromellow.conversation.v1', conversationId); } catch { /* Optional. */ }
     if (data.tracker) applyBackendTracker(data.tracker);
     if (data.memories) { savedMemories = data.memories; renderMemoryList(); }
-    appendResult(data);
+    await loadConversation();
+    if (data.kind === 'error') showToast(data.message, 'error');
+    else if (data.acknowledgment_only) showToast(data.message, 'success');
   } catch (error) {
     const bubble = appendBubble('assistant', error.message);
     bubble.classList.add('error');
     appendDebug(bubble, error.debug);
-    showToast(error.message, 'error');
-    await checkAI();
+    showToast('The request could not be verified. Check your tracker before resending.', 'error');
   } finally {
-    chatBusy = false;
-    els.loading.hidden = true;
-    els.send.disabled = false;
+    setChatBusy(false);
     els.input.focus();
   }
 }
@@ -929,7 +1018,9 @@ els.refresh.addEventListener('click', async () => {
   }
 });
 
-(async () => { await Promise.all([loadDatasets(false), checkAI(), loadBackendTracker(),
+historyLoading = loadConversation().catch(error => showToast(`Could not restore conversation: ${error.message}`, 'error'));
+
+(async () => { await Promise.all([historyLoading, loadDatasets(false), checkAI(), loadBackendTracker(),
   request('/api/memories').then(data => { savedMemories = data.memories; renderMemoryList(); })]); await syncStatus(); })().catch(error => {
   renderTracker();
   els.meta.textContent = 'Saved data could not be loaded.';

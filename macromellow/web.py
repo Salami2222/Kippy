@@ -12,18 +12,43 @@ import webbrowser
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
 from zoneinfo import ZoneInfo
 
 from .umd import HALLS, retrieve, save_json
 from .agent import normalize_intent, resolve, tokens
-from .ollama import OllamaClient, OllamaError
-from .memory import MemoryStore
+from .ollama import OllamaClient, OllamaError, validate_response
+from .memory import MemoryStore, numbers
+from .conversation import Conversations
 
 
 STATIC_DIR = Path(__file__).with_name("static")
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 UNAVAILABLE_MESSAGE = "UMD states nutrition information is not available for this recipe"
+
+
+def validate_adjustment(message: str, intent: dict, today: str) -> tuple[str, dict]:
+    command = re.match(r"^(?:please\s+)?(add|subtract|remove|set)\b", message.strip(), re.I)
+    if not command or "?" in message or re.search(r"\b(not|don't|never|if|unless|yesterday|tomorrow|goal|goals)\b", message, re.I):
+        raise ValueError("Please explicitly say add, subtract, or set today's macro amounts, for example: Add 35g of protein.")
+    mode = {"remove": "subtract"}.get(command[1].lower(), command[1].lower())
+    if (intent.get("adjustment_mode") != mode or intent.get("log_date", "") not in {"", today}
+            or any(day != today for day in re.findall(r"\b\d{4}-\d{2}-\d{2}\b", message))):
+        raise ValueError("Please clarify the adjustment mode and today's amounts.")
+    raw = intent.get("adjustment_values")
+    if not isinstance(raw, dict) or set(raw) - {"calories", "protein_g", "carbohydrates_g", "fat_g"}:
+        raise ValueError("Invalid macro adjustment.")
+    values = numbers({key: value for key, value in raw.items() if value is not None}, nonnegative=True)
+    found = {}
+    for match in re.finditer(r"(?<![\w.\-])([0-9]+(?:\.[0-9]+)?)\s*(?:(?:g|grams?)\s*(?:of\s+)?)?(calories|kcal|protein|carbs|carbohydrates|fat)\b", message, re.I):
+        key = {"calories": "calories", "kcal": "calories", "protein": "protein_g", "carbs": "carbohydrates_g",
+               "carbohydrates": "carbohydrates_g", "fat": "fat_g"}[match[2].lower()]
+        if key in found:
+            raise ValueError("Please specify each macro amount once.")
+        found[key] = round(float(match[1]), 2)
+    if found != values:
+        raise ValueError("Please give literal amounts such as 35g protein or 200 calories. I won't guess adjustment values.")
+    return mode, values
 
 
 class ChatError(RuntimeError):
@@ -40,6 +65,7 @@ class DataApp:
         self.lock = threading.Lock()
         self.status = {"state": "idle", "message": "", "date": None}
         self.memory = MemoryStore(data_dir / "macromellow.sqlite3")
+        self.conversations = Conversations(self)
 
     def _meal_target(self, target: str, session: dict) -> dict | None:
         active = [meal for meal in self.memory.meals(30) if meal["status"] == "active"]
@@ -77,14 +103,8 @@ class DataApp:
                  "model_interpretation": None, "resolved_foods": [], "matches": [],
                  "calculations": [], "total": None, "warnings": [], "error": None,
                  "ai_response_time_ms": None, "response_time_ms": None, "tool_action": None}
-        if not data["datasets"] and not re.search(r"\b(today|goal|logged|history|remember|favorite|preference|undo|remove|delete|meals|yesterday|macros|totals)\b", message, re.I):
-            return {"conversation_id": None, "kind": "needs_data",
-                    "message": "No saved UMD menus yet. Open UMD menu and refresh today's menu first.",
-                    "cards": [], "total": None, "options": [],
-                    "debug": {**debug, "warnings": ["No saved UMD menu data."],
-                              "response_time_ms": round((time.perf_counter() - started) * 1000)}}
         session = self.memory.conversation(conversation_id)
-        if not conversation_id or not session.get("recent"):
+        if not conversation_id:
             conversation_id = uuid.uuid4().hex
         memories = self.memory.memories()
         recent_meals = [{"id": meal["id"], "date": meal["date"], "label": meal["label"],
@@ -102,14 +122,30 @@ class DataApp:
                      for memory in memories], recent_meals)
             finally:
                 debug["ai_response_time_ms"] = round((time.perf_counter() - ai_started) * 1000)
+            validate_response(intent)
             operation = intent.get("operation", "lookup")
             debug["model_interpretation"] = intent
             stage = "request validation"
             requested = session["foods"]
-            if intent["action"] == "clarify" and operation not in {"today", "history", "recall"}:
-                result = {"kind": "clarification", "message": intent.get("question") or "Which food do you mean?",
+            if intent["action"] == "clarify" or intent.get("response_type") == "clarification":
+                result = {"kind": "clarification", "message": intent.get("question") or intent.get("response_text") or "Could you clarify what you would like me to do?",
                           "cards": [], "total": None, "options": []}
-                debug["warnings"].append("The model requested clarification before a UMD label could be selected.")
+                debug["warnings"].append("The model requested clarification; no action was executed.")
+            elif operation == "converse":
+                response_type = intent["response_type"]
+                text = intent.get("response_text", "").strip()
+                result = {"kind": "conversation",
+                          "response_type": response_type, "message": text if response_type != "acknowledgment" else "",
+                          "cards": [], "total": None}
+            elif operation == "adjust":
+                stage = "manual macro adjustment"
+                mode, values = validate_adjustment(message, intent, self.memory.today())
+                snapshot = self.memory.adjust(mode, values)
+                result = {"kind": "adjusted", "response_type": "action", "acknowledgment_only": True,
+                          "message": "Updated today's editable macro totals.", "cards": [], "total": None,
+                          "tracker": snapshot}
+                debug["tool_action"] = {"operation": "adjust", "mode": mode, "values": values,
+                                        "verified_totals": snapshot["totals"]}
             elif operation in {"today", "history", "recall"}:
                 if operation == "today":
                     tracker = self.memory.tracker()
@@ -368,6 +404,12 @@ class AppHandler(BaseHTTPRequestHandler):
             self._json(200, self.app.memory.tracker())
         elif route == "/api/meals":
             self._json(200, {"meals": self.app.memory.meals()})
+        elif route == "/api/conversation":
+            try:
+                conversation_id = parse_qs(urlsplit(self.path).query).get("id", [""])[0]
+                self._json(200, self.app.conversations.history(conversation_id))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
         elif route == "/api/memories":
             self._json(200, {"memories": self.app.memory.memories()})
         elif route in ("/", "/app.css", "/app.js", "/tracker.js"):
@@ -384,7 +426,7 @@ class AppHandler(BaseHTTPRequestHandler):
         route = urlsplit(self.path).path
         actions = {"/api/tracker/adjust", "/api/tracker/goals", "/api/tracker/reset",
                    "/api/tracker/import", "/api/tracker/add-result", "/api/meal/remove", "/api/meal/restore",
-                   "/api/memory/save", "/api/memory/update", "/api/memory/delete"}
+                   "/api/memory/save", "/api/memory/update", "/api/memory/delete", "/api/reaction"}
         if route not in ("/api/refresh", "/api/chat", *actions):
             self._json(404, {"error": "Not found"})
             return
@@ -412,13 +454,15 @@ class AppHandler(BaseHTTPRequestHandler):
                                                                or len(conversation_id) != 32))):
                     raise ValueError("Invalid chat request")
                 try:
-                    self._json(200, self.app.chat(message.strip(), conversation_id))
+                    self._json(200, self.app.conversations.turn(message.strip(), conversation_id, payload.get("request_id")))
                 except ChatError as exc:
                     self._json(exc.status, {"error": str(exc), "debug": exc.debug})
                 return
             if route in actions:
                 try:
-                    if route == "/api/tracker/adjust":
+                    if route == "/api/reaction":
+                        result = self.app.conversations.react(payload["conversation_id"], payload["message_id"], payload["active"])
+                    elif route == "/api/tracker/adjust":
                         result = self.app.memory.adjust(payload["mode"], payload["values"])
                     elif route == "/api/tracker/goals":
                         result = self.app.memory.set_goals(payload["goals"])
