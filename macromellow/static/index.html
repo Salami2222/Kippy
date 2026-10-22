@@ -11,30 +11,24 @@
 <body>
   <main class="shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark" aria-hidden="true">M</span><span class="brand-name">Macro<span>Mellow</span></span></div>
-      <span class="local-tag"><span class="local-dot" aria-hidden="true"></span> Private local workspace</span>
+      <div class="brand-lockup">
+        <div class="brand"><span class="brand-mark" aria-hidden="true">M</span><span class="brand-name">Macro<span>Mellow</span></span></div>
+        <p class="brand-tagline">Your AI-powered nutrition assistant.</p>
+      </div>
+      <nav class="tabs" aria-label="Views">
+        <button id="chat-tab" class="tab active" type="button" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H7l-3 2v-7.5a7.5 7.5 0 1 1 16-2Z"/></svg> Chat</button>
+        <button id="tracker-tab" class="tab" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V9m8 9V5m8 13v-7M2 20h20"/></svg> Daily macros</button>
+        <button id="browse-tab" class="tab" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h8M8 17h5"/></svg> Food data</button>
+      </nav>
+      <details id="ai-status" class="source-card connection" aria-live="polite">
+        <summary><span class="source-dot" aria-hidden="true"></span><strong id="ai-status-title">Checking Mellow’s connection…</strong><span class="connection-chevron" aria-hidden="true">⌄</span></summary>
+        <span id="ai-status-detail">The food data browser works offline.</span>
+      </details>
     </header>
-
-    <section class="hero" aria-labelledby="page-title">
-      <div>
-        <p class="eyebrow">NUTRITION, MADE SIMPLE</p>
-        <h1 id="page-title">Your AI-powered nutrition assistant.</h1>
-        <p class="intro">Tell MacroMellow what you ate. We’ll help with the macros. UMD dining is the first supported source.</p>
-      </div>
-      <div id="ai-status" class="source-card" role="status" aria-live="polite">
-        <span class="source-dot" aria-hidden="true"></span>
-        <div><strong id="ai-status-title">Checking Mellow’s connection…</strong><span id="ai-status-detail">The food data browser works offline.</span></div>
-      </div>
-    </section>
-
-    <nav class="tabs" aria-label="Views">
-      <button id="chat-tab" class="tab active" type="button" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H7l-3 2v-7.5a7.5 7.5 0 1 1 16-2Z"/></svg> Chat</button>
-      <button id="tracker-tab" class="tab" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V9m8 9V5m8 13v-7M2 20h20"/></svg> Daily macros</button>
-      <button id="browse-tab" class="tab" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h8M8 17h5"/></svg> Food data</button>
-    </nav>
+    <h1 id="page-title" class="sr-only">MacroMellow — Your AI-powered nutrition assistant.</h1>
 
     <section id="chat-view" class="chat-view" aria-label="Mellow nutrition chat">
-      <div class="chat-top"><div class="chat-identity"><span class="mellow-avatar" aria-hidden="true">m</span><div><p class="eyebrow">YOUR NUTRITION COMPANION</p><h2>Mellow</h2></div></div><button id="new-chat" class="quiet-button" type="button"><span aria-hidden="true">＋</span> New chat</button></div>
+      <div class="chat-top"><div class="chat-identity"><span class="mellow-avatar" aria-hidden="true">m</span><div><h2>Mellow</h2></div></div><button id="new-chat" class="quiet-button" type="button"><span aria-hidden="true">＋</span> New chat</button></div>
       <section class="daily-tracker is-collapsed" aria-labelledby="tracker-title">
         <div class="tracker-heading"><div><p class="eyebrow">DAILY OVERVIEW</p><h3 id="tracker-title">Today’s macros <span id="tracker-date"></span></h3></div><div class="tracker-heading-actions"><span class="tracker-timezone">Resets midnight ET</span><button id="tracker-expand" class="tracker-expand" type="button" aria-expanded="false" aria-controls="tracker-totals tracker-controls goal-controls">Show details <span aria-hidden="true">⌄</span></button></div></div>
         <div id="tracker-totals" class="tracker-totals" aria-live="polite">

@@ -41,7 +41,7 @@ Use `--no-browser` if you only want to start the server. The server listens on `
 
 ### Visual design
 
-The interface uses marshmallow surfaces, a warm cream background, and caramel accents with toasted-brown headings. Shared palette tokens live in `macromellow/static/app.css`; error and success feedback retain distinct colors. Rounded controls use a short squish on press and a gentle spring on release. Chat entrances, progress bars, value updates, and expanding panels animate subtly and respect reduced-motion preferences. No external fonts or UI dependencies are needed; the Mellow avatar slot is preserved for future mascot artwork.
+Branding, navigation, and expandable connection details share a compact desktop header, leaving more height and width for messages. On small screens the navigation wraps below the brand and status. The interface uses marshmallow surfaces, a warm cream background, and caramel accents with toasted-brown headings. Shared palette tokens live in `macromellow/static/app.css`; error and success feedback retain distinct colors. Rounded controls use a short squish on press and a gentle spring on release. Chat entrances, progress bars, value updates, and expanding panels animate subtly and respect reduced-motion preferences. No external fonts or UI dependencies are needed; the Mellow avatar slot is preserved for future mascot artwork.
 
 ## Daily macro tracker
 
