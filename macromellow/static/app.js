@@ -799,7 +799,7 @@ function attachMessageActions(bubble, data, role) {
         ...(approval && !active ? {confirm_approval: true} : {})
       });
       if (update.tracker) applyBackendTracker(update.tracker);
-      await loadConversation();
+      await loadConversation({animateReactionIds: [data.message_id]});
       if (update.response?.kind === 'error') showToast(update.response.message, 'error');
       else if (update.response?.response_type === 'action') { mascot.respond(); showToast(update.response.message, 'success'); }
       if (event.detail === 0) {
@@ -854,7 +854,18 @@ function attachMessageActions(bubble, data, role) {
   bubble.append(toolbar);
 }
 
-async function loadConversation() {
+function appendReactionBadge(bubble, role, animate) {
+  const badge = document.createElement('span');
+  badge.className = 'message-reaction-badge';
+  if (animate) badge.classList.add('is-new-reaction');
+  badge.textContent = '👍';
+  badge.setAttribute('role', 'img');
+  badge.setAttribute('aria-label', role === 'assistant' ? 'You liked this message' : 'Mellow acknowledged this message; acknowledgment is not proof of a completed action');
+  badge.title = badge.getAttribute('aria-label');
+  bubble.append(badge);
+}
+
+async function loadConversation({animateReactionIds = []} = {}) {
   if (!conversationId) return;
   const id = conversationId;
   const history = await request(`/api/conversation?id=${encodeURIComponent(id)}`);
@@ -862,6 +873,7 @@ async function loadConversation() {
   const atBottom = nearMessagesBottom();
   const scrollTop = els.messages.scrollTop;
   const previous = new Set([...els.messages.children].map(node => node.dataset.messageId));
+  const previousReactions = new Set([...els.messages.querySelectorAll('.message')].filter(node => node.querySelector('.message-reaction-badge')).map(node => node.dataset.messageId));
   const openActions = new Set([...els.messages.children].filter(node => node.classList.contains('actions-open')).map(node => node.dataset.messageId));
   els.messages.replaceChildren();
   els.welcome.hidden = history.messages.length > 0;
@@ -882,6 +894,8 @@ async function loadConversation() {
       bubble = appendResult({...data, message_id: entry.id, user_reaction: entry.reactions.user, reaction_processed: entry.reaction_processed?.user});
     }
     bubble.dataset.messageId = entry.id;
+    const reacted = entry.role === 'assistant' ? entry.reactions.user : entry.reactions.mellow;
+    if (reacted) appendReactionBadge(bubble, entry.role, animateReactionIds.includes(entry.id) && !previousReactions.has(entry.id));
     bubble.parentElement.classList.toggle('actions-open', openActions.has(entry.id));
     if (previous.has(entry.id)) bubble.classList.add('restored-message');
     bubbles.set(entry.id, bubble);
@@ -910,7 +924,7 @@ async function sendMessage(message) {
     });
     if (data.tracker) applyBackendTracker(data.tracker);
     if (data.memories) { savedMemories = data.memories; renderMemoryList(); }
-    await loadConversation();
+    await loadConversation({animateReactionIds: [requestId]});
     if (data.kind === 'error') {
       mascot.fail();
       showToast(data.message, 'error');

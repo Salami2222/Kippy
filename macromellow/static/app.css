@@ -465,6 +465,10 @@ input, select, textarea { transition: border-color .18s var(--ease), box-shadow 
 .message-action:disabled { opacity: .45; }
 .message:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .message-action-status.is-error { position: absolute; top: calc(100% + 5px); right: 0; width: 190px; padding: 7px 9px; border: 1px solid var(--error-line); border-radius: 10px; background: var(--error-bg); color: var(--error); font-size: 11px; line-height: 1.4; }
+/* A saved reaction floats in the existing 10px message gap without changing layout. */
+.message-reaction-badge { position: absolute; right: 12px; bottom: -8px; z-index: 2; display: grid; place-items: center; width: 30px; height: 22px; padding: 0; border: 2px solid var(--surface); border-radius: 999px; background: var(--ink); color: var(--gold); font-size: 13px; line-height: 1; box-shadow: 0 2px 4px rgb(var(--shadow-color) / .09); user-select: none; }
+.message-reaction-badge.is-new-reaction { animation: reaction-badge-in 180ms ease-out both; }
+@keyframes reaction-badge-in { from { opacity: 0; transform: translateY(2px) scale(.85); } to { opacity: 1; transform: none; } }
 .restored-message { animation: none; }
 .composer { display: block; }
 .composer-input-row { display: flex; align-items: flex-end; gap: 7px; min-width: 0; }
@@ -502,4 +506,5 @@ input, select, textarea { transition: border-color .18s var(--ease), box-shadow 
   button { transform: none !important; }
   .mellow-mascot, .mellow-mascot img, .mellow-mascot::after { animation: none !important; transform: none !important; filter: none !important; }
   .mellow-mascot::after { display: none; }
+  .message-reaction-badge { animation: none !important; }
 }

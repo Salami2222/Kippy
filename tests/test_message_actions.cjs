@@ -13,7 +13,7 @@ function history(approval = false) {
 const message = (app, role) => app.get('chat-messages').querySelectorAll('.message').find(node => node.classList.contains(role));
 const action = (app, role, name) => message(app, role).querySelector(`.message-action-${name}`);
 
-test('each restored message gets exactly three outline actions, with role-specific wrappers and no badges', async () => {
+test('each restored message gets exactly three outline actions, with role-specific wrappers and no large badges', async () => {
   const app = await loadApp(); await app.loadHistory(history());
   for (const role of ['user','assistant']) {
     const node = message(app,role), toolbar = node.querySelector('.message-actions');
@@ -150,4 +150,63 @@ test('touch taps reveal actions, scrolling and interactive controls do not; keyb
   assert.equal(action(app,'assistant','like').focused,true);
   await action(app,'assistant','like').emit('click',{detail:0});
   assert.equal(action(app,'assistant','like').focused,true);
+});
+
+
+test('floating assistant likes appear, stay selected, disappear on unlike and restore without animation', async () => {
+  const app=await loadApp(); const entries=history(); await app.loadHistory(entries);
+  const badge=() => message(app,'assistant').querySelector('.message-reaction-badge');
+  assert.equal(badge(),null);
+  await action(app,'assistant','like').emit('click');
+  assert.equal(badge().textContent,'👍');
+  assert.equal(badge().getAttribute('aria-label'),'You liked this message');
+  assert.equal(badge().classList.contains('is-new-reaction'),true);
+  assert.equal(action(app,'assistant','like').getAttribute('aria-pressed'),'true');
+  assert.equal(message(app,'assistant').querySelector('.message-actions').querySelectorAll('button').length,3);
+  await app.run('loadConversation()');
+  assert.equal(badge().classList.contains('is-new-reaction'),false);
+  await action(app,'assistant','like').emit('click');
+  assert.equal(badge(),null);
+  assert.equal(action(app,'assistant','like').getAttribute('aria-pressed'),'false');
+  entries[1].reactions.user=true;
+  const reopened=await loadApp(); await reopened.loadHistory(entries);
+  assert.equal(message(reopened,'assistant').querySelector('.message-reaction-badge').classList.contains('is-new-reaction'),false);
+});
+
+test('user badges represent persisted Mellow acknowledgment, never user feedback or inferred success', async () => {
+  const app=await loadApp(); const entries=history(); entries[0].reactions={};
+  await app.loadHistory(entries);
+  assert.equal(message(app,'user').querySelector('.message-reaction-badge'),null);
+  await action(app,'user','like').emit('click');
+  assert.equal(action(app,'user','like').getAttribute('aria-pressed'),'true');
+  assert.equal(message(app,'user').querySelector('.message-reaction-badge'),null);
+  entries[0].reactions.mellow=true;
+  await app.run(`loadConversation({animateReactionIds:['${userId}']})`);
+  let badge=message(app,'user').querySelector('.message-reaction-badge');
+  assert.equal(badge.textContent,'👍');
+  assert.match(badge.getAttribute('aria-label'),/Mellow acknowledged/);
+  assert.equal(badge.classList.contains('is-new-reaction'),true);
+  await app.run(`loadConversation({animateReactionIds:['${userId}']})`);
+  badge=message(app,'user').querySelector('.message-reaction-badge');
+  assert.equal(badge.classList.contains('is-new-reaction'),false);
+  await action(app,'user','like').emit('click');
+  assert.ok(message(app,'user').querySelector('.message-reaction-badge'));
+  const reopened=await loadApp(); await reopened.loadHistory(entries);
+  assert.equal(message(reopened,'user').querySelector('.message-reaction-badge').classList.contains('is-new-reaction'),false);
+});
+
+test('cancelled meal approval never adds a floating assistant badge', async () => {
+  const app=await loadApp(); await app.loadHistory(history(true));
+  await action(app,'assistant','like').emit('click');
+  assert.equal(message(app,'assistant').querySelector('.message-reaction-badge'),null);
+  assert.equal(app.requests.filter(request => request.url === '/api/reaction').length,0);
+});
+
+
+test('a live update animates only its target while older restored badges remain still', async () => {
+  const app=await loadApp(); const entries=history(); entries[1].reactions.user=true;
+  app.setHistory(entries);
+  await app.run(`conversationId='c'.repeat(32); loadConversation({animateReactionIds:['${mellowId}']})`);
+  assert.equal(message(app,'assistant').querySelector('.message-reaction-badge').classList.contains('is-new-reaction'),true);
+  assert.equal(message(app,'user').querySelector('.message-reaction-badge').classList.contains('is-new-reaction'),false);
 });

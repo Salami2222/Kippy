@@ -131,7 +131,12 @@ them. Touch targets are 44px, animations are short, and reduced motion is respec
 - **Thumbs up:** ordinary Mellow messages toggle a persisted reaction. Your own
   messages use a separate persisted feedback reaction (`/api/message-feedback`),
   which cannot authorize nutrition operations. Automatic Mellow acknowledgments
-  remain in SQLite/context, with no large badges or acknowledgment pills in chat.
+  remain in SQLite/context. A tiny floating thumbs-up pill shows your like on
+  Mellow's messages, or Mellow's saved acknowledgment on yours. Your own user-message
+  feedback never fabricates a Mellow acknowledgment. Badges stay visible without
+  hover; new reactions fade/scale in over 180ms, restored history does not animate,
+  and reduced motion disables the effect. They overlap the bottom-right edge within
+  the existing message gap without moving bubbles or changing the three actions.
 - **Meal offers:** a complete, unambiguous, same-day result can offer meal logging.
   Clicking thumbs up first opens an explicit confirmation naming the exact meal,
   nutrition and date. Cancel sends nothing. `/api/reaction` also requires a boolean
