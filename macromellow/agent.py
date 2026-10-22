@@ -18,8 +18,29 @@ AUTO_MATCH_MIN_SCORE = 0.86
 ALTERNATIVE_MARGIN = 0.06
 
 
+FOOD_ALIASES = {
+    "mac n cheese": "macaroni and cheese",
+    "mac and cheese": "macaroni and cheese",
+    "mac n cheeze": "macaroni and cheese",
+    "banannas": "bananas",
+    "bananna": "banana",
+    "banannna": "banana",
+    "choc chip": "chocolate chip",
+    "choclate": "chocolate",
+    "cilanto": "cilantro",
+    "maccaroni": "macaroni",
+}
+
+
+def food_words(value: str) -> list[str]:
+    value = value.lower().replace("&", " and ")
+    for short, canonical in FOOD_ALIASES.items():
+        value = re.sub(r"\\b" + re.escape(short) + r"\\b", canonical, value)
+    return re.findall(r"[a-z0-9]+", value)
+
+
 def tokens(value: str) -> set[str]:
-    words = re.findall(r"[a-z0-9]+", value.lower())
+    words = food_words(value)
     return {word[:-1] if word.endswith("s") and len(word) > 3 else word
             for word in words if word not in STOP_WORDS}
 
