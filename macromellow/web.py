@@ -53,24 +53,28 @@ def validate_adjustment(message: str, intent: dict, today: str) -> tuple[str, di
 
 
 def allowed_request_origin(headers, peer_ip: str) -> bool:
-    """Check browser Origin for local HTTP or HTTPS through Tailscale Serve.
+    """Allow same-origin local HTTP and HTTPS requests through Tailscale Serve.
 
-    Serve terminates HTTPS and forwards to our loopback-only HTTP listener.
-    Trust its X-Forwarded-Host/Proto only when the actual TCP peer is loopback.
-    Never allow arbitrary external origins or infer authorization from an
-    unverified X-Forwarded-* header.
+    Tailscale Serve terminates HTTPS and may forward an internal Host such as
+    127.0.0.1:8000, without X-Forwarded-Host. A strict Origin == http://Host
+    comparison therefore rejects legitimate HTTPS form submissions.
+
+    Only accept a Tailscale HTTPS Origin when the TCP peer is loopback (the
+    local reverse proxy) and Host is either that same hostname or loopback.
+    The existing X-MacroMellow-Request header is still required for writes,
+    preventing ordinary cross-origin browser forms from sending requests.
     """
     origin = headers.get("Origin")
     if not origin:
-        return True  # Retain existing behavior for local CLI / non-browser requests.
+        return True  # Preserve current local CLI behavior.
     host = headers.get("Host", "")
-    if origin == f"http://{host}" and host:
+    if host and origin == f"http://{host}":
         return True
-    if peer_ip not in {"127.0.0.1", "::1"}:
+    if peer_ip not in {"127.0.0.1", "::1", "::ffff:127.0.0.1"}:
         return False
     try:
         parsed = urlsplit(origin)
-        return (
+        if not (
             parsed.scheme == "https"
             and parsed.hostname is not None
             and parsed.hostname.endswith(".ts.net")
@@ -81,14 +85,21 @@ def allowed_request_origin(headers, peer_ip: str) -> bool:
             and not parsed.path
             and not parsed.query
             and not parsed.fragment
-            and (
-                host.lower() == parsed.netloc.lower()
-                or (
-                    headers.get("X-Forwarded-Proto", "").lower() == "https"
-                    and headers.get("X-Forwarded-Host", "").lower() == parsed.netloc.lower()
-                )
-            )
-        )
+        ):
+            return False
+        if host.lower() == parsed.netloc.lower():
+            return True
+        forwarded_host = headers.get("X-Forwarded-Host", "")
+        if (
+            headers.get("X-Forwarded-Proto", "").lower() == "https"
+            and forwarded_host.lower() == parsed.netloc.lower()
+        ):
+            return True
+        # Tailscale Serve commonly rewrites Host to the internal backend and
+        # provides no forwarded hostname; localhost-only socket access makes
+        # this fallback specific to the installed local reverse proxy.
+        internal_host = urlsplit(f"http://{host}").hostname
+        return internal_host in {"127.0.0.1", "localhost", "::1"}
     except ValueError:
         return False
 
