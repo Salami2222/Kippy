@@ -53,20 +53,23 @@ The eight PNGs live in `macromellow/static/assets/mellow/`; their [asset notes](
 
 ### Update the existing Windows server
 
-In PowerShell, change into the existing MacroMellow checkout (use its actual path), then pull the changes:
+Use **`mellow-update`** from your Mac Terminal after the [one-time Mac setup](docs/remote-deployment.md).
+It connects using the existing SSH key to `tommy@100.81.130.10`, updates
+`C:\Users\tommy\MacroMellow` from main with fast-forward-only Git operations,
+checks dependencies in the existing `.venv`, runs tests, safely restarts
+`\MacroMellow Web`, and verifies HTTP 200 on Windows port **8000**. Dirty
+checkouts and unidentified port listeners are refused. Failed updates attempt
+guarded code recovery; no application data is restored or deleted.
 
-```powershell
-Set-Location "C:\path\to\MacroMellow"
-git pull --ff-only origin main
+```bash
+mellow-update --check  # tests + current service health; no pull/install/restart
+mellow-update         # deploy latest GitHub main, test, restart, verify
 ```
 
-Restart the existing MacroMellow Python process using its current launch method. For a manually launched server, press `Ctrl+C` in its terminal and run:
-
-```powershell
-py -3 -m macromellow web --port 8001 --no-browser
-```
-
-Keep the same port, `--data-dir`, and environment variables used by your current server (replace `8001` above if yours differs). Your existing JSON and SQLite files stay in place. If your server already uses Task Scheduler, restart that existing task through its usual controls; this update requires no task or Tailscale configuration changes. Refresh the browser after restarting; use `Ctrl+F5` if it retains old styles. No Ollama model update or new dependency is required.
+The [deployment guide](docs/remote-deployment.md) covers setup, dependencies,
+failure recovery, limits, and the isolated Windows deployment tests. The existing
+launcher, data directory, task credentials, SSH settings, and Tailscale settings
+remain in place. Refresh the browser after an update (`Ctrl+F5` if needed).
 
 ## Daily macro tracker
 
