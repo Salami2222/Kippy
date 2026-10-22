@@ -8,6 +8,19 @@ class OriginSecurityTests(unittest.TestCase):
         headers = {"Host": "tp-industry.tail4cab83.ts.net", "Origin": "https://tp-industry.tail4cab83.ts.net"}
         self.assertTrue(allowed_request_origin(headers, "127.0.0.1"))
         self.assertFalse(allowed_request_origin(headers, "192.0.2.1"))
+    def test_tailscale_proxy_rewrites_host_to_loopback(self):
+        origin = "https://tp-industry.tail4cab83.ts.net"
+        for backend_host in ("127.0.0.1:8000", "localhost:8000", "[::1]:8000"):
+            self.assertTrue(allowed_request_origin(
+                {"Host": backend_host, "Origin": origin}, "127.0.0.1"
+            ))
+        self.assertFalse(allowed_request_origin(
+            {"Host": "evil.example", "Origin": origin}, "127.0.0.1"
+        ))
+        self.assertFalse(allowed_request_origin(
+            {"Host": "127.0.0.1:8000", "Origin": "https://evil.example"}, "127.0.0.1"
+        ))
+
     def test_forwarded_https(self):
         headers = {"Host": "127.0.0.1:8000", "Origin": "https://tp-industry.tail4cab83.ts.net", "X-Forwarded-Host": "tp-industry.tail4cab83.ts.net", "X-Forwarded-Proto": "https"}
         self.assertTrue(allowed_request_origin(headers, "127.0.0.1"))
