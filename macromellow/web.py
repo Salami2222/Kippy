@@ -81,8 +81,13 @@ def allowed_request_origin(headers, peer_ip: str) -> bool:
             and not parsed.path
             and not parsed.query
             and not parsed.fragment
-            and headers.get("X-Forwarded-Proto", "").lower() == "https"
-            and headers.get("X-Forwarded-Host", "").lower() == parsed.netloc.lower()
+            and (
+                host.lower() == parsed.netloc.lower()
+                or (
+                    headers.get("X-Forwarded-Proto", "").lower() == "https"
+                    and headers.get("X-Forwarded-Host", "").lower() == parsed.netloc.lower()
+                )
+            )
         )
     except ValueError:
         return False
