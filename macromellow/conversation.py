@@ -157,6 +157,7 @@ class Conversations:
                                     tracker=self.store.tracker())
                     session = self.store.conversation(conversation_id)
                     if added:
+                        session["working_logged_id"] = meal["id"]
                         session["last_logged_id"] = meal["id"]
                         session["last_action"] = {"type": "log", "entry_id": meal["id"]}
                         self.store.save_conversation(conversation_id, session)

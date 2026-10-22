@@ -53,7 +53,7 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(result["kind"], "result")
         self.assertEqual(result["total"], {"calories": 900, "protein_g": 160, "carbohydrates_g": 0, "fat_g": 25})
         self.assertEqual(result["cards"][0]["source_url"], self.dataset["foods"][0]["source_url"])
-        self.assertTrue(any("Assumed" in note for note in result["notes"]))
+        self.assertEqual(result["cards"][0]["conversion"], "Reported units match the listed UMD unit.")
         match = result["debug"]["matches"][0]
         self.assertEqual(match["selected"]["source_url"], self.dataset["foods"][0]["source_url"])
         self.assertEqual(match["selected"]["name_score"], 1)
@@ -79,7 +79,7 @@ class AgentTests(unittest.TestCase):
         self.assertTrue(all(candidate["source_url"] for candidate in result["debug"]["matches"][0]["candidates"]))
 
     def test_same_food_across_halls_needs_hall(self):
-        self.dataset["foods"].append(food("Grilled Chicken Breast", hall="251 North"))
+        self.dataset["foods"].append(food("Grilled Chicken Breast", hall="251 North", calories=210))
         result = resolve([item("grilled chicken breast", hall="")], [self.dataset], DAY)
         self.assertEqual(result["kind"], "clarification")
         self.assertEqual(len(result["options"]), 2)
@@ -158,7 +158,7 @@ class AgentTests(unittest.TestCase):
                 self.assertEqual(payload["model"], "qwen3.5:9b")
                 self.assertEqual(payload["format"]["type"], "object")
                 self.assertIn("operation", payload["format"]["required"])
-                self.assertIn("log_date", payload["format"]["required"])
+                self.assertEqual(payload["format"]["required"], ["operation"])
                 self.assertEqual(json.loads(payload["messages"][1]["content"])["today"], DAY)
                 self.assertFalse(payload["stream"])
 

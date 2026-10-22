@@ -428,6 +428,8 @@ function appendDebug(bubble, debug) {
   requestSection.append(debugRow('Action', debug.model_interpretation?.action));
   requestSection.append(debugRow('Backend operation', debug.model_interpretation?.operation || debug.tool_action?.operation || 'None'));
   requestSection.append(debugRow('Response type', debug.response_type || debug.model_interpretation?.response_type));
+  if (debug.planner) requestSection.append(debugRow('Planner diagnostics', JSON.stringify(debug.planner)));
+  if (debug.pending_clarification) requestSection.append(debugRow('Pending clarification', JSON.stringify(debug.pending_clarification)));
   if (debug.reaction_target) requestSection.append(debugRow('Reaction target message', debug.reaction_target));
   if (debug.model_interpretation?.target) requestSection.append(debugRow('Target meal', debug.model_interpretation.target));
   if (debug.model_interpretation?.label) requestSection.append(debugRow('Meal label', debug.model_interpretation.label));
@@ -440,7 +442,7 @@ function appendDebug(bubble, debug) {
   if (debug.resolved_foods?.length) debug.resolved_foods.forEach((food, index) => requestSection.append(debugRow(`Meal item ${index + 1}`, debugFood(food))));
 
   const matches = debugSection(body, 'UMD matching');
-  matches.append(debugRow('Scoring', 'Heuristic name similarity, not a probability. Hall and date filter the records first.'));
+  matches.append(debugRow('Scoring', 'Heuristic coverage, token precision, and character similarity; not a probability. Hall and date filter the records first.'));
   if (!debug.matches?.length) matches.append(debugRow('Match attempts', 'None'));
   for (const match of debug.matches || []) {
     const group = document.createElement('div');
@@ -449,6 +451,7 @@ function appendDebug(bubble, debug) {
     group.append(debugRow('Decision', match.status));
     if (match.selected) {
       debugSource(group, match.selected, 'Selected: ');
+      if (match.selected.signals) group.append(debugRow('Match signals', JSON.stringify(match.selected.signals)));
       group.append(debugRow('Listed serving', match.selected.serving_size || 'Missing from UMD label'));
     }
     const alternatives = (match.candidates || []).filter(candidate => !match.selected || candidate.name !== match.selected.name || candidate.source_url !== match.selected.source_url || candidate.dining_hall !== match.selected.dining_hall);
@@ -461,6 +464,7 @@ function appendDebug(bubble, debug) {
   for (const calculation of debug.calculations || []) {
     const group = document.createElement('div');
     group.className = 'debug-match';
+    if (calculation.conversion) group.append(debugRow('Portion conversion', calculation.conversion));
     group.append(debugRow('Food', `${calculation.name} · ${calculation.quantity} listed serving(s) × ${calculation.serving_size || 'size unavailable'}`));
     for (const [label, key, unit] of [['Calories', 'calories', ''], ['Protein', 'protein_g', ' g'], ['Carbs', 'carbohydrates_g', ' g'], ['Fat', 'fat_g', ' g']]) {
       const per = calculation.per_serving?.[key];
@@ -483,7 +487,7 @@ function appendDebug(bubble, debug) {
   });
   else if (!debug.error) flags.append(debugRow('Checks', 'No specific assumption flagged; verify the label when accuracy matters.'));
   if (debug.error) {
-    const error = debugRow(`Error · ${debug.error.stage}`, debug.error.message);
+    const error = debugRow(`Error · ${debug.error.stage}`, `${debug.error.message} · ${debug.error.category || 'unknown'} · ${JSON.stringify(debug.error.details || {})}`);
     error.classList.add('debug-alert');
     flags.append(error);
   }
@@ -508,8 +512,15 @@ function appendResult(data) {
     title.textContent = card.name;
     const serving = document.createElement('p');
     serving.className = 'card-serving';
-    serving.textContent = `${card.quantity} listed serving${card.quantity === 1 ? '' : 's'} × ${card.serving_size || 'size unavailable'} · ${card.match}`;
-    panel.append(kicker, title, serving, nutritionGrid(card.nutrition));
+    const portionKnown = card.portion_confirmed !== false;
+    serving.textContent = portionKnown ? `${card.reported_quantity ?? card.quantity} ${card.unit || 'serving'} → ${card.quantity} listed serving${card.quantity === 1 ? '' : 's'} × ${card.serving_size || 'size unavailable'} · ${card.match}` :
+      `Reported ${card.reported_quantity} ${card.unit} · UMD serving: ${card.serving_size || 'unavailable'} · portion needs confirmation`;
+    panel.append(kicker, title, serving);
+    if (!portionKnown) {
+      const label = document.createElement('p'); label.className = 'result-note';
+      label.textContent = 'Official values per listed serving below. Your portion has not been calculated.';
+      panel.append(label, nutritionGrid(card.per_serving));
+    } else panel.append(nutritionGrid(card.nutrition));
     const linkUrl = safeSource(card.source_url);
     if (linkUrl) {
       const link = document.createElement('a');
@@ -526,9 +537,19 @@ function appendResult(data) {
     const total = document.createElement('div');
     total.className = 'total-card';
     const title = document.createElement('strong');
-    title.textContent = data.cards.length > 1 ? 'Meal total' : 'Estimated total';
+    title.textContent = data.nutrition_complete === false ? 'Partial nutrition total · missing UMD values' : data.cards.length > 1 ? 'Meal total' : 'Estimated total';
     total.append(title, nutritionGrid(data.total));
     bubble.append(total);
+  }
+  if (data.confirmed_subtotal) {
+    const subtotal = document.createElement('div'); subtotal.className = 'total-card';
+    const title = document.createElement('strong'); title.textContent = 'Confirmed subtotal · excludes unresolved foods and portions';
+    subtotal.append(title, nutritionGrid(data.confirmed_subtotal)); bubble.append(subtotal);
+  }
+  if (data.unresolved_items?.length) {
+    const pending = document.createElement('p'); pending.className = 'result-note';
+    pending.textContent = 'Still checking: ' + data.unresolved_items.map(item => `${item.name} (${item.field})`).join(' · ');
+    bubble.append(pending);
   }
   if (data.kind === 'tracker' && data.total) {
     const total = document.createElement('div'); total.className = 'total-card';

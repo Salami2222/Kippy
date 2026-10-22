@@ -63,6 +63,30 @@ With a saved menu and the Windows Ollama server connected, ask `How many calorie
 
 The assistant sends a constrained JSON schema to [Ollama's chat endpoint](https://docs.ollama.com/api/chat) and validates the returned plan. The model identifies the requested operation, foods, portions, halls, dates, and memory fields; it never supplies official nutrient numbers. Python searches saved UMD menus, rejects uncertain matches, multiplies official per-serving values, and calculates totals. Logging requires an explicit add/log/track request, a matching menu date, complete official macro values, and a clear listed portion. A vague portion or uncertain food prompts clarification before the ledger changes. Repeat meal fingerprints are not silently logged twice. Conversation context is a small recent window plus the current meal state stored in SQLite, so it survives a server restart when the browser retains its conversation ID. A new chat starts a separate context.
 
+### Natural meal descriptions and clarification
+
+Mellow accepts multi-food descriptions such as:
+
+> I had a macaroni pizza slice, 2 scoops of cilantro lime rice, 1 chocolate chip cookie and a scoop of mac n cheese
+
+The working meal retains all four reported items: one pizza slice, two scoops of rice, one cookie, and one scoop of mac and cheese. Names are checked against actual saved UMD labels; a missing macaroni pizza does **not** turn into a different pizza. Aliases such as `mac n cheese` and `mac and cheese`, conservative spelling similarity, requested ingredients, token coverage/precision, hall/date filters, and competing labels contribute to matching. Exact duplicate labels listed at multiple halls can share a result; distinct recipes still need a hall or label choice.
+
+A clarification keeps the complete working meal in SQLite: food names, reported quantities/units, selected label keys, remaining unresolved items, the current question, and the intended lookup/log/edit operation and authorization. Reply with a candidate name, a distinguishing description, or **the first one**. Candidate buttons fill a specific reply into the composer. Follow-ups such as **The pizza was from The Y**, **Actually it was 3 scoops of rice, not 2**, and **Wait, remove the cookie** change the relevant item without discarding the rest. If a correction could apply to multiple items, Mellow asks which one. Preferences remain separate from consumed meals.
+
+A scoop is never silently treated as a serving. An exact listed count (e.g. one slice or one each) can be calculated directly; measured weights use standard unit conversions. If a scoop's size is unknown, reply with something like **each scoop was 3 oz** or **each scoop matches one listed serving** if that is accurate. No cup-to-weight density or scoop size is guessed. Cards with uncertain portions show official **per-listed-serving** values only. A clearly labeled **confirmed subtotal** excludes unresolved items/portions, and a complete meal cannot be logged until required matches, portions, dates, and nutrients are verified. Older saved results with assumed scoop conversions must be checked again.
+
+**I had...** performs a lookup, without persistent logging. **Can you add that to today's macros?** explicitly requests logging. A pending explicit log can finish after its portion/label questions are answered; **don't log it** cancels that intent. Corrections replace the existing logged meal, and undo restores both its ledger values and working context. Canonical label/serving fingerprints and request IDs prevent duplicate additions. **I had the same thing as yesterday** requires a unique, real, verified prior meal; historical labels retain their source date, and logging on a new date requires matching records for that date.
+
+#### Local planner reliability
+
+The planning schema requires only `operation`; unrelated fields are optional, and Python normalizes and strictly validates defaults, foods, patches, dates, and types. No source URL or official nutrient values are accepted from the model. A single fenced JSON object is supported. Empty, malformed, truncated, missing, or incorrectly typed model output can receive **one repair request**, within a shared 90-second planning budget. Connection errors, timeouts, HTTP failures, and model failures are reported explicitly and are not retried as interpretations. The model availability check has its own 10-second timeout.
+
+Planning calls use `think: false` and a bounded output budget; this is a per-request option, with no change to Ollama's installation or Windows configuration. In the live October 21 test, `/api/show` reported Qwen's default thinking enabled; the first thinking-enabled request timed out. With thinking disabled, the exact four-food example extracted correctly on the first attempt in about two seconds. A subsequent live five-turn check preserved food context through hall/quantity corrections and removal while leaving daily totals unchanged. These smoke tests used a temporary database and copies of saved menus, not the active tracker.
+
+Developer debugging distinguishes malformed JSON, missing/empty content, invalid fields, truncated output, repair attempts, connection issues, timeouts, and model failures. It also shows pending state, individual match signals, and verified portion calculations. Sanitized failure diagnostics contain categories and field names, without raw model replies or private conversation content in server logs. Normal chat history/debugging remains stored locally in SQLite. See [Ollama's thinking controls](https://docs.ollama.com/capabilities/thinking).
+
+Remaining limits: only saved UMD menus are supported; short/generic names, unknown dishes, ambiguous past meals, and unmeasured portions can still require clarification. Matching scores are conservative heuristics, not calibrated probabilities. An unsupported answer stays unresolved. Model parsing is tested with deterministic fixtures; real Qwen behavior can vary. Restart the app manually after updating to run the changes; no automatic deployment or network configuration changes are performed.
+
 ### Message reactions and acknowledgments
 
 Every new chat turn is now saved as messages with stable IDs in the existing SQLite database. The current conversation and its reactions reload after a page refresh or server restart. Older compact agent context is retained, but messages from before this update cannot be reconstructed as a full transcript. **New chat** starts a separate conversation.
@@ -79,9 +103,9 @@ Local tests do not verify deployment on the Windows host. Pull the GitHub change
 
 ### Developer debugging
 
-Open **Developer debugging** below any assistant response to inspect that turn. It shows the original request, the model's structured interpretation and backend action, the effective meal items after any follow-up correction, the saved date and hall used for each lookup, selected UMD label links, and ranked alternative records. The displayed name score is a **heuristic similarity score, not a probability** that the food is correct. A low score or a close competing record prevents automatic selection and asks for clarification. A different selected menu name or an assumed portion is called out in the normal response as well as the debug panel.
+Open **Developer debugging** below any assistant response to inspect that turn. It shows the original request, the model's structured interpretation and backend action, the effective meal items after any follow-up correction, the saved date and hall used for each lookup, selected UMD label links, and ranked alternative records. The displayed name score is a **heuristic similarity score, not a probability** that the food is correct. A low score or a close competing record prevents automatic selection and asks for clarification. A different selected menu name or an unresolved portion is called out in the normal response as well as the debug panel.
 
-For each selected food, the panel shows UMD values per listed serving multiplied by the number of assumed servings, then the final total. Missing official values remain unavailable in both places. The panel also lists accuracy notes, the Ollama response time (including its model availability check), the full request time, and any error stage. Errors return a debug panel too. These diagnostics are sent only to the local browser for the current turn; they are not saved to the UMD JSON files.
+For each selected food, the panel shows UMD values per listed serving multiplied by the verified serving factor, then the final total. Missing official values remain unavailable in both places. The panel also lists accuracy notes, the Ollama response time (including its model availability check), the full request time, and any error stage. Errors return a debug panel too. These diagnostics appear in the local browser and persisted conversation history; they are not saved to the UMD JSON files.
 
 Run the automated tests without a live Ollama server:
 
@@ -89,6 +113,14 @@ Run the automated tests without a live Ollama server:
 python3 -m unittest discover -s tests -v
 node --test tests/test_tracker.cjs
 ```
+
+Optionally test the real configured Ollama model, without changing the active tracker:
+
+```bash
+python3 tests/smoke_ollama.py
+```
+
+This uses a temporary SQLite database and copies of saved JSON menus. It checks the four-food example plus hall/quantity corrections, cookie removal, and a follow-up question. It prints `SKIPPED` when the model is unavailable, and exits unsuccessfully on a failed assertion or model response. Pass a JSON data-directory path as the first argument if needed. The automated suite includes a checked-in excerpt of actual October 19 UMD labels; it does not require live Ollama or a network connection.
 
 ## Command line retrieval and search
 

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from .agent import NUTRIENTS
+from .agent import NUTRIENTS, portion_factor
 
 
 NY = ZoneInfo("America/New_York")
@@ -97,7 +97,7 @@ class MemoryStore:
     def conversation(self, conversation_id: str | None) -> dict:
         if not conversation_id:
             return {"foods": [], "question": "", "recent": [], "last_result_id": None,
-                    "last_logged_id": None, "last_action": None}
+                    "last_logged_id": None, "last_action": None, "pending": None, "selections": {}, "working_logged_id": None}
         with self.db() as con:
             row = con.execute("SELECT state_json FROM conversations WHERE id=? AND profile_id=?",
                               (conversation_id, PROFILE)).fetchone()
@@ -168,6 +168,14 @@ class MemoryStore:
         result = self.result(result_id)
         if not result or result.get("kind") != "result" or not result.get("cards"):
             raise ValueError("This nutrition result is unavailable.")
+        for card in result["cards"]:
+            if card.get("portion_confirmed") is False:
+                raise ValueError("Please confirm the reported portion before logging this result.")
+            if "portion_confirmed" not in card:
+                # Old saved results may have assumed a scoop was a serving. Revalidate them.
+                factor, _ = portion_factor({"quantity": card.get("quantity", 1), "unit": card.get("unit", "unspecified")}, card)
+                if factor is None or factor != card.get("quantity"):
+                    raise ValueError("This older result needs a portion check. Ask Mellow to verify it again.")
         values = numbers(result.get("total"), complete=True, nonnegative=True)
         if any(card.get("menu_date") != day for card in result["cards"]):
             raise ValueError("The menu date differs from the log date. Specify a matching saved menu first.")
@@ -265,6 +273,14 @@ class MemoryStore:
         result = self.result(result_id)
         if not result or result.get("kind") != "result" or not result.get("cards"):
             raise ValueError("The replacement nutrition result is unavailable.")
+        for card in result["cards"]:
+            if card.get("portion_confirmed") is False:
+                raise ValueError("Please confirm the reported portion before logging this result.")
+            if "portion_confirmed" not in card:
+                # Old saved results may have assumed a scoop was a serving. Revalidate them.
+                factor, _ = portion_factor({"quantity": card.get("quantity", 1), "unit": card.get("unit", "unspecified")}, card)
+                if factor is None or factor != card.get("quantity"):
+                    raise ValueError("This older result needs a portion check. Ask Mellow to verify it again.")
         values = numbers(result.get("total"), complete=True, nonnegative=True)
         stamp = self.timestamp()
         with self.db() as con:
