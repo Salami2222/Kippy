@@ -6,13 +6,14 @@
   <title>MacroMellow · Meet Mellow</title>
   <link rel="stylesheet" href="/app.css">
   <script src="/tracker.js" defer></script>
+  <script src="/mascot.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
   <main class="shell">
     <header class="topbar">
       <div class="brand-lockup">
-        <div class="brand"><span class="brand-mark" aria-hidden="true">M</span><span class="brand-name">Macro<span>Mellow</span></span></div>
+        <div class="brand"><img class="brand-mark mellow-profile" data-mellow-profile src="/assets/mellow/profile.png" alt="" width="32" height="32"><span class="brand-name">Macro<span>Mellow</span></span></div>
         <p class="brand-tagline">Your AI-powered nutrition assistant.</p>
       </div>
       <nav class="tabs" aria-label="Views">
@@ -28,7 +29,7 @@
     <h1 id="page-title" class="sr-only">MacroMellow — Your AI-powered nutrition assistant.</h1>
 
     <section id="chat-view" class="chat-view" aria-label="Mellow nutrition chat">
-      <div class="chat-top"><div class="chat-identity"><span class="mellow-avatar" aria-hidden="true">m</span><div><h2>Mellow</h2></div></div><button id="new-chat" class="quiet-button" type="button"><span aria-hidden="true">＋</span> New chat</button></div>
+      <div class="chat-top"><div class="chat-identity"><span class="mellow-mascot" data-mellow-mascot data-state="idle" data-burned="false" aria-hidden="true"><img src="/assets/mellow/idle.png" alt="" width="64" height="64"></span><div><h2>Mellow</h2></div></div><button id="new-chat" class="quiet-button" type="button"><span aria-hidden="true">＋</span> New chat</button></div>
       <section class="daily-tracker is-collapsed" aria-labelledby="tracker-title">
         <div class="tracker-heading"><div><p class="eyebrow">DAILY OVERVIEW</p><h3 id="tracker-title">Today’s macros <span id="tracker-date"></span></h3></div><div class="tracker-heading-actions"><span class="tracker-timezone">Resets midnight ET</span><button id="tracker-expand" class="tracker-expand" type="button" aria-expanded="false" aria-controls="tracker-totals tracker-controls goal-controls">Show details <span aria-hidden="true">⌄</span></button></div></div>
         <div id="tracker-totals" class="tracker-totals" aria-live="polite">
@@ -82,7 +83,7 @@
       </section>
       <div id="chat-messages" class="chat-messages" role="log" aria-live="polite"></div>
       <div id="chat-welcome" class="chat-welcome">
-        <div class="welcome-icon mellow-avatar" aria-hidden="true">m</div>
+        <div class="welcome-icon mellow-mascot" data-mellow-mascot data-state="idle" data-burned="false" aria-hidden="true"><img src="/assets/mellow/idle.png" alt="" width="128" height="128"></div>
         <p class="welcome-kicker">MEET MELLOW</p>
         <h3>What did you eat today?</h3>
         <p>Tell Mellow about a meal or ask a nutrition question. Official lookups currently cover UMD dining.</p>
@@ -92,7 +93,7 @@
           <button type="button" class="prompt" data-prompt="How much protein is in the rotisserie chicken at The Y?">Protein in rotisserie chicken at The Y</button>
         </div>
       </div>
-      <div id="chat-loading" class="chat-loading" role="status" hidden><span class="mellow-avatar" aria-hidden="true">m</span><span>Mellow is checking saved UMD labels</span><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+      <div id="chat-loading" class="chat-loading" role="status" hidden><span class="mellow-mascot" data-mellow-mascot data-state="thinking" data-burned="false" aria-hidden="true"><img src="/assets/mellow/thinking.png" alt="" width="48" height="48"></span><span>Mellow is working on your request</span><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
       <form id="chat-form" class="composer">
         <label class="sr-only" for="chat-input">Ask Mellow about your meal</label>
         <textarea id="chat-input" rows="2" placeholder="Tell Mellow what you ate…" maxlength="1000" required></textarea>

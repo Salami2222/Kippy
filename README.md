@@ -27,7 +27,7 @@ From the repository directory, use Python 3.10+:
 python3 -m macromellow web
 ```
 
-The server opens [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser. If a browser tab does not open automatically, visit that address yourself. Press `Ctrl+C` in the terminal to stop the server. Use **Chat** to talk with Mellow, **Daily macros** to focus the tracker, and **Food data** to search the currently supported UMD menus and open original labels. On a typical laptop, chat and daily macros share the screen and scroll independently; on smaller screens, the tracker starts as a compact summary above chat. Enter sends a chat message; Shift+Enter adds a line. **New chat** clears the current conversation context. The visual design uses local system fonts, and the small Mellow letter tile is an avatar slot for future mascot artwork.
+The server opens [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser. If a browser tab does not open automatically, visit that address yourself. Press `Ctrl+C` in the terminal to stop the server. Use **Chat** to talk with Mellow, **Daily macros** to focus the tracker, and **Food data** to search the currently supported UMD menus and open original labels. On a typical laptop, chat and daily macros share the screen and scroll independently; on smaller screens, the tracker starts as a compact summary above chat. Enter sends a chat message; Shift+Enter adds a line. **New chat** clears the current conversation context. The visual design uses local system fonts and Mellow's local transparent pixel-art sprites.
 
 The app reads actual JSON files in this repository's `data/` directory. Data is not committed to Git, so a fresh clone starts empty: open **Food data**, choose today's date, and click **Refresh UMD data** to retrieve all three halls. A complete refresh can take several minutes; the page shows a loading state and any retrieval error. Existing saved data is kept if a refresh is incomplete. Dates outside UMD's current seven-day menu window cannot be refreshed, although older saved JSON can still be viewed. After a refresh, return to **Chat** and ask about that date.
 
@@ -41,7 +41,32 @@ Use `--no-browser` if you only want to start the server. The server listens on `
 
 ### Visual design
 
-Branding, navigation, and expandable connection details share a compact desktop header, leaving more height and width for messages. On small screens the navigation wraps below the brand and status. The interface uses marshmallow surfaces, a warm cream background, and caramel accents with toasted-brown headings. Shared palette tokens live in `macromellow/static/app.css`; error and success feedback retain distinct colors. Rounded controls use a short squish on press and a gentle spring on release. Chat entrances, progress bars, value updates, and expanding panels animate subtly and respect reduced-motion preferences. No external fonts or UI dependencies are needed; the Mellow avatar slot is preserved for future mascot artwork.
+Branding, navigation, and expandable connection details share a compact desktop header, leaving more height and width for messages. On small screens the navigation wraps below the brand and status. The interface uses marshmallow surfaces, a warm cream background, and caramel accents with toasted-brown headings. Shared palette tokens live in `macromellow/static/app.css`; error and success feedback retain distinct colors. Rounded controls use a short squish on press and a gentle spring on release. Chat entrances, progress bars, value updates, and expanding panels animate subtly and respect reduced-motion preferences. No external fonts or UI dependencies are needed.
+
+### Animated Mellow mascot
+
+Mellow rests in the chat header and welcome area, works on a laptop while a request is processing, and talks for 1.6 seconds after a response (including a clarification or action acknowledgment). Errors and **New chat** restore the resting pose; reconnecting starts a fresh request animation. Brand and assistant-message avatars always use the profile icon. Fixed square image slots prevent pose changes from shifting the chat or controls, and `image-rendering: pixelated` preserves the pixel edges.
+
+The toasted/crying appearance is a separate visual modifier: it appears only when **any finite positive daily goal is strictly exceeded** by that macro's current consumed total. Equality, unset goals, and zero goals do not trigger it. All four goals are checked independently. It updates immediately after goal edits, tracker changes, backend synchronization, reload, or the New York day change. Lowering totals, raising goals, or resetting the day restores the normal artwork when no goal is exceeded. This presentation does not change calculations, saved goals, or meal logs.
+
+The eight PNGs live in `macromellow/static/assets/mellow/`; their [asset notes](macromellow/static/assets/mellow/README.md) document preparation and the overlapping reference sheet's limitations. Each state has one clean pose, animated with small CSS movements rather than a multi-frame sprite strip. The subtle breathing, laptop movement, talking bounce, and toasted shimmer/smoke stop under **prefers-reduced-motion**. `mascot.js` contains the small presentation controller. Python serves only its explicit static routes and eight allowed image filenames; arbitrary paths are not exposed.
+
+### Update the existing Windows server
+
+In PowerShell, change into the existing MacroMellow checkout (use its actual path), then pull the changes:
+
+```powershell
+Set-Location "C:\path\to\MacroMellow"
+git pull --ff-only origin main
+```
+
+Restart the existing MacroMellow Python process using its current launch method. For a manually launched server, press `Ctrl+C` in its terminal and run:
+
+```powershell
+py -3 -m macromellow web --port 8001 --no-browser
+```
+
+Keep the same port, `--data-dir`, and environment variables used by your current server (replace `8001` above if yours differs). Your existing JSON and SQLite files stay in place. If your server already uses Task Scheduler, restart that existing task through its usual controls; this update requires no task or Tailscale configuration changes. Refresh the browser after restarting; use `Ctrl+F5` if it retains old styles. No Ollama model update or new dependency is required.
 
 ## Daily macro tracker
 
@@ -111,7 +136,7 @@ Run the automated tests without a live Ollama server:
 
 ```bash
 python3 -m unittest discover -s tests -v
-node --test tests/test_tracker.cjs
+node --test tests/test_tracker.cjs tests/test_mascot.cjs tests/test_mascot_integration.cjs
 ```
 
 Optionally test the real configured Ollama model, without changing the active tracker:

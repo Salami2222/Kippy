@@ -23,6 +23,19 @@ from .meals import nutrition_turn, local_reply
 
 
 STATIC_DIR = Path(__file__).with_name("static")
+STATIC_ROUTES = {
+    "/": ("index.html", "text/html; charset=utf-8"),
+    "/app.css": ("app.css", "text/css; charset=utf-8"),
+    "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/tracker.js": ("tracker.js", "text/javascript; charset=utf-8"),
+    "/mascot.js": ("mascot.js", "text/javascript; charset=utf-8"),
+    **{
+        f"/assets/mellow/{state}{variant}.png":
+        (f"assets/mellow/{state}{variant}.png", "image/png")
+        for state in ("idle", "talking", "thinking", "profile")
+        for variant in ("", "-burned")
+    },
+}
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 UNAVAILABLE_MESSAGE = "UMD states nutrition information is not available for this recipe"
 
@@ -377,12 +390,17 @@ class AppHandler(BaseHTTPRequestHandler):
                 self._json(400, {"error": str(exc)})
         elif route == "/api/memories":
             self._json(200, {"memories": self.app.memory.memories()})
-        elif route in ("/", "/app.css", "/app.js", "/tracker.js"):
-            filename = {"/": "index.html", "/app.css": "app.css", "/app.js": "app.js", "/tracker.js": "tracker.js"}[route]
-            media_type = {"index.html": "text/html; charset=utf-8", "app.css": "text/css; charset=utf-8", "app.js": "text/javascript; charset=utf-8", "tracker.js": "text/javascript; charset=utf-8"}[filename]
+        elif route in STATIC_ROUTES:
+            filename, media_type = STATIC_ROUTES[route]
             try:
-                self._send(200, (STATIC_DIR / filename).read_bytes(), media_type)
-            except OSError:
+                root = STATIC_DIR.resolve(strict=True)
+                path = (root / filename).resolve(strict=True)
+                # Keep exact public routes within the static root, including symlinks.
+                if not path.is_relative_to(root):
+                    self._json(404, {"error": "Not found"})
+                    return
+                self._send(200, path.read_bytes(), media_type)
+            except (OSError, RuntimeError):
                 self._json(500, {"error": "Interface file is missing"})
         else:
             self._json(404, {"error": "Not found"})

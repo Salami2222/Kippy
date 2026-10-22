@@ -83,6 +83,20 @@ let trackerTimer = null;
 let backendEntries = [];
 let savedMemories = [];
 let memoryEditingId = null;
+const mascot = MellowMascot.createController({render: renderMascot});
+mascot.syncTracker(tracker);
+
+function renderMascot(snapshot) {
+  document.querySelectorAll('[data-mellow-mascot]').forEach(slot => {
+    slot.dataset.state = snapshot.state;
+    slot.dataset.burned = String(snapshot.burned);
+    const img = slot.querySelector('img');
+    if (img.getAttribute('src') !== snapshot.asset) img.setAttribute('src', snapshot.asset);
+  });
+  document.querySelectorAll('[data-mellow-profile]').forEach(img => {
+    if (img.getAttribute('src') !== snapshot.profileAsset) img.setAttribute('src', snapshot.profileAsset);
+  });
+}
 
 async function stateRequest(path, payload) {
   return request(path, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-MacroMellow-Request': 'state'},
@@ -235,6 +249,7 @@ function populateGoalInputs() {
 function renderTracker() {
   const state = tracker.getState();
   const goals = tracker.getGoals();
+  mascot.syncTracker(tracker);
   els.trackerDate.textContent = humanDate(state.date);
   for (const field of MacroTracker.FIELDS) {
     const consumed = state.totals[field];
@@ -277,6 +292,8 @@ function renderTracker() {
 async function checkTrackerDay() {
   try {
     if (tracker.checkDay()) {
+      // Update the local day immediately, even while the server is reconnecting.
+      renderTracker();
       await loadBackendTracker();
       trackerMessage('New York day changed. Today’s totals started at zero.');
       scheduleTrackerRollover();
@@ -335,6 +352,16 @@ function appendBubble(role, text) {
   const label = document.createElement('span');
   label.className = 'message-label';
   label.textContent = role === 'user' ? 'You' : 'Mellow';
+  if (role === 'assistant') {
+    const profile = document.createElement('img');
+    profile.className = 'mellow-profile';
+    profile.dataset.mellowProfile = '';
+    profile.src = mascot.getState().profileAsset;
+    profile.alt = '';
+    profile.width = 24;
+    profile.height = 24;
+    label.prepend(profile);
+  }
   const body = document.createElement('p');
   body.textContent = text;
   bubble.append(label, body);
@@ -653,6 +680,8 @@ async function checkAI() {
 
 function setChatBusy(busy) {
   chatBusy = busy;
+  if (busy) mascot.startThinking();
+  else if (mascot.getState().state === 'thinking') mascot.fail();
   els.loading.hidden = !busy;
   els.send.disabled = busy;
   els.messages.querySelectorAll('.reaction-button').forEach(button => { button.disabled = busy; });
@@ -678,10 +707,15 @@ function attachReactionButton(bubble, data) {
         message_id: data.message_id, active: !active});
       if (update.tracker) applyBackendTracker(update.tracker);
       await loadConversation();
-      if (update.response?.kind === 'error') showToast(update.response.message, 'error');
-      else showToast(active ? 'Reaction removed. Logged meals are unchanged.' :
-        update.response?.message || 'Reaction saved.', 'info');
-    } catch (error) { showToast(error.message, 'error'); }
+      if (update.response?.kind === 'error') {
+        mascot.fail();
+        showToast(update.response.message, 'error');
+      } else {
+        if (update.response) mascot.respond();
+        showToast(active ? 'Reaction removed. Logged meals are unchanged.' :
+          update.response?.message || 'Reaction saved.', 'info');
+      }
+    } catch (error) { mascot.fail(); showToast(error.message, 'error'); }
     finally { setChatBusy(false); }
   });
   bubble.append(button);
@@ -754,9 +788,15 @@ async function sendMessage(message) {
     if (data.tracker) applyBackendTracker(data.tracker);
     if (data.memories) { savedMemories = data.memories; renderMemoryList(); }
     await loadConversation();
-    if (data.kind === 'error') showToast(data.message, 'error');
-    else if (data.acknowledgment_only) showToast(data.message, 'success');
+    if (data.kind === 'error') {
+      mascot.fail();
+      showToast(data.message, 'error');
+    } else {
+      mascot.respond();
+      if (data.acknowledgment_only) showToast(data.message, 'success');
+    }
   } catch (error) {
+    mascot.fail();
     const bubble = appendBubble('assistant', error.message);
     bubble.classList.add('error');
     appendDebug(bubble, error.debug);
@@ -1004,6 +1044,7 @@ els.browseTab.addEventListener('click', () => switchView('browse'));
 els.trackerExpand.addEventListener('click', () => setTrackerExpanded(els.trackerPanel.classList.contains('is-collapsed')));
 els.newChat.addEventListener('click', () => {
   if (chatBusy) return;
+  mascot.reset();
   conversationId = null;
   try { window.localStorage.removeItem('macromellow.conversation.v1'); } catch { /* Optional. */ }
   els.messages.replaceChildren();
