@@ -260,7 +260,7 @@ class DataApp:
                     session["last_result_id"] = result_id
                     if operation in {"log", "edit"}:
                         stage = "meal ledger"
-                        pattern = (r"\b(add|log|track|record)\b" if operation == "log" else
+                        pattern = (r"\b(add|log|track|record|update\s+my\s+macros|update\s+(?:today.s|my)\s+totals)\b" if operation == "log" else
                                    r"\b(actually|change|correct|edit|replace|instead)\b|make that")
                         explicit = re.search(pattern, message, re.I)
                         target_meal = self._meal_target(intent.get("target", ""), session) if operation == "edit" else None
