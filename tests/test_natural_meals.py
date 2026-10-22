@@ -211,6 +211,22 @@ class NaturalMealTests(unittest.TestCase):
         self.assertEqual(final['kind'],'result')
         self.assertEqual(app.memory.meals(),[])
 
+    def test_update_my_macros_authorizes_the_verified_meal(self):
+        app = self.app([{'operation': 'log', 'foods': [item('Chocolate Chip Cookie', unit='each', hall='south')]}])
+        result = app.conversations.turn('I had 1 chocolate chip cookie, update my macros', None)
+        self.assertEqual(result['kind'], 'meal_logged')
+        self.assertEqual(result['tracker']['totals']['calories'], 188)
+        self.assertEqual(len(app.memory.meals()), 1)
+
+    def test_do_not_update_cancels_pending_log(self):
+        app = self.app([{'operation': 'log', 'foods': [{'name': 'Cilantro Lime Rice', 'quantity': 2, 'unit': 'scoop', 'hall': 'south'}]},
+                        {'operation': 'lookup'}])
+        first = app.conversations.turn('Log 2 scoops of cilantro lime rice', None)
+        app.conversations.turn("Don't update my macros", first['conversation_id'])
+        final = app.conversations.turn('each scoop was 3 oz', first['conversation_id'])
+        self.assertEqual(final['kind'], 'result')
+        self.assertEqual(app.memory.meals(), [])
+
     def test_quantity_correction_with_two_scooped_foods_needs_target(self):
         app=self.app([{'operation':'lookup','foods':FOUR},
                       {'operation':'lookup','updates':[{'item_index':1,'quantity':3,'unit':'scoop'}]}])
@@ -254,6 +270,7 @@ class NaturalMealTests(unittest.TestCase):
         first=app.conversations.turn('A chocolate chip cookie',None)
         payload=json.dumps({'result_id':first['result_id'],'conversation_id':first['conversation_id']}).encode()
         handler=object.__new__(AppHandler); handler.app=app; handler.path='/api/tracker/add-result'
+        handler.client_address = ('127.0.0.1', 12345)
         handler.headers={'Host':'localhost:8000','Content-Type':'application/json','Content-Length':str(len(payload)),
                          'X-MacroMellow-Request':'state'}
         handler.rfile=io.BytesIO(payload); responses=[]

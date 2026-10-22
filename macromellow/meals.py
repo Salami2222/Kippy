@@ -11,7 +11,7 @@ from .agent import HALL_NAMES, normalize_intent, resolve, tokens, unit_name
 
 
 def explicit_log(message):
-    return bool(re.search(r"\b(add|log|track|record)\b", message, re.I)
+    return bool(re.search(r"\b(add|log|track|record|update\s+my\s+macros|update\s+(?:today.s|my)\s+totals)\b", message, re.I)
                 and not re.search(r"\b(don't|not|never|without|if)\b|\bI (?:prefer|like|love)\b|\bremember\b", message, re.I))
 
 
@@ -188,7 +188,7 @@ def nutrition_turn(app, message, plan, session, conversation_id, data, debug):
     metadata = {"operation": operation, "authorized": explicit_log(message) if operation == "log" else
                 bool(re.search(r"\b(actually|change|correct|edit|replace|remove|instead)\b|make that|was from", message, re.I)) if operation == "edit" else False,
                 "target": plan["target"], "label": plan["label"], "log_date": plan["log_date"]}
-    canceled = bool(re.search(r"\b(?:don't|do not|never)\s+(?:add|log|track)|\bjust (?:look up|lookup)\b", message, re.I))
+    canceled = bool(re.search(r"\b(?:don't|do not|never)\s+(?:add|log|track|record|update)|\bjust (?:look up|lookup)\b", message, re.I))
     if canceled:
         operation = "lookup"
         metadata.update(operation="lookup", authorized=False)

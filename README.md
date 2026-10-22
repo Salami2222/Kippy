@@ -110,6 +110,8 @@ Planning calls use `think: false` and a bounded output budget; this is a per-req
 
 Developer debugging distinguishes malformed JSON, missing/empty content, invalid fields, truncated output, repair attempts, connection issues, timeouts, and model failures. It also shows pending state, individual match signals, and verified portion calculations. Sanitized failure diagnostics contain categories and field names, without raw model replies or private conversation content in server logs. Normal chat history/debugging remains stored locally in SQLite. See [Ollama's thinking controls](https://docs.ollama.com/capabilities/thinking).
 
+The merged planner recovery also supports compact model replies and a JSON-only repair. After two syntax/envelope failures, a literal single-food report can be recovered from the original text only when there is no earlier meal or clarification context. Multi-food, negated, date-dependent, and rejected unsafe plans do not use that recovery. Official matching, portion checks, and logging authorization still run in Python. Explicit **update my macros** requests reuse the guarded meal logging path; **don't update my macros** cancels a pending log.
+
 Remaining limits: only saved UMD menus are supported; short/generic names, unknown dishes, ambiguous past meals, and unmeasured portions can still require clarification. Matching scores are conservative heuristics, not calibrated probabilities. An unsupported answer stays unresolved. Model parsing is tested with deterministic fixtures; real Qwen behavior can vary. Restart the app manually after updating to run the changes; no automatic deployment or network configuration changes are performed.
 
 ### Message reactions and acknowledgments

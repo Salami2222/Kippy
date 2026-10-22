@@ -90,6 +90,18 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(result["kind"], "clarification")
         self.assertEqual(result["cards"], [])
 
+    def test_multiple_food_name_typos_require_confirmation(self):
+        selected, alternatives = choose_food("griled chiken breast", self.dataset["foods"])
+        self.assertIsNone(selected)
+        self.assertTrue(any(food["name"] == "Grilled Chicken Breast" for food in alternatives))
+
+    def test_near_exact_food_match_with_competing_variant_requires_confirmation(self):
+        foods = [food("Grilled Chicken Breast"), food("Grilled Chicken Breast Strips", calories=210)]
+        selected, alternatives = choose_food("grilled chiken breast", foods)
+        self.assertIsNone(selected)
+        self.assertEqual({food["name"] for food in alternatives},
+                         {"Grilled Chicken Breast", "Grilled Chicken Breast Strips"})
+
     def test_missing_nutrition_stays_missing_in_card_and_total(self):
         self.dataset["foods"][0]["protein_g"] = None
         result = resolve([item("grilled chicken breast", 2)], [self.dataset], DAY)
@@ -159,6 +171,7 @@ class AgentTests(unittest.TestCase):
                 self.assertEqual(payload["format"]["type"], "object")
                 self.assertIn("operation", payload["format"]["required"])
                 self.assertEqual(payload["format"]["required"], ["operation"])
+                self.assertNotIn("log_date", payload["format"]["required"])  # optional fields default in Python
                 self.assertEqual(json.loads(payload["messages"][1]["content"])["today"], DAY)
                 self.assertFalse(payload["stream"])
 

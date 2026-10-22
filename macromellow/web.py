@@ -64,6 +64,60 @@ def validate_adjustment(message: str, intent: dict, today: str) -> tuple[str, di
     return mode, values
 
 
+
+def allowed_request_origin(headers, peer_ip: str) -> bool:
+    """Allow same-origin local HTTP and HTTPS requests through Tailscale Serve.
+
+    Tailscale Serve terminates HTTPS and may forward an internal Host such as
+    127.0.0.1:8000, without X-Forwarded-Host. A strict Origin == http://Host
+    comparison therefore rejects legitimate HTTPS form submissions.
+
+    Only accept a Tailscale HTTPS Origin when the TCP peer is loopback (the
+    local reverse proxy) and Host is either that same hostname or loopback.
+    The existing X-MacroMellow-Request header is still required for writes,
+    preventing ordinary cross-origin browser forms from sending requests.
+    """
+    origin = headers.get("Origin")
+    if not origin:
+        return True  # Preserve current local CLI behavior.
+    host = headers.get("Host", "")
+    if host and origin == f"http://{host}":
+        return True
+    if peer_ip not in {"127.0.0.1", "::1", "::ffff:127.0.0.1"}:
+        return False
+    try:
+        parsed = urlsplit(origin)
+        if not (
+            parsed.scheme == "https"
+            and parsed.hostname is not None
+            and parsed.hostname.endswith(".ts.net")
+            and parsed.hostname != "ts.net"
+            and parsed.port is None
+            and not parsed.username
+            and not parsed.password
+            and not parsed.path
+            and not parsed.query
+            and not parsed.fragment
+        ):
+            return False
+        if host.lower() == parsed.netloc.lower():
+            return True
+        forwarded_host = headers.get("X-Forwarded-Host", "")
+        forwarded_proto = headers.get("X-Forwarded-Proto", "").lower()
+        if forwarded_host:
+            return forwarded_proto == "https" and forwarded_host.lower() == parsed.netloc.lower()
+        # Tailscale Serve may rewrite Host without forwarding the original.
+        # In that case the local proxy connection and custom X-MacroMellow-
+        # Request header protect the app against cross-site browser posts.
+        internal_host = urlsplit(f"http://{host}").hostname
+        return (
+            internal_host in {"127.0.0.1", "localhost", "::1"}
+            and forwarded_proto in {"", "https"}
+        )
+    except ValueError:
+        return False
+
+
 class ChatError(RuntimeError):
     def __init__(self, message: str, debug: dict, status: int) -> None:
         super().__init__(message)
@@ -413,10 +467,9 @@ class AppHandler(BaseHTTPRequestHandler):
         if route not in ("/api/refresh", "/api/chat", *actions):
             self._json(404, {"error": "Not found"})
             return
-        origin = self.headers.get("Origin")
-        expected = f"http://{self.headers.get('Host')}"
         kind = "refresh" if route == "/api/refresh" else "chat" if route == "/api/chat" else "state"
-        if (origin and origin != expected) or self.headers.get("X-MacroMellow-Request") != kind:
+        if (not allowed_request_origin(self.headers, self.client_address[0])
+                or self.headers.get("X-MacroMellow-Request") != kind):
             self._json(403, {"error": "This action is only available from the local interface"})
             return
         if self.headers.get("Content-Type", "").split(";")[0] != "application/json":

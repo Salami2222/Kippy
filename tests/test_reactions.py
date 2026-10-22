@@ -187,6 +187,7 @@ class ReactionTests(unittest.TestCase):
         self.assertEqual(len(responses[-1][1]["messages"]), 2)
         payload = json.dumps({"conversation_id": reply["conversation_id"], "message_id": reply["message_id"], "active": True}).encode()
         handler.path = "/api/reaction"
+        handler.client_address = ('127.0.0.1', 12345)
         handler.headers = {"Host": "localhost:8000", "Origin": "http://localhost:8000", "Content-Type": "application/json",
                            "Content-Length": str(len(payload)), "X-MacroMellow-Request": "state"}
         handler.rfile = io.BytesIO(payload)

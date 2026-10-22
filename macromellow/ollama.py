@@ -185,6 +185,63 @@ def validate_response(intent):
     normalize_plan(intent)
 
 
+def parse_model_plan(response: dict) -> dict:
+    """Compatibility entry point for compact replies, using the strict validator."""
+    plan = decode_plan(response)
+    # Defaults describe omitted input, never a measured or verified serving size.
+    for food in plan["foods"]:
+        food.setdefault("quantity", 1)
+        food.setdefault("unit", "unspecified")
+        food.setdefault("hall", "")
+        food.setdefault("date", "")
+    values = plan.setdefault("adjustment_values", {})
+    for key in ("calories", "protein_g", "carbohydrates_g", "fat_g"):
+        values.setdefault(key, None)
+    return plan
+
+
+def fallback_single_food(message: str) -> dict | None:
+    """Recover only a complete, literal single-food report, without nutrition."""
+    if not isinstance(message, str) or len(message) > 500:
+        return None
+    # A comma may introduce an explicit action clause, but never discard a second food.
+    action = re.search(
+        r"(?:,\s*|\s+(?:and\s+)?)(?:(?:can|could)\s+you\s+|please\s+)?"
+        r"(?:update\s+my\s+macros|(?:log|track|record)\s+(?:it|that|this)(?:\s+(?:meal|food))?"
+        r"|add\s+(?:it|that|this)\s+to\s+(?:my|today(?:'s)?)\s+macros)"
+        r"(?:\s+please)?[.!?]?\s*$", message, re.I,
+    )
+    if action and re.search(r"\b(?:not|never|don't|do\s+not)\b", message, re.I):
+        return None
+    report = message[:action.start()] if action else message
+    # Date/hall/meal references require the real contextual planner.
+    if re.search(r"\b(?:yesterday|tomorrow|last|earlier|previous|before|instead|actually)\b|\d{4}-\d{2}-\d{2}", report, re.I):
+        return None
+    match = re.fullmatch(
+        r"\s*i\s+(?:just\s+)?(?:had|ate)\s+"
+        r"(?:(?P<qty>\d+(?:\.\d+)?|a|an|one|two|three)\s+)?"
+        r"(?:(?P<unit>slices?|scoops?|servings?|pieces?)\s+of\s+)?"
+        r"(?P<name>[^,;.!?\n]+?)[.!]?\s*", report, re.I,
+    )
+    if not match:
+        return None
+    name = match.group("name").strip()
+    if not name or len(name) > 100 or re.search(r"\s+(?:and|plus|from|at|on|with)\s+", name, re.I):
+        return None
+    number = (match.group("qty") or "1").lower()
+    quantity = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3}.get(number)
+    if quantity is None:
+        quantity = float(number)
+    if not 0 < quantity <= 100:
+        return None
+    unit = (match.group("unit") or ("each" if match.group("qty") else "unspecified")).lower()
+    unit = {"slices": "slice", "scoops": "scoop", "pieces": "piece", "servings": "serving"}.get(unit, unit)
+    return parse_model_plan({"message": {"content": json.dumps({
+        "operation": "log" if action else "lookup", "action": "set",
+        "foods": [{"name": name, "quantity": quantity, "unit": unit}],
+    })}})
+
+
 class OllamaClient:
     def __init__(self, base_url: str | None = None, model: str | None = None) -> None:
         self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/")
@@ -262,6 +319,8 @@ class OllamaClient:
             "For converse use response_type message with response_text, or acknowledgment only if no answer is expected. "
             "Never answer a question with acknowledgment only. Converse cannot claim an action succeeded or supply nutrition numbers. "
             "Manual adjust: adjustment_mode add/subtract/set, adjustment_values from literal user numbers only. "
+            "When food is described and the user explicitly says update my macros, choose log rather than adjust. "
+            "Keep food names in the user's words, including aliases and typos; matching belongs to the backend. "
             "Other fields target, label, log_date, memory_category/key/value are optional and only for relevant operations. "
             "Reacting is scoped to its exact message. Reaction approvals already execute in Python; do not repeat them."
         )
@@ -277,7 +336,8 @@ class OllamaClient:
             if remaining <= 0:
                 raise OllamaError("Mellow took too long to respond. Please try again.", "timeout")
             response = self._request("/api/chat", {"model": self.model, "messages": messages,
-                "stream": False, "think": False, "format": INTENT_SCHEMA, "options": {"temperature": 0, "num_predict": 2048}}, timeout=max(1, int(remaining)))
+                "stream": False, "think": False, "format": "json" if attempt else INTENT_SCHEMA,
+                "options": {"temperature": 0, "num_predict": 2048}}, timeout=max(1, int(remaining)))
             try:
                 plan = decode_plan(response)
                 plan["_diagnostics"] = {"attempts": attempt + 1, "repaired": bool(attempt), "failures": failures}
@@ -285,6 +345,15 @@ class OllamaClient:
             except PlanError as exc:
                 failures.append({"category": exc.category, "field": exc.field})
                 if attempt:
+                    # Recover syntax/envelope failures only, never a rejected unsafe plan,
+                    # a truncated multi-food reply, or a context-dependent follow-up.
+                    recoverable = {"missing_message", "content_type", "thinking_only", "empty_content", "malformed_json"}
+                    if not previous and not pending and not last_question and all(f["category"] in recoverable for f in failures):
+                        recovered = fallback_single_food(message)
+                        if recovered is not None:
+                            recovered["_diagnostics"] = {"attempts": 2, "repaired": False,
+                                "recovery": "literal_single_food", "failures": failures}
+                            return recovered
                     raise OllamaError("I couldn't read the local model's meal plan. Please try again; no tracker changes were made.",
                                       "invalid_plan", {"attempts": 2, "failures": failures}) from exc
                 # Repair without echoing malformed model text or conversation content into logs.

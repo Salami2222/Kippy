@@ -19,10 +19,24 @@ UNAVAILABLE_MESSAGE = "UMD states nutrition information is not available for thi
 STOP_WORDS = {"a", "an", "the", "of", "and", "with", "some", "serving", "servings"}
 AUTO_MATCH_MIN_SCORE = .91
 ALTERNATIVE_MARGIN = .12
+FOOD_ALIASES = {
+    "mac n cheese": "macaroni and cheese",
+    "mac and cheese": "macaroni and cheese",
+    "mac n cheeze": "macaroni and cheese",
+    "banannas": "bananas",
+    "bananna": "banana",
+    "banannna": "banana",
+    "choc chip": "chocolate chip",
+    "choclate": "chocolate",
+    "cilanto": "cilantro",
+    "maccaroni": "macaroni",
+}
 
 
 def name_words(value):
     value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode().lower().replace("&", " and ")
+    for short, canonical in FOOD_ALIASES.items():
+        value = re.sub(r"\b" + re.escape(short) + r"\b", canonical, value)
     value = re.sub(r"\bmac(?:aroni)?\s+(?:n|and|'n')\s+cheese\b", "macaroni cheese", value)
     value = re.sub(r"\bmac\s+cheese\b", "macaroni cheese", value)
     value = re.sub(r"\bbbq\b", "barbecue", value)
@@ -55,6 +69,19 @@ def normalize_intent(intent, previous):
     return normalized
 
 
+def near_exact_typo(wanted, offered):
+    """Allow only one long, highly similar token substitution for auto-matching."""
+    if len(wanted) != len(offered) or len(wanted) > 8:
+        return False
+    missing = list((Counter(wanted) - Counter(offered)).elements())
+    extra = list((Counter(offered) - Counter(wanted)).elements())
+    if len(missing) != 1 or len(extra) != 1:
+        return False
+    word, replacement = missing[0], extra[0]
+    return (min(len(word), len(replacement)) >= 5 and abs(len(word) - len(replacement)) <= 2
+            and SequenceMatcher(None, word, replacement).ratio() >= .88)
+
+
 def match_signals(query, name):
     wanted, offered = name_words(query), name_words(name)
     if not wanted or not offered:
@@ -84,6 +111,12 @@ def match_signals(query, name):
         value = 1.0
     else:
         value = .55 * coverage + .25 * precision + .2 * characters
+    if not exact:
+        if near_exact_typo(wanted, offered):
+            value = .91
+        elif value >= AUTO_MATCH_MIN_SCORE:
+            # Broader fuzzy matches remain visible candidates, requiring confirmation.
+            value = AUTO_MATCH_MIN_SCORE - .01
     # Reject cross-dish substitutions even when shared modifiers are numerous.
     dish_types = {"pizza", "cookie", "rice", "soup", "salad", "sauce", "sandwich", "pasta", "chicken", "beef", "fish", "tofu"}
     if (set(wanted) & dish_types) - set(offered):
