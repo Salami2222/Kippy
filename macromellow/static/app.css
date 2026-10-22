@@ -448,21 +448,53 @@ input, select, textarea { transition: border-color .18s var(--ease), box-shadow 
   .results-top { align-items: start; }
   .toast-stack { right: 12px; bottom: 12px; }
 }
-/* Reactions stay with their message; touch targets remain 44px on small screens. */
-.reaction-button, .reaction-badge {
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  min-height: 44px; min-width: 44px; margin-top: 9px; padding: 6px 11px;
-  border: 1px solid var(--line); border-radius: 999px;
-  background: var(--surface); color: var(--accent-dark); font-size: 12px;
+/* Reserve a stable action gutter: revealing icons never changes a bubble's size. */
+.chat-messages { container: chat-log / inline-size; }
+.message-row { position: relative; display: flex; align-items: flex-start; min-width: 0; padding-right: 116px; margin-bottom: 10px; }
+.message-row.user { justify-content: flex-end; padding-right: 0; padding-left: 116px; }
+.message-row > .message { position: relative; width: fit-content; min-width: 0; max-width: 100%; margin: 0; }
+.message-actions { position: absolute; top: 7px; left: calc(100% + 7px); display: flex; gap: 1px; padding: 3px; width: max-content; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: 0 3px 10px rgb(var(--shadow-color) / .055); color: var(--muted); opacity: 0; pointer-events: none; transform: translateX(-2px); transition: opacity 150ms ease, transform 150ms ease; z-index: 3; }
+.message.user .message-actions { left: auto; right: calc(100% + 7px); transform: translateX(2px); }
+.message-actions::before { content: ''; position: absolute; top: -8px; bottom: -8px; right: 100%; width: 9px; }
+.message.user .message-actions::before { right: auto; left: 100%; }
+.message-row:hover .message-actions, .message-row:has(:focus-visible) .message-actions, .message-row.actions-open .message-actions { opacity: 1; pointer-events: auto; transform: none; }
+.message-action { display: grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 7px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); box-shadow: none; transition: background 120ms ease, color 120ms ease; }
+.message-action svg, .reply-cancel svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.message-action:hover:not(:disabled), .message-action.is-selected { color: var(--accent-dark); background: var(--accent-soft); transform: none; }
+.message-actions .message-action:not(:disabled):active, .message-actions .message-action:not(:disabled):active:hover { transform: none; box-shadow: none; transition-duration: 120ms; }
+.message-action:disabled { opacity: .45; }
+.message:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.message-action-status.is-error { position: absolute; top: calc(100% + 5px); right: 0; width: 190px; padding: 7px 9px; border: 1px solid var(--error-line); border-radius: 10px; background: var(--error-bg); color: var(--error); font-size: 11px; line-height: 1.4; }
+.restored-message { animation: none; }
+.composer { display: block; }
+.composer-input-row { display: flex; align-items: flex-end; gap: 7px; min-width: 0; }
+.reply-preview { display: flex; align-items: center; gap: 8px; margin: 2px 5px 5px; padding: 5px 7px 5px 9px; border-left: 2px solid var(--accent); border-radius: 3px 10px 10px 3px; background: var(--surface-soft); }
+.reply-preview[hidden] { display: none; }
+.reply-preview > div { flex: 1; min-width: 0; }
+.reply-preview strong, .message-quote strong { display: block; color: var(--accent-dark); font-size: 10px; font-weight: 750; }
+.reply-preview span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
+.composer .reply-cancel { flex: none; width: 32px; min-height: 32px; padding: 7px; background: transparent; color: var(--muted); box-shadow: none; }
+.composer .reply-cancel:hover { background: var(--accent-soft); color: var(--ink); box-shadow: none; transform: none; }
+.message-quote { margin: 3px 0 9px; padding: 5px 8px; border-left: 2px solid var(--accent); border-radius: 3px 8px 8px 3px; background: rgb(var(--shadow-color) / .035); }
+.message-quote span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 11px; opacity: .8; white-space: pre-wrap; }
+.message.user .message-quote { background: rgb(255 253 249 / .08); }
+.message.user .message-quote strong { color: var(--surface); }
+@media (pointer: coarse) {
+  .message-action { width: 44px; height: 44px; }
+  .message-row { padding-right: 152px; }
+  .message-row.user { padding-left: 152px; }
+  .composer .reply-cancel { width: 44px; min-height: 44px; }
 }
-.restored-message, .restored-message .mellow-reaction { animation: none; }
-.reaction-receipt { display: inline-block; margin-left: 8px; color: var(--muted); font-size: 11px; }
-.reaction-button { animation: reaction-in .18s var(--ease); }
-.reaction-button:hover { background: var(--accent-soft); transform: translateY(-1px); }
-.reaction-button.is-selected { background: var(--accent-soft); border-color: var(--accent-dark); animation: reaction-in .22s var(--spring); }
-.reaction-button:disabled { opacity: .6; }
-.mellow-reaction { min-height: 30px; background: var(--surface-soft); color: var(--ink); font-size: 11px; animation: reaction-in .22s var(--spring); }
-@keyframes reaction-in { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: scale(1); } }
+/* In a narrow chat column, float over the label band instead of beyond an edge. */
+@container chat-log (max-width: 460px) {
+  .message-row, .message-row.user { padding-left: 0; padding-right: 0; }
+  .message-row > .message { min-width: min(100%, 240px); }
+  .message-row .message-actions, .message-row.user .message-actions { top: 4px; right: 5px; left: auto; transform: translateY(-2px); }
+  .message-row .message-actions::before { top: -5px; bottom: -5px; left: -8px; right: -8px; width: auto; z-index: -1; }
+  .message-row .message-label { min-height: 39px; padding-right: 140px; }
+  .message-action { width: 44px; height: 44px; }
+  .message-row:hover .message-actions, .message-row:has(:focus-visible) .message-actions, .message-row.actions-open .message-actions { transform: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   html, .chat-messages { scroll-behavior: auto; }

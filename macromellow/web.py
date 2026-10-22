@@ -165,7 +165,7 @@ class DataApp:
                 return f"UMD has no serving size for {card['name']}; please clarify the portion."
         return None
 
-    def chat(self, message: str, conversation_id: str | None) -> dict:
+    def chat(self, message: str, conversation_id: str | None, reply_context: dict | None = None) -> dict:
         started = time.perf_counter()
         data = self.datasets()
         debug = {"user_request": message, "model": getattr(self.ollama, "model", None),
@@ -183,7 +183,7 @@ class DataApp:
         ai_started = time.perf_counter()
         try:
             try:
-                intent = local_reply(message, session)
+                intent = local_reply(message, session) if not reply_context else None
                 if intent is None:
                     kwargs = {"pending": session.get("pending")} if isinstance(self.ollama, OllamaClient) else {}
                     intent = self.ollama.interpret(
@@ -209,7 +209,19 @@ class DataApp:
                 intent = {**intent, "action": "set", "response_type": "message"}
             stage = "request validation"
             requested = session["foods"]
-            if intent["action"] == "clarify" or intent.get("response_type") == "clarification":
+            if reply_context:
+                debug["reply_reference"] = reply_context
+            older_reply_action = reply_context and not reply_context["is_current"] and (
+                operation in {"log", "edit", "remove", "undo", "adjust", "remember", "forget"}
+                or intent["action"] in {"update", "drop"} or intent["updates"] or "selection" in intent
+                or (operation == "lookup" and not intent["foods"]
+                    and (session.get("pending") or {}).get("operation") in {"log", "edit"}))
+            if older_reply_action:
+                # An older quoted message must never redirect today's working meal implicitly.
+                result = {"kind": "clarification", "message": "You're replying to an earlier message. Please name the exact meal and date or adjustment in a new request so I don't change the wrong record.",
+                          "cards": [], "total": None, "options": []}
+                debug["warnings"].append("An older reply target cannot authorize an action against the current working meal.")
+            elif intent["action"] == "clarify" or intent.get("response_type") == "clarification":
                 result = {"kind": "clarification", "message": intent.get("question") or intent.get("response_text") or "Could you clarify what you would like me to do?",
                           "cards": [], "total": None, "options": []}
                 debug["warnings"].append("The model requested clarification; no action was executed.")
@@ -468,7 +480,7 @@ class AppHandler(BaseHTTPRequestHandler):
         route = urlsplit(self.path).path
         actions = {"/api/tracker/adjust", "/api/tracker/goals", "/api/tracker/reset",
                    "/api/tracker/import", "/api/tracker/add-result", "/api/meal/remove", "/api/meal/restore",
-                   "/api/memory/save", "/api/memory/update", "/api/memory/delete", "/api/reaction"}
+                   "/api/memory/save", "/api/memory/update", "/api/memory/delete", "/api/reaction", "/api/message-feedback"}
         if route not in ("/api/refresh", "/api/chat", *actions):
             self._json(404, {"error": "Not found"})
             return
@@ -495,14 +507,16 @@ class AppHandler(BaseHTTPRequestHandler):
                                                                or len(conversation_id) != 32))):
                     raise ValueError("Invalid chat request")
                 try:
-                    self._json(200, self.app.conversations.turn(message.strip(), conversation_id, payload.get("request_id")))
+                    self._json(200, self.app.conversations.turn(message.strip(), conversation_id, payload.get("request_id"), payload.get("reply_to")))
                 except ChatError as exc:
                     self._json(exc.status, {"error": str(exc), "debug": exc.debug})
                 return
             if route in actions:
                 try:
                     if route == "/api/reaction":
-                        result = self.app.conversations.react(payload["conversation_id"], payload["message_id"], payload["active"])
+                        result = self.app.conversations.react(payload["conversation_id"], payload["message_id"], payload["active"], payload.get("confirm_approval", False))
+                    elif route == "/api/message-feedback":
+                        result = self.app.conversations.feedback(payload["conversation_id"], payload["message_id"], payload["active"])
                     elif route == "/api/tracker/adjust":
                         result = self.app.memory.adjust(payload["mode"], payload["values"])
                     elif route == "/api/tracker/goals":

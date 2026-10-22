@@ -118,19 +118,58 @@ The merged planner recovery also supports compact model replies and a JSON-only 
 
 Remaining limits: only saved UMD menus are supported; short/generic names, unknown dishes, ambiguous past meals, and unmeasured portions can still require clarification. Matching scores are conservative heuristics, not calibrated probabilities. An unsupported answer stays unresolved. Model parsing is tested with deterministic fixtures; real Qwen behavior can vary. The optional Windows automation deploys tested main-branch changes; it does not alter network configuration.
 
-### Message reactions and acknowledgments
+### Message actions, replies, and acknowledgments
 
-Every new chat turn is now saved as messages with stable IDs in the existing SQLite database. The current conversation and its reactions reload after a page refresh or server restart. Older compact agent context is retained, but messages from before this update cannot be reconstructed as a full transcript. **New chat** starts a separate conversation.
+Hover over a message to reveal **three outline icons: thumbs up, reply, and copy**.
+Actions float to the right of Mellow's bubble and the left of yours, with a stable
+gutter so bubbles do not move. In narrow chat columns they fit over the message's
+label band instead of clipping outside the container. Tab exposes the actions;
+Enter/Space opens them from a focused message. On touchscreens, tap a message to
+reveal its actions, then tap an icon. Scrolling and text selection do not toggle
+them. Touch targets are 44px, animations are short, and reduced motion is respected.
 
-- Tap **👍** beneath any Mellow message to add your reaction; tap again to remove it. The button is keyboard accessible and reports its pressed state. Your reaction and Mellow's acknowledgment have distinct labels.
-- Mellow attaches **👍 Mellow** to understood requests. This means acknowledgment, **not proof of success**. Questions still receive answers and factual cards. Clarifications and failures show explicit text instead of an acknowledgment. Straightforward manual macro changes show the updated dashboard and a success notification, with debugging details attached to the request.
-- A complete, unambiguous, same-day UMD lookup can include **React 👍 to log this meal for YYYY-MM-DD**. Only that visible offer authorizes a reaction-triggered action. The backend binds approval to its exact result, message, conversation, and date. Older offers become stale after a newer Mellow response or midnight. A reaction to a clarification, error, or unrelated message does not execute a tool. Removals, resets, and memory deletion require explicit words or their existing controls.
-- Retries, repeated taps, removal/re-addition, and the existing **Add result to today** button cannot log the same result twice. Removing a reaction never undoes a meal; use the existing removal or undo workflow. An interrupted approval is not automatically retried: inspect the tracker before asking again.
-- Chat supports literal manual changes such as **Add 35g protein**, **Remove 200 calories from today**, or **Set 100g protein and 60g fat**. These reuse the existing adjustment ledger; calories and macros remain independent. The backend checks model-extracted amounts against the actual request. Ambiguous phrasing or other dates require clarification; the dashboard remains available for more flexible edits.
+- **Thumbs up:** ordinary Mellow messages toggle a persisted reaction. Your own
+  messages use a separate persisted feedback reaction (`/api/message-feedback`),
+  which cannot authorize nutrition operations. Automatic Mellow acknowledgments
+  remain in SQLite/context, with no large badges or acknowledgment pills in chat.
+- **Meal offers:** a complete, unambiguous, same-day result can offer meal logging.
+  Clicking thumbs up first opens an explicit confirmation naming the exact meal,
+  nutrition and date. Cancel sends nothing. `/api/reaction` also requires a boolean
+  `confirm_approval: true` for an unprocessed meal offer, protecting against stale
+  clients and accidental calls. Existing result/message/conversation/date checks
+  and duplicate prevention still apply; other reactions cannot execute tools.
+  Removing a reaction does not undo a logged meal. Use the normal removal/undo
+  workflow, and check the tracker after an interrupted action before retrying.
+- **Reply:** opens a compact quote above the composer without filling the input.
+  Cancel with X or Escape. The request sends only the referenced message ID; Python
+  resolves its original text and food/portion/date context within that conversation,
+  stores the bounded reference with the new message, and includes it in Mellow's
+  recent context. Quotes survive reloads/restarts. Quoted text is context, never
+  authorization. Actions aimed at an older message require a fresh explicit
+  request naming the meal/date rather than silently changing the current meal.
+- **Copy:** copies the message and displayed nutrition text, excluding debug data
+  and controls. A checkmark briefly confirms success. Clipboard failures appear
+  inline; use HTTPS or localhost and allow clipboard access in the browser.
 
-The Ollama planner now returns a validated response type (`acknowledgment`, `message`, `clarification`, or `action`) alongside its operation. Conversation replies do not bypass deterministic nutrition and action tools. Relevant reaction events include the referenced message ID and text in the bounded conversation context. Invalid model responses produce an explicit error without executing an action. No new dependencies or configuration are needed; restart the Python server after updating the checkout. Automated planner fixtures live only in tests, not in an application mock mode.
+Messages, reactions and reply references use the existing SQLite database; no
+new dependencies or setup are needed. **New chat** starts a separate conversation.
+Older compact context remains, but transcripts predating persisted messages cannot
+be reconstructed. Clear literal macro commands such as **Add 35g protein** retain
+their existing deterministic checks; calories and macros remain independent.
+Questions still receive answers and nutrition cards; acknowledgment is not proof
+of an action. Simple completed adjustments show the dashboard and success status,
+with debugging details attached to the original request.
 
-Local tests alone do not verify Windows deployment. The automation verifies the running commit and HTTP assets after each restart; see its guide for live task checks. The Ollama model does not need reinstalling for code updates.
+The frontend tests exercise the real handlers with an isolated DOM/clipboard and
+network harness. Python tests cover scoped references, persistence, confirmation,
+feedback isolation, stale/day checks and concurrent duplicate prevention. Manual
+browser review covered a 1280×720 desktop, 390×844 and 320×780 mobile layouts,
+left/right positioning, hover dismissal, keyboard focus, reply previews, clipboard
+success and horizontal overflow. No mock AI mode is added to the application.
+
+Local tests alone do not verify Windows deployment. The automation verifies the
+running commit and HTTP assets after restart; see the [deployment guide](docs/remote-deployment.md).
+The Ollama model does not need reinstalling for code updates.
 
 ### Developer debugging
 
@@ -142,7 +181,7 @@ Run the automated tests without a live Ollama server:
 
 ```bash
 python3 -m unittest discover -s tests -v
-node --test tests/test_tracker.cjs tests/test_mascot.cjs tests/test_mascot_integration.cjs
+node --test tests/test_*.cjs
 ```
 
 Optionally test the real configured Ollama model, without changing the active tracker:

@@ -14,6 +14,10 @@ const els = {
   form: document.getElementById('chat-form'),
   input: document.getElementById('chat-input'),
   send: document.getElementById('send'),
+  replyPreview: document.getElementById('reply-preview'),
+  replyAuthor: document.getElementById('reply-author'),
+  replyText: document.getElementById('reply-text'),
+  replyCancel: document.getElementById('reply-cancel'),
   newChat: document.getElementById('new-chat'),
   aiStatus: document.getElementById('ai-status'),
   aiTitle: document.getElementById('ai-status-title'),
@@ -67,6 +71,8 @@ let lastRefreshState = null;
 let conversationId = null;
 try { conversationId = window.localStorage.getItem('macromellow.conversation.v1'); } catch { /* Browser storage is optional. */ }
 let chatBusy = false;
+let reactionBusy = false;
+let replyTarget = null;
 let historyLoading = Promise.resolve();
 let trackerStorage;
 let trackerPersists = true;
@@ -345,7 +351,7 @@ function safeSource(url) {
   } catch { return null; }
 }
 
-function appendBubble(role, text) {
+function appendBubble(role, text, reference = null) {
   const shouldScroll = role === 'user' || nearMessagesBottom();
   const bubble = document.createElement('div');
   bubble.className = `message ${role}`;
@@ -364,8 +370,13 @@ function appendBubble(role, text) {
   }
   const body = document.createElement('p');
   body.textContent = text;
-  bubble.append(label, body);
-  els.messages.append(bubble);
+  bubble.append(label);
+  if (reference) bubble.append(replyQuote(reference));
+  bubble.append(body);
+  const row = document.createElement('div');
+  row.className = `message-row ${role}`;
+  row.append(bubble);
+  els.messages.append(row);
   if (shouldScroll) requestAnimationFrame(() => { els.messages.scrollTop = els.messages.scrollHeight; });
   return bubble;
 }
@@ -458,6 +469,10 @@ function appendDebug(bubble, debug) {
   if (debug.planner) requestSection.append(debugRow('Planner diagnostics', JSON.stringify(debug.planner)));
   if (debug.pending_clarification) requestSection.append(debugRow('Pending clarification', JSON.stringify(debug.pending_clarification)));
   if (debug.reaction_target) requestSection.append(debugRow('Reaction target message', debug.reaction_target));
+  if (debug.reply_reference) {
+    requestSection.append(debugRow('Reply target message', debug.reply_reference.message_id));
+    requestSection.append(debugRow('Quoted context', debug.reply_reference.text));
+  }
   if (debug.model_interpretation?.target) requestSection.append(debugRow('Target meal', debug.model_interpretation.target));
   if (debug.model_interpretation?.label) requestSection.append(debugRow('Meal label', debug.model_interpretation.label));
   if (debug.model_interpretation?.log_date) requestSection.append(debugRow('Log date', debug.model_interpretation.log_date));
@@ -660,7 +675,7 @@ function appendResult(data) {
     bubble.append(button);
   }
   appendDebug(bubble, data.debug);
-  if (data.message_id) attachReactionButton(bubble, data);
+  if (data.message_id) attachMessageActions(bubble, data, 'assistant');
   if (shouldScroll) requestAnimationFrame(() => { els.messages.scrollTop = els.messages.scrollHeight; });
   return bubble;
 }
@@ -687,51 +702,156 @@ function setChatBusy(busy) {
   if (busy) mascot.startThinking();
   else if (mascot.getState().state === 'thinking') mascot.fail();
   els.loading.hidden = !busy;
-  els.send.disabled = busy;
-  els.messages.querySelectorAll('.reaction-button').forEach(button => { button.disabled = busy; });
+  updateActionBusy();
 }
 
-function attachReactionButton(bubble, data) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'reaction-button';
-  const active = Boolean(data.user_reaction);
-  button.classList.toggle('is-selected', active);
-  button.setAttribute('aria-pressed', String(active));
-  button.setAttribute('aria-label', active ? 'Remove your thumbs-up reaction (does not undo actions)' :
-    data.approval ? `Approve logging this meal for ${data.approval.date} with a thumbs-up` : 'React thumbs-up to this Mellow message');
-  button.title = button.getAttribute('aria-label');
-  button.textContent = active ? '👍 You' : '👍';
-  button.disabled = chatBusy;
-  button.addEventListener('click', async () => {
-    if (chatBusy) return;
-    setChatBusy(true);
+function updateActionBusy() {
+  els.send.disabled = chatBusy || reactionBusy;
+  els.messages.querySelectorAll('.message-action-like').forEach(button => { button.disabled = chatBusy || reactionBusy; });
+}
+
+const ACTION_PATHS = {
+  like: 'M7 10v11H3V10h4Zm0 0 5-8c2 0 3 1 2 4l-1 4h6a2 2 0 0 1 2 2l-2 7a2 2 0 0 1-2 2H7',
+  reply: 'm9 5-6 6 6 6M3 11h10a7 7 0 0 1 7 7v2',
+  copy: 'M9 9h12v12H9zM15 5V3H3v12h2',
+  check: 'm5 12 4 4L19 6'
+};
+function actionIcon(name) {
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('viewBox', '0 0 24 24'); icon.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', ACTION_PATHS[name]); icon.append(path);
+  return icon;
+}
+function replyQuote(reference) {
+  const quote = document.createElement('blockquote'); quote.className = 'message-quote';
+  const who = document.createElement('strong'); who.textContent = `Replying to ${reference.role === 'user' ? 'You' : 'Mellow'}`;
+  const text = document.createElement('span'); text.textContent = reference.text.slice(0, 180);
+  quote.append(who, text); return quote;
+}
+function setReplyTarget(target) {
+  const stickToBottom = nearMessagesBottom();
+  replyTarget = target;
+  els.replyPreview.hidden = !target;
+  els.replyAuthor.textContent = target ? `Replying to ${target.role === 'user' ? 'You' : 'Mellow'}` : '';
+  els.replyText.textContent = target ? target.text.slice(0, 160) : '';
+  if (stickToBottom) requestAnimationFrame(() => { els.messages.scrollTop = els.messages.scrollHeight; });
+}
+function messagePlainText(data) {
+  const macros = values => `Calories: ${formatAmount(values.calories, ' kcal')} · Protein: ${formatAmount(values.protein_g, ' g')} · Carbs: ${formatAmount(values.carbohydrates_g, ' g')} · Fat: ${formatAmount(values.fat_g, ' g')}`;
+  const lines = [data.message || ''];
+  for (const card of data.cards || []) {
+    lines.push(`${card.name} · ${hallLabel(card.dining_hall)} · ${humanDate(card.menu_date)}`);
+    if (card.portion_confirmed === false) {
+      lines.push(`Portion unconfirmed. Official values per listed serving only: ${card.serving_size || 'size unavailable'}`);
+      lines.push(macros(card.per_serving || {}));
+    } else {
+      lines.push(`${card.quantity ?? 'Unconfirmed'} × ${card.serving_size || 'serving size unavailable'}`);
+      if (card.nutrition) lines.push(macros(card.nutrition));
+    }
+    const source = safeSource(card.source_url);
+    if (source) lines.push(source);
+  }
+  if (data.total) lines.push(`${data.nutrition_complete === false ? 'Partial total (missing values)' : 'Total'} · ${macros(data.total)}`);
+  if (data.confirmed_subtotal) lines.push(`Confirmed subtotal (excludes unresolved portions) · ${macros(data.confirmed_subtotal)}`);
+  if (data.unresolved_items?.length) lines.push('Still checking: ' + data.unresolved_items.map(item => `${item.name} (${item.field})`).join(' · '));
+  for (const meal of (data.meals || []).slice(0, 8)) lines.push(`${meal.date} · ${meal.label} · ${meal.status} · ${formatAmount(meal.delta.calories, ' kcal')}`);
+  for (const memory of (data.memories || []).slice(0, 12)) lines.push(`${memory.category.replaceAll('_', ' ')} · ${memory.key}: ${memory.value}`);
+  lines.push(...(data.notes || []));
+  return lines.filter(Boolean).join('\n');
+}
+function attachMessageActions(bubble, data, role) {
+  bubble.dataset.messageId = data.message_id;
+  bubble.parentElement.dataset.messageId = data.message_id;
+  bubble.tabIndex = 0;
+  bubble.setAttribute('role', 'group');
+  bubble.setAttribute('aria-label', `${role === 'user' ? 'Your' : 'Mellow’s'} message; message actions available`);
+  const toolbar = document.createElement('div'); toolbar.className = 'message-actions';
+  toolbar.setAttribute('role', 'group'); toolbar.setAttribute('aria-label', `${role === 'user' ? 'Your' : 'Mellow’s'} message actions`);
+  const buttons = {};
+  for (const [name, label] of [['like', 'Thumbs up'], ['reply', 'Reply'], ['copy', 'Copy message']]) {
+    const button = document.createElement('button'); button.type = 'button';
+    button.className = `message-action message-action-${name}`;
+    button.setAttribute('aria-label', label); button.title = label;
+    button.append(actionIcon(name)); toolbar.append(button); buttons[name] = button;
+  }
+  const status = document.createElement('span'); status.className = 'message-action-status sr-only';
+  status.setAttribute('role', 'status'); toolbar.append(status);
+  let active = Boolean(data.user_reaction);
+  const approval = role === 'assistant' && data.approval && !data.reaction_processed;
+  function updateLike() {
+    buttons.like.setAttribute('aria-pressed', String(active));
+    buttons.like.classList.toggle('is-selected', active);
+    const label = active ? 'Remove your thumbs-up; logged meals stay unchanged' : approval ?
+      `Thumbs up: confirm adding this meal to your macros for ${data.approval.date}` :
+      `Like this ${role === 'user' ? 'user' : 'Mellow'} message`;
+    buttons.like.setAttribute('aria-label', label); buttons.like.title = label;
+    buttons.like.disabled = chatBusy || reactionBusy;
+  }
+  updateLike();
+  buttons.like.addEventListener('click', async event => {
+    if (chatBusy || reactionBusy) return;
+    if (!active && approval && !window.confirm(`Add this exact meal to your macros for ${data.approval.date}?\n\n${messagePlainText(data)}\n\nThis updates your tracker. Removing the thumbs-up afterward does not undo the meal. An already logged result will not be added twice.`)) return;
+    reactionBusy = true; updateActionBusy();
     try {
-      const update = await stateRequest('/api/reaction', {conversation_id: conversationId,
-        message_id: data.message_id, active: !active});
+      const update = await stateRequest(role === 'user' ? '/api/message-feedback' : '/api/reaction', {
+        conversation_id: conversationId, message_id: data.message_id, active: !active,
+        ...(approval && !active ? {confirm_approval: true} : {})
+      });
       if (update.tracker) applyBackendTracker(update.tracker);
       await loadConversation();
-      if (update.response?.kind === 'error') {
-        mascot.fail();
-        showToast(update.response.message, 'error');
-      } else {
-        if (update.response) mascot.respond();
-        showToast(active ? 'Reaction removed. Logged meals are unchanged.' :
-          update.response?.message || 'Reaction saved.', 'info');
+      if (update.response?.kind === 'error') showToast(update.response.message, 'error');
+      else if (update.response?.response_type === 'action') { mascot.respond(); showToast(update.response.message, 'success'); }
+      if (event.detail === 0) {
+        [...els.messages.querySelectorAll('.message')].find(node => node.dataset.messageId === data.message_id)?.querySelector('.message-action-like')?.focus({preventScroll: true});
       }
-    } catch (error) { mascot.fail(); showToast(error.message, 'error'); }
-    finally { setChatBusy(false); }
+    } catch (error) { showToast(error.message, 'error'); }
+    finally { reactionBusy = false; updateActionBusy(); }
   });
-  bubble.append(button);
-}
-
-function mellowReaction(bubble) {
-  const badge = document.createElement('span');
-  badge.className = 'reaction-badge mellow-reaction';
-  badge.textContent = '👍 Mellow';
-  badge.title = 'Mellow understood this message. This acknowledgment is not proof of successful execution.';
-  badge.setAttribute('aria-label', badge.title);
-  bubble.append(badge);
+  buttons.reply.addEventListener('click', () => {
+    setReplyTarget({message_id: data.message_id, role, text: data.message || ''});
+    bubble.parentElement.classList.remove('actions-open');
+    els.input.focus();
+  });
+  let copyTimer;
+  buttons.copy.addEventListener('click', async () => {
+    clearTimeout(copyTimer);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard is unavailable. Use a secure browser connection and try again.');
+      await navigator.clipboard.writeText(messagePlainText(data));
+      buttons.copy.replaceChildren(actionIcon('check'));
+      status.className = 'message-action-status sr-only'; status.textContent = 'Message copied';
+      buttons.copy.title = 'Copied'; buttons.copy.setAttribute('aria-label', 'Message copied');
+      copyTimer = setTimeout(() => {
+        buttons.copy.replaceChildren(actionIcon('copy')); buttons.copy.title = 'Copy message'; buttons.copy.setAttribute('aria-label', 'Copy message'); status.textContent = '';
+      }, 1400);
+    } catch (error) {
+      buttons.copy.replaceChildren(actionIcon('copy'));
+      buttons.copy.setAttribute('aria-label', 'Copy message');
+      status.className = 'message-action-status is-error'; status.textContent = 'Could not copy. Check clipboard permission and try again.';
+      buttons.copy.title = error.message;
+    }
+  });
+  let touchStart;
+  bubble.addEventListener('pointerdown', event => { touchStart = event.pointerType === 'touch' ? {x: event.clientX, y: event.clientY} : null; });
+  bubble.addEventListener('pointercancel', () => { touchStart = null; });
+  bubble.addEventListener('pointerup', event => {
+    if (event.pointerType !== 'touch' || !touchStart) return;
+    const moved = Math.hypot(event.clientX - touchStart.x, event.clientY - touchStart.y); touchStart = null;
+    if (moved > 8 || event.target.closest('button, a, input, summary, details') || window.getSelection()?.toString()) return;
+    const row = bubble.parentElement;
+    const open = !row.classList.contains('actions-open');
+    els.messages.querySelectorAll('.actions-open').forEach(node => node.classList.remove('actions-open'));
+    row.classList.toggle('actions-open', open);
+  });
+  bubble.addEventListener('keydown', event => {
+    if (event.target === bubble && ['Enter', ' '].includes(event.key)) {
+      event.preventDefault(); bubble.parentElement.classList.toggle('actions-open');
+      buttons.like.focus();
+    }
+    if (event.key === 'Escape') { bubble.parentElement.classList.remove('actions-open'); bubble.focus(); }
+  });
+  bubble.append(toolbar);
 }
 
 async function loadConversation() {
@@ -742,6 +862,7 @@ async function loadConversation() {
   const atBottom = nearMessagesBottom();
   const scrollTop = els.messages.scrollTop;
   const previous = new Set([...els.messages.children].map(node => node.dataset.messageId));
+  const openActions = new Set([...els.messages.children].filter(node => node.classList.contains('actions-open')).map(node => node.dataset.messageId));
   els.messages.replaceChildren();
   els.welcome.hidden = history.messages.length > 0;
   const bubbles = new Map();
@@ -749,23 +870,19 @@ async function loadConversation() {
     const data = entry.payload;
     let bubble;
     if (entry.role === 'user') {
-      bubble = appendBubble('user', data.message);
-      if (entry.reactions.mellow) mellowReaction(bubble);
+      bubble = appendBubble('user', data.message, data.reply_reference);
+      attachMessageActions(bubble, {...data, message_id: entry.id, user_reaction: entry.reactions.user_feedback}, 'user');
     } else if (data.response_type === 'acknowledgment' || data.acknowledgment_only) {
       // No empty assistant bubble: keep diagnostic details attached to the understood request.
       const parent = bubbles.get(data.reply_to);
       if (parent?.classList.contains('user') && data.debug) appendDebug(parent, data.debug);
-      else if (parent?.querySelector('.reaction-button[aria-pressed="true"]')) {
-        const receipt = document.createElement('span');
-        receipt.className = 'reaction-receipt';
-        receipt.textContent = '👍 Mellow acknowledged your reaction';
-        parent.append(receipt);
-      }
+
       continue;
     } else {
-      bubble = appendResult({...data, message_id: entry.id, user_reaction: entry.reactions.user});
+      bubble = appendResult({...data, message_id: entry.id, user_reaction: entry.reactions.user, reaction_processed: entry.reaction_processed?.user});
     }
     bubble.dataset.messageId = entry.id;
+    bubble.parentElement.classList.toggle('actions-open', openActions.has(entry.id));
     if (previous.has(entry.id)) bubble.classList.add('restored-message');
     bubbles.set(entry.id, bubble);
   }
@@ -775,10 +892,12 @@ async function loadConversation() {
 
 async function sendMessage(message) {
   await historyLoading;
-  if (chatBusy || !message.trim()) return;
+  if (chatBusy || reactionBusy || !message.trim()) return;
   setChatBusy(true);
   els.welcome.hidden = true;
-  appendBubble('user', message.trim());
+  const reference = replyTarget;
+  appendBubble('user', message.trim(), reference);
+  setReplyTarget(null);
   els.input.value = '';
   if (!conversationId) conversationId = crypto.randomUUID().replaceAll('-', '');
   try { window.localStorage.setItem('macromellow.conversation.v1', conversationId); } catch { /* Optional. */ }
@@ -787,7 +906,7 @@ async function sendMessage(message) {
     const data = await request('/api/chat', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-MacroMellow-Request': 'chat'},
-      body: JSON.stringify({message: message.trim(), conversation_id: conversationId, request_id: requestId})
+      body: JSON.stringify({message: message.trim(), conversation_id: conversationId, request_id: requestId, ...(reference ? {reply_to: reference.message_id} : {})})
     });
     if (data.tracker) applyBackendTracker(data.tracker);
     if (data.memories) { savedMemories = data.memories; renderMemoryList(); }
@@ -1049,14 +1168,20 @@ els.trackerTab.addEventListener('click', () => switchView('tracker'));
 els.browseTab.addEventListener('click', () => switchView('browse'));
 els.trackerExpand.addEventListener('click', () => setTrackerExpanded(els.trackerPanel.classList.contains('is-collapsed')));
 els.newChat.addEventListener('click', () => {
-  if (chatBusy) return;
+  if (chatBusy || reactionBusy) return;
   mascot.reset();
+  setReplyTarget(null);
   conversationId = null;
   try { window.localStorage.removeItem('macromellow.conversation.v1'); } catch { /* Optional. */ }
   els.messages.replaceChildren();
   els.welcome.hidden = false;
   els.input.value = '';
   els.input.focus();
+});
+els.replyCancel.addEventListener('click', () => { setReplyTarget(null); els.input.focus(); });
+els.input.addEventListener('keydown', event => { if (event.key === 'Escape') setReplyTarget(null); });
+document.addEventListener('pointerdown', event => {
+  if (!event.target.closest('.message-row')) els.messages.querySelectorAll('.actions-open').forEach(node => node.classList.remove('actions-open'));
 });
 els.form.addEventListener('submit', event => { event.preventDefault(); sendMessage(els.input.value); });
 els.input.addEventListener('keydown', event => {

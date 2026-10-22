@@ -49,7 +49,8 @@ class Conversations:
                                     "WHERE m.profile_id=? AND m.conversation_id=?", (PROFILE, conversation_id)).fetchall()
         return {"conversation_id": conversation_id, "messages": [
             {"id": row["id"], "role": row["role"], "payload": json.loads(row["payload_json"]),
-             "reactions": {r["actor"]: bool(r["active"]) for r in reactions if r["message_id"] == row["id"]}}
+             "reactions": {r["actor"]: bool(r["active"]) for r in reactions if r["message_id"] == row["id"]},
+             "reaction_processed": {r["actor"]: bool(r["processed"]) for r in reactions if r["message_id"] == row["id"]}}
             for row in rows]}
 
     def _save_message(self, con, message_id, conversation_id, role, payload):
@@ -61,7 +62,7 @@ class Conversations:
         session["recent"] = (session.get("recent", []) + [event])[-6:]
         self.store.save_conversation(conversation_id, session)
 
-    def turn(self, message, conversation_id=None, request_id=None):
+    def turn(self, message, conversation_id=None, request_id=None, reply_to=None):
         from .web import ChatError
         conversation_id = identifier(conversation_id) if conversation_id else uuid.uuid4().hex
         request_id = identifier(request_id) if request_id else uuid.uuid4().hex
@@ -75,10 +76,30 @@ class Conversations:
                     if old["response_json"]:
                         return json.loads(old["response_json"])
                     raise ValueError("This request is processing or was interrupted. Check your tracker before sending a new request.")
+                reference = None
+                if reply_to is not None:
+                    identifier(reply_to)
+                    target = con.execute("SELECT * FROM chat_messages WHERE id=? AND conversation_id=? AND profile_id=?",
+                                         (reply_to, conversation_id, PROFILE)).fetchone()
+                    if not target:
+                        raise ValueError("The reply target was not found in this conversation.")
+                    latest = con.execute("SELECT id FROM chat_messages WHERE conversation_id=? AND profile_id=? ORDER BY rowid DESC LIMIT 1",
+                                         (conversation_id, PROFILE)).fetchone()
+                    payload = json.loads(target["payload_json"])
+                    reference = {"message_id": reply_to, "role": target["role"], "text": payload.get("message", "")[:600],
+                                 "is_current": latest["id"] == reply_to}
+                    if payload.get("cards"):
+                        reference["foods"] = [{key: card.get(key) for key in ("name", "quantity", "serving_size", "dining_hall", "menu_date")}
+                                              for card in payload["cards"][:12]]
                 con.execute("INSERT INTO chat_turns VALUES (?,?,?,NULL)", (request_id, PROFILE, conversation_id))
-                self._save_message(con, request_id, conversation_id, "user", {"message": message})
+                self._save_message(con, request_id, conversation_id, "user",
+                                   {"message": message, **({"reply_reference": reference} if reference else {})})
             try:
-                response = self.app.chat(message, conversation_id)
+                if reference:
+                    self._context(conversation_id, {"role": "user", "event": "reply_reference", "reply_reference": reference})
+                    response = self.app.chat(message, conversation_id, reply_context=reference)
+                else:
+                    response = self.app.chat(message, conversation_id)
             except ChatError as exc:
                 response = {"kind": "error", "message": str(exc), "debug": exc.debug, "cards": [], "total": None}
                 self._context(conversation_id, {"role": "user", "text": message[:250]})
@@ -96,7 +117,7 @@ class Conversations:
                 day = self.store.today()
                 if self.app._safe_to_log(response, session["foods"], day) is None:
                     response["approval"] = {"operation": "log", "result_id": response["result_id"], "date": day}
-                    response["message"] += f" React 👍 to log this meal for {day}."
+                    response["message"] += f" You can add this meal for {day}; a thumbs-up will ask you to confirm first."
             with self.store.db() as con:
                 self._save_message(con, response["message_id"], conversation_id, "assistant", response)
                 if response["acknowledged"]:
@@ -108,11 +129,30 @@ class Conversations:
                                            "text": response["message"][:500], "approval": response.get("approval")})
             return response
 
-    def react(self, conversation_id, message_id, active):
+    def feedback(self, conversation_id, message_id, active):
+        """User-authored message feedback cannot authorize nutrition operations."""
+        identifier(conversation_id)
+        identifier(message_id)
+        if not isinstance(active, bool):
+            raise ValueError("Feedback active must be true or false.")
+        with self.store.db() as con:
+            con.execute("BEGIN IMMEDIATE")
+            row = con.execute("SELECT id FROM chat_messages WHERE id=? AND conversation_id=? AND profile_id=? AND role='user'",
+                              (message_id, conversation_id, PROFILE)).fetchone()
+            if not row:
+                raise ValueError("That user message was not found in this conversation.")
+            con.execute("INSERT INTO message_reactions VALUES (?,?,'user_feedback',?,1,NULL) "
+                        "ON CONFLICT(message_id,profile_id,actor) DO UPDATE SET active=excluded.active",
+                        (message_id, PROFILE, int(active)))
+        return {"active": active}
+
+    def react(self, conversation_id, message_id, active, confirm_approval=False):
         identifier(conversation_id)
         identifier(message_id)
         if not isinstance(active, bool):
             raise ValueError("Reaction active must be true or false.")
+        if not isinstance(confirm_approval, bool):
+            raise ValueError("Approval confirmation must be true or false.")
         started = time.perf_counter()
         with self.lock:
             with self.store.db() as con:
@@ -124,6 +164,8 @@ class Conversations:
                 target = json.loads(row["payload_json"])
                 existing = con.execute("SELECT * FROM message_reactions WHERE message_id=? AND profile_id=? AND actor='user'",
                                        (message_id, PROFILE)).fetchone()
+                if active and target.get("approval") and not (existing and existing["processed"]) and not confirm_approval:
+                    raise ValueError("Confirm logging this specific meal and date before approving it. No meal or reaction was changed.")
                 con.execute("INSERT INTO message_reactions VALUES (?,?,'user',?,0,NULL) "
                             "ON CONFLICT(message_id,profile_id,actor) DO UPDATE SET active=excluded.active",
                             (message_id, PROFILE, int(active)))

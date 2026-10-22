@@ -95,9 +95,15 @@
       </div>
       <div id="chat-loading" class="chat-loading" role="status" hidden><span class="mellow-mascot" data-mellow-mascot data-state="thinking" data-burned="false" aria-hidden="true"><img src="/assets/mellow/thinking.png" alt="" width="48" height="48"></span><span>Mellow is working on your request</span><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
       <form id="chat-form" class="composer">
-        <label class="sr-only" for="chat-input">Ask Mellow about your meal</label>
-        <textarea id="chat-input" rows="2" placeholder="Tell Mellow what you ate…" maxlength="1000" required></textarea>
-        <button id="send" type="submit">Send <span aria-hidden="true">↗</span></button>
+        <div id="reply-preview" class="reply-preview" hidden>
+          <div><strong id="reply-author"></strong><span id="reply-text"></span></div>
+          <button id="reply-cancel" class="reply-cancel" type="button" aria-label="Cancel reply" title="Cancel reply"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        </div>
+        <div class="composer-input-row">
+          <label class="sr-only" for="chat-input">Ask Mellow about your meal</label>
+          <textarea id="chat-input" rows="2" placeholder="Tell Mellow what you ate…" maxlength="1000" required></textarea>
+          <button id="send" type="submit">Send <span aria-hidden="true">↗</span></button>
+        </div>
       </form>
       <p class="chat-footnote">Nutrition comes from saved UMD labels. Portions and tracked totals are estimates.</p>
     </section>
