@@ -87,6 +87,30 @@ def score(query: str, name: str) -> float:
         return 0
     if wanted == offered:
         return 1
+    # Conservative typo recovery: only full one-to-one token matches, with
+    # long tokens and extremely similar spellings. Competing plausible menu
+    # names remain ambiguous under select_ranked.
+    if len(wanted) == len(offered) and len(wanted) <= 8:
+        remaining = list(offered)
+        substitutions = 0
+        for word in sorted(wanted):
+            if word in remaining:
+                remaining.remove(word)
+                continue
+            if len(word) < 5:
+                break
+            candidates = [(SequenceMatcher(None, word, alt).ratio(), alt)
+                          for alt in remaining if len(alt) >= 5 and abs(len(word) - len(alt)) <= 2]
+            if not candidates:
+                break
+            similarity, match = max(candidates)
+            if similarity < 0.88:
+                break
+            remaining.remove(match)
+            substitutions += 1
+        else:
+            if not remaining and substitutions == 1:
+                return 0.91
     if wanted <= offered:
         return 0.83 + 0.1 * len(wanted) / len(offered)
     return 0.56 * overlap + 0.12 * SequenceMatcher(None, query.lower(), name.lower()).ratio()
