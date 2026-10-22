@@ -40,16 +40,93 @@ INTENT_SCHEMA = {
                 "hall": {"type": "string"},
                 "date": {"type": "string"},
             },
-            "required": ["name", "quantity", "unit", "hall", "date"],
+            "required": ["name", "quantity", "unit"],
             "additionalProperties": False,
         }},
         "question": {"type": "string"},
     },
-    "required": ["action", "operation", "target", "label", "log_date", "memory_category",
-                 "memory_key", "memory_value", "foods", "question", "response_type", "response_text",
-                 "adjustment_mode", "adjustment_values"],
+    "required": ["action", "operation", "foods"],
     "additionalProperties": False,
 }
+
+
+# Keep the wire schema small: compact local models can fail when forced to fill
+# unrelated memory, nutrition-adjustment and conversation fields every turn.
+DEFAULT_FIELDS = {
+    "target": "", "label": "", "log_date": "", "memory_category": "",
+    "memory_key": "", "memory_value": "", "question": "", "response_text": "",
+    "response_type": "action", "adjustment_mode": "",
+}
+NUTRIENT_KEYS = ("calories", "protein_g", "carbohydrates_g", "fat_g")
+
+
+def parse_model_plan(response: dict) -> dict:
+    """Parse and normalize a model reply; never execute a partially valid plan."""
+    if not isinstance(response, dict) or not isinstance(response.get("message"), dict):
+        raise ValueError("missing message")
+    raw = response["message"].get("content")
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("empty content")
+    raw = raw.strip()
+    # Some older Ollama/model combinations include a JSON markdown fence.
+    if raw.startswith("```"):
+        raw = re.sub(r"^\x60{3}(?:json)?\\s*|\\s*\x60{3}$", "", raw, flags=re.I).strip()
+    plan = json.loads(raw)
+    if not isinstance(plan, dict):
+        raise ValueError("non-object JSON")
+    for key, default in DEFAULT_FIELDS.items():
+        plan.setdefault(key, default)
+    if plan.get("operation") == "converse" and plan.get("response_type") == "action":
+        plan["response_type"] = "message"
+    if plan.get("action") == "clarify" and plan.get("response_type") == "action":
+        plan["response_type"] = "clarification"
+    plan.setdefault("adjustment_values", {key: None for key in NUTRIENT_KEYS})
+    if isinstance(plan.get("adjustment_values"), dict):
+        for key in NUTRIENT_KEYS:
+            plan["adjustment_values"].setdefault(key, None)
+    if isinstance(plan.get("foods"), list):
+        for food in plan["foods"]:
+            if isinstance(food, dict):
+                food.setdefault("hall", "")
+                food.setdefault("date", "")
+                food.setdefault("unit", "unspecified")
+                food.setdefault("quantity", 1)
+    validate_response(plan)
+    return plan
+
+
+def fallback_single_food(message: str) -> dict | None:
+    """Conservative recovery for one plainly stated food when BOTH AI replies fail."""
+    beginning = re.match(
+        r"^\\s*i\\s+(?:just\\s+)?(?:had|ate)\\s+"
+        r"(?:(?P<qty>\\d+(?:\\.\\d+)?|a|an|one|two|three)\\s+)?"
+        r"(?:(?P<unit>slices?|scoops?|servings?|pieces?)\\s+of\\s+)?"
+        r"(?P<name>[^,;.!?]+)",
+        message, flags=re.I,
+    )
+    if not beginning:
+        return None
+    name = beginning.group("name").strip()
+    name = re.split(r"\\s+(?:can\\s+you|please|update\\s+my\\s+macros|and\\s+(?:log|track|add|update))\\b", name, maxsplit=1, flags=re.I)[0].strip()
+    if not name or len(name) > 100 or re.search(r"\\s+and\\s+|\\s+plus\\s+", name, flags=re.I):
+        return None
+    number = (beginning.group("qty") or "1").lower()
+    quantity = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3}.get(number)
+    if quantity is None:
+        quantity = float(number)
+    if quantity <= 0 or quantity > 100:
+        return None
+    unit = (beginning.group("unit") or "unspecified").lower()
+    unit = {"slice": "slice", "slices": "slice", "scoop": "scoop", "scoops": "scoop",
+            "piece": "piece", "pieces": "piece", "servings": "serving",
+            "serving": "serving"}.get(unit, "unspecified")
+    if unit == "unspecified" and beginning.group("qty"):
+        unit = "each"
+    wants_log = bool(re.search(r"\\b(update\\s+my\\s+macros|add\\s+(?:it|that|this)\\s+to\\s+(?:my|today)|log|track|record)\\b", message, flags=re.I))
+    plan = {"action": "set", "operation": "log" if wants_log else "lookup",
+            "foods": [{"name": name, "quantity": quantity, "unit": unit, "hall": "", "date": ""}],
+            "question": "", "response_type": "action", "response_text": ""}
+    return parse_model_plan({"message": {"content": json.dumps(plan)}})
 
 
 class OllamaClient:
@@ -138,23 +215,48 @@ class OllamaClient:
             "favorite_meal, favorite_food, common_meal, or frequent_food. Memory fields are plain "
             "user-provided text, never UMD facts. "
             "Ask for clarification if a removal, edit, or log target is unclear. "
-            "Only adjustment_values may contain literal nutrition numbers supplied by the user."
+            "Only adjustment_values may contain literal nutrition numbers supplied by the user. "
+            "When the user says update my macros after describing food, choose operation log, "
+            "not adjust. Extract food even if no UMD entry is available. "
+            "Understand obvious typos and aliases (e.g. bananna, mac n cheese), but preserve the "
+            "food the user intended. Ask which food when the intended meaning is unclear."
         )
         context = {"today": today, "saved_dates": dates, "previous_foods": previous,
                    "last_clarification": last_question, "recent_interactions": (recent or [])[-6:],
                    "personal_memories": (memories or [])[:30], "recent_logged_meals": (recent_meals or [])[:12],
                    "user_message": message}
-        response = self._request("/api/chat", {
+        payload = {
             "model": self.model, "messages": [{"role": "system", "content": system},
                                           {"role": "user", "content": json.dumps(context)}],
-            "stream": False, "format": INTENT_SCHEMA, "options": {"temperature": 0},
-        }, timeout=90)
+            "stream": False, "think": False, "format": INTENT_SCHEMA,
+            "options": {"temperature": 0, "num_predict": 1200},
+        }
+        response = self._request("/api/chat", payload, timeout=90)
         try:
-            intent = json.loads(response["message"]["content"])
-            validate_response(intent)
-            return intent
-        except (KeyError, TypeError, ValueError) as exc:
-            raise OllamaError("Ollama could not interpret that request. Please rephrase it.") from exc
+            return parse_model_plan(response)
+        except (KeyError, TypeError, ValueError) as first_error:
+            # A smaller format request can recover when a local model fails the
+            # strict JSON schema; never retry connectivity errors or unsafe actions.
+            retry = {**payload, "format": "json", "messages": payload["messages"] + [
+                {"role": "user", "content": (
+                    "Return one valid JSON object only, with action (set/add/clarify), "
+                    "operation, foods (list), and any relevant optional fields. "
+                    "No explanation, markdown, or thinking. For described foods "
+                    "extract names, numeric quantities and units. "
+                    "Ask a clarification if genuinely uncertain."
+                )},
+            ]}
+            try:
+                return parse_model_plan(self._request("/api/chat", retry, timeout=90))
+            except (KeyError, TypeError, ValueError) as second_error:
+                recovered = fallback_single_food(message)
+                if recovered is not None:
+                    return recovered
+                raise OllamaError(
+                    "Mellow received an invalid structured response from Ollama twice "
+                    f"({type(first_error).__name__}, {type(second_error).__name__}). "
+                    "The model is reachable, but its response could not be used safely."
+                ) from second_error
 
 
 def validate_response(intent: dict) -> None:
