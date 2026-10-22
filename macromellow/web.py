@@ -90,16 +90,17 @@ def allowed_request_origin(headers, peer_ip: str) -> bool:
         if host.lower() == parsed.netloc.lower():
             return True
         forwarded_host = headers.get("X-Forwarded-Host", "")
-        if (
-            headers.get("X-Forwarded-Proto", "").lower() == "https"
-            and forwarded_host.lower() == parsed.netloc.lower()
-        ):
-            return True
-        # Tailscale Serve commonly rewrites Host to the internal backend and
-        # provides no forwarded hostname; localhost-only socket access makes
-        # this fallback specific to the installed local reverse proxy.
+        forwarded_proto = headers.get("X-Forwarded-Proto", "").lower()
+        if forwarded_host:
+            return forwarded_proto == "https" and forwarded_host.lower() == parsed.netloc.lower()
+        # Tailscale Serve may rewrite Host without forwarding the original.
+        # In that case the local proxy connection and custom X-MacroMellow-
+        # Request header protect the app against cross-site browser posts.
         internal_host = urlsplit(f"http://{host}").hostname
-        return internal_host in {"127.0.0.1", "localhost", "::1"}
+        return (
+            internal_host in {"127.0.0.1", "localhost", "::1"}
+            and forwarded_proto in {"", "https"}
+        )
     except ValueError:
         return False
 
