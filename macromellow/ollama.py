@@ -70,7 +70,7 @@ def parse_model_plan(response: dict) -> dict:
     raw = raw.strip()
     # Some older Ollama/model combinations include a JSON markdown fence.
     if raw.startswith("```"):
-        raw = re.sub(r"^\x60{3}(?:json)?\\s*|\\s*\x60{3}$", "", raw, flags=re.I).strip()
+        raw = re.sub(r"^\x60{3}(?:json)?\s*|\s*\x60{3}$", "", raw, flags=re.I).strip()
     plan = json.loads(raw)
     if not isinstance(plan, dict):
         raise ValueError("non-object JSON")
@@ -98,17 +98,17 @@ def parse_model_plan(response: dict) -> dict:
 def fallback_single_food(message: str) -> dict | None:
     """Conservative recovery for one plainly stated food when BOTH AI replies fail."""
     beginning = re.match(
-        r"^\\s*i\\s+(?:just\\s+)?(?:had|ate)\\s+"
-        r"(?:(?P<qty>\\d+(?:\\.\\d+)?|a|an|one|two|three)\\s+)?"
-        r"(?:(?P<unit>slices?|scoops?|servings?|pieces?)\\s+of\\s+)?"
+        r"^\s*i\s+(?:just\s+)?(?:had|ate)\s+"
+        r"(?:(?P<qty>\d+(?:\.\d+)?|a|an|one|two|three)\s+)?"
+        r"(?:(?P<unit>slices?|scoops?|servings?|pieces?)\s+of\s+)?"
         r"(?P<name>[^,;.!?]+)",
         message, flags=re.I,
     )
     if not beginning:
         return None
     name = beginning.group("name").strip()
-    name = re.split(r"\\s+(?:can\\s+you|please|update\\s+my\\s+macros|and\\s+(?:log|track|add|update))\\b", name, maxsplit=1, flags=re.I)[0].strip()
-    if not name or len(name) > 100 or re.search(r"\\s+and\\s+|\\s+plus\\s+", name, flags=re.I):
+    name = re.split(r"\s+(?:can\s+you|please|update\s+my\s+macros|and\s+(?:log|track|add|update))\b", name, maxsplit=1, flags=re.I)[0].strip()
+    if not name or len(name) > 100 or re.search(r"\s+and\s+|\s+plus\s+", name, flags=re.I):
         return None
     number = (beginning.group("qty") or "1").lower()
     quantity = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3}.get(number)
@@ -122,7 +122,7 @@ def fallback_single_food(message: str) -> dict | None:
             "serving": "serving"}.get(unit, "unspecified")
     if unit == "unspecified" and beginning.group("qty"):
         unit = "each"
-    wants_log = bool(re.search(r"\\b(update\\s+my\\s+macros|add\\s+(?:it|that|this)\\s+to\\s+(?:my|today)|log|track|record)\\b", message, flags=re.I))
+    wants_log = bool(re.search(r"\b(update\s+my\s+macros|add\s+(?:it|that|this)\s+to\s+(?:my|today)|log|track|record)\b", message, flags=re.I))
     plan = {"action": "set", "operation": "log" if wants_log else "lookup",
             "foods": [{"name": name, "quantity": quantity, "unit": unit, "hall": "", "date": ""}],
             "question": "", "response_type": "action", "response_text": ""}
