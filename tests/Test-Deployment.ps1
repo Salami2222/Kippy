@@ -267,6 +267,29 @@ try {
             }
         }
     }
+    Case 'dependency staging pins only new packages and refuses installed-package replacement' {
+        $dir=Join-Path $script:Scratch 'dependency-plan'
+        $null=New-Item -ItemType Directory $dir
+        [IO.File]::WriteAllText((Join-Path $dir 'requirements.txt'),'added>=2')
+        $script:Replacing=$false; $script:InstallCalls=0
+        function Get-NativeText { '{"present":"1.0"}' }
+        function Invoke-Native {
+            param($Executable,$Arguments)
+            if ($Arguments -contains '--dry-run') {
+                $report=$Arguments[[array]::IndexOf($Arguments,'--report')+1]
+                $name=if($script:Replacing){'present'}else{'added'}
+                @{install=@(@{metadata=@{name=$name;version='2.0'}})} | ConvertTo-Json -Depth 5 | Set-Content $report
+            } else {
+                $script:InstallCalls++
+                Assert-True ($Arguments -contains '--no-deps' -and $Arguments -contains 'added==2.0')
+            }
+        }
+        $result=Prepare-CandidateDependencies $dir 'unused' 'unused'
+        Assert-True ($result.packages[0] -eq 'added==2.0' -and $script:InstallCalls -eq 1)
+        $script:Replacing=$true
+        Assert-Throws { Prepare-CandidateDependencies $dir 'unused' 'unused' }
+        Assert-True ($script:InstallCalls -eq 1)
+    }
     Case 'release identity and all asset MIME types are required; AI is not a release gate' {
         $script:Expected = 'a' * 40; $script:WrongCommit = $false; $script:WrongMime = $false
         function Invoke-RestMethod { @{commit=$(if ($script:WrongCommit) {'b' * 40} else {$script:Expected});pid=123} }

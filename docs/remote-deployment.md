@@ -196,3 +196,19 @@ Implementation references: [Windows Job Objects](https://learn.microsoft.com/en-
 [Ollama on Windows](https://docs.ollama.com/windows),
 [Ollama tags](https://docs.ollama.com/api/tags) and
 [generate](https://docs.ollama.com/api/generate).
+
+### Setup verification (2026-10-22)
+
+The actual Windows installation was inspected over the existing SSH connection.
+Both services already used boot-triggered S4U tasks. Installation preserved the
+healthy Ollama listener, and a real `qwen3.5:9b` inference completed successfully.
+A staged release passed 100 Python tests, then the frontend and Windows suites;
+its live startup commit/PID and all required endpoints/MIME types were verified.
+The two-minute deployment task and independent one-minute monitor both completed
+unattended runs with result `0`; the no-change poll left the web PID unchanged.
+A separate real Windows supervisor test proved Python child/grandchild cleanup.
+
+A full Windows reboot and a deliberately induced production Ollama outage were
+**not** performed. Boot triggers/noninteractive execution are configured and
+verified; recovery decisions are covered by isolated tests. No model was
+redownloaded, and the already healthy production Ollama instance was preserved.

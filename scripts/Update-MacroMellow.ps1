@@ -240,8 +240,9 @@ function Prepare-CandidateDependencies {
     if (@($plan.install).Count -eq 0) { return $null }
     # Isolate newly required packages from the serving process until tests pass.
     $overlay = Join-Path $Candidate 'candidate-packages'
-    Invoke-Native $Python @('-m','pip','install','--target',$overlay,'--disable-pip-version-check','--no-input','-r',$requirements)
-    return $overlay
+    $packages = @($plan.install | ForEach-Object { $_.metadata.name + '==' + $_.metadata.version })
+    Invoke-Native $Python (@('-m','pip','install','--target',$overlay,'--no-deps','--disable-pip-version-check','--no-input') + $packages)
+    return @{overlay=$overlay;packages=$packages}
 }
 
 function Invoke-MacroMellowUpdate {
@@ -250,6 +251,7 @@ function Invoke-MacroMellowUpdate {
     $lock = $null; $candidate = $null; $git = $null
     $previousLocation = Get-Location
     $oldPythonPath = $env:PYTHONPATH
+    $oldGitPrompt = $env:GIT_TERMINAL_PROMPT; $oldGcmInteractive = $env:GCM_INTERACTIVE
     $previousCommit = $null; $targetCommit = $null
     $codeAdvanced = $false; $serviceTouched = $false; $phase = 'preflight'
     $statePath = Join-Path $LockDirectory 'deployment-state.json'
@@ -281,6 +283,7 @@ function Invoke-MacroMellowUpdate {
             Write-AutomationEvent $LockDirectory 'deploy' 'check_passed' @{commit=$previousCommit}
             return 0
         }
+        $env:GIT_TERMINAL_PROMPT = '0'; $env:GCM_INTERACTIVE = 'Never'
         $phase = 'fetch'
         Invoke-Native $git @('-C',$Root,'fetch','--no-tags','origin','refs/heads/main:refs/remotes/origin/main')
         $targetCommit = Get-NativeText $git @('-C',$Root,'rev-parse','refs/remotes/origin/main')
@@ -301,15 +304,15 @@ function Invoke-MacroMellowUpdate {
         $candidate = Join-Path $LockDirectory ('staging-' + [guid]::NewGuid().ToString('N'))
         Invoke-Native $git @('-C',$Root,'worktree','add','--detach',$candidate,$targetCommit)
         Set-Location $candidate
-        $overlay = Prepare-CandidateDependencies $candidate $python $Root
-        $env:PYTHONPATH = if ($overlay) { $candidate + ';' + $overlay } else { $candidate }
+        $dependencies = Prepare-CandidateDependencies $candidate $python $Root
+        $env:PYTHONPATH = if ($dependencies) { $candidate + ';' + $dependencies.overlay } else { $candidate }
         Invoke-DeploymentTests $candidate $python $node
         Write-AutomationEvent $LockDirectory 'deploy' 'tests_passed' @{target=$targetCommit}
         $env:PYTHONPATH = $oldPythonPath
         Set-Location $Root
         if ((Get-RepositoryState $Root $git) -ne $previousCommit) { throw 'Repository changed during staging.' }
-        if ($overlay) {
-            Invoke-Native $python @('-m','pip','install','--disable-pip-version-check','--no-input','-r',(Join-Path $candidate 'requirements.txt'))
+        if ($dependencies) {
+            Invoke-Native $python (@('-m','pip','install','--no-deps','--disable-pip-version-check','--no-input') + $dependencies.packages)
             Invoke-Native $python @('-m','pip','check')
         }
         $phase = 'promote'
@@ -359,6 +362,7 @@ function Invoke-MacroMellowUpdate {
         return 1
     } finally {
         $env:PYTHONPATH = $oldPythonPath
+        $env:GIT_TERMINAL_PROMPT = $oldGitPrompt; $env:GCM_INTERACTIVE = $oldGcmInteractive
         Set-Location $previousLocation
         if ($candidate -and $git -and (Test-Path $candidate)) {
             try { Invoke-Native $git @('-C',$Root,'worktree','remove','--force',$candidate) }

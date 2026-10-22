@@ -64,11 +64,11 @@ foreach ($spec in @(@('MacroMellow Auto Deploy',2,'Deploy'),@('MacroMellow Ollam
     $existing = Get-ScheduledTask -TaskName $spec[0] -TaskPath '\' -ErrorAction SilentlyContinue
     if ($existing -and $existing.Description -ne 'MacroMellow managed automation v1') { throw "Task $($spec[0]) already exists and is not owned by this installer." }
     if ($spec[2] -eq 'Deploy') {
-        $args = '-NoLogo -NoProfile -NonInteractive -File "' + $supervisor + '" -Role Deploy -AutomationDirectory "' + $AutomationDirectory + '"'
+        $taskArguments = '-NoLogo -NoProfile -NonInteractive -File "' + $supervisor + '" -Role Deploy -AutomationDirectory "' + $AutomationDirectory + '"'
     } else {
-        $args = '-NoLogo -NoProfile -NonInteractive -File "' + (Join-Path $Repository 'scripts\windows\Monitor-Ollama.ps1') + '" -AutomationDirectory "' + $AutomationDirectory + '"'
+        $taskArguments = '-NoLogo -NoProfile -NonInteractive -File "' + (Join-Path $Repository 'scripts\windows\Monitor-Ollama.ps1') + '" -AutomationDirectory "' + $AutomationDirectory + '"'
     }
-    $action = New-ScheduledTaskAction -Execute $powerShell -Argument $args -WorkingDirectory $Repository
+    $action = New-ScheduledTaskAction -Execute $powerShell -Argument $taskArguments -WorkingDirectory $Repository
     $boot = New-ScheduledTaskTrigger -AtStartup
     $boot.Delay = 'PT45S'
     $poll = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes $spec[1])

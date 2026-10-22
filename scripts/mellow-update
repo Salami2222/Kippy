@@ -27,7 +27,7 @@ identity="$HOME/.ssh/macromellow_windows"
 [[ -r "$windows_script" ]] || { printf 'Windows updater is missing: %s\n' "$windows_script" >&2; exit 1; }
 
 # Invoke the reviewed updater already installed in the Windows checkout.
-bootstrap='$ErrorActionPreference="Stop"; try { & "C:\Users\tommy\MacroMellow\scripts\Update-MacroMellow.ps1"'
+bootstrap='$ErrorActionPreference="Stop"; $ProgressPreference="SilentlyContinue"; try { & "C:\Users\tommy\MacroMellow\scripts\Update-MacroMellow.ps1"'
 bootstrap+="$check_argument"
 bootstrap+='; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }'
 encoded=$(printf '%s' "$bootstrap" | iconv -f UTF-8 -t UTF-16LE | base64 | tr -d '\r\n')

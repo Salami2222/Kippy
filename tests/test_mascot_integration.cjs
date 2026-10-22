@@ -104,6 +104,8 @@ async function loadApp() {
   };
   const storage = new Map([['macromellow.backend-migrated.v1', '1']]);
   const timers = new Map();
+  const intervals = new Map();
+  let aiStatus = {model_available: true, model: 'Qwen', message: 'Connected'};
   let timerId = 0;
   let uuid = 0;
   const pendingChat = [];
@@ -120,14 +122,18 @@ async function loadApp() {
     matchMedia: () => ({matches: false}), addEventListener() {},
     requestAnimationFrame: callback => callback(),
     setTimeout(callback, delay) { const id = ++timerId; timers.set(id, {callback, delay}); return id; },
-    clearTimeout: id => timers.delete(id), setInterval: () => ++timerId, clearInterval() {},
+    clearTimeout: id => timers.delete(id),
+    setInterval(callback, delay) { const id = ++timerId; intervals.set(id, {callback, delay}); return id; }, clearInterval() {},
     async fetch(url, options) {
       requests.push({url, options});
       let data;
       if (url === '/api/chat') data = await pendingChat.shift().promise;
       else if (url.startsWith('/api/conversation?')) data = {messages: history};
       else if (url === '/api/datasets') data = {datasets: [], today: serverTracker.date, load_errors: []};
-      else if (url === '/api/ollama/status') data = {model_available: true, model: 'Qwen', message: 'Connected'};
+      else if (url === '/api/ollama/status') {
+        if (aiStatus instanceof Error) throw aiStatus;
+        data = aiStatus.promise ? await aiStatus.promise : aiStatus;
+      }
       else if (url === '/api/tracker') data = serverTracker;
       else if (url === '/api/memories') data = {memories: []};
       else if (url === '/api/status') data = {state: 'idle'};
@@ -142,6 +148,12 @@ async function loadApp() {
   await settle();
   return {
     get, slots, profile, requests,
+    setAIStatus: status => { aiStatus = status; },
+    setHidden: hidden => { document.hidden = hidden; },
+    async pollAI() {
+      for (const timer of intervals.values()) if (timer.delay === 30000) timer.callback();
+      await settle();
+    },
     run: source => vm.runInContext(source, context),
     state: () => vm.runInContext('mascot.getState()', context),
     enqueueChat() { const pending = deferred(); pendingChat.push(pending); return pending; },
@@ -268,4 +280,29 @@ test('day rollover clears the burned avatar immediately while backend refresh is
   assert.ok(app.slots.every(slot => slot.dataset.burned === 'false'));
   await rollover;
   assert.equal(app.run('tracker.getGoals().calories'), 100);
+});
+
+
+test('independent AI polling shows offline/recovery without duplicate checks or resending chat', async () => {
+  const app = await loadApp();
+  app.setAIStatus(new Error('Ollama offline'));
+  await app.pollAI();
+  assert.equal(app.get('ai-status').classList.contains('offline'), true);
+  app.setAIStatus({model_available: true, model: 'Qwen', message: 'Connected'});
+  await app.pollAI();
+  assert.equal(app.get('ai-status').classList.contains('offline'), false);
+  const before = app.requests.length;
+  const pending = deferred();
+  app.setAIStatus(pending);
+  const first = app.run('checkAI()');
+  const second = app.run('checkAI()');
+  await settle();
+  assert.equal(app.requests.length, before + 1);
+  pending.resolve({model_available: true, model: 'Qwen', message: 'Connected'});
+  await Promise.all([first, second]);
+  app.setHidden(true);
+  const hiddenCount = app.requests.length;
+  await app.pollAI();
+  assert.equal(app.requests.length, hiddenCount);
+  assert.equal(app.requests.filter(request => request.url === '/api/chat').length, 0);
 });
