@@ -26,6 +26,23 @@ class MascotStaticRoutesTests(unittest.TestCase):
         handler._send.assert_called_once()
         return handler._send.call_args.args
 
+    def test_release_endpoints_do_not_depend_on_ollama_and_identity_is_frozen(self):
+        handler = object.__new__(AppHandler)
+        handler.runtime_identity = {"commit": "a" * 40, "pid": 123, "started_at": "startup"}
+        handler.app = Mock()
+        handler.app.get_status.return_value = {"state": "idle"}
+        handler.app.ollama.status.side_effect = RuntimeError("offline")
+        handler._send = Mock()
+        for route in ("/api/version", "/api/status"):
+            handler.path = route
+            with patch("macromellow.web.capture_runtime_identity", side_effect=AssertionError("must not re-read Git")):
+                handler.do_GET()
+            self.assertEqual(handler._send.call_args.args[0], 200)
+        handler.app.ollama.status.assert_not_called()
+        handler.path = "/api/version"
+        handler.do_GET()
+        self.assertEqual(json.loads(handler._send.call_args.args[1])["commit"], "a" * 40)
+
     def test_all_eight_mascot_assets_have_explicit_png_routes(self):
         for state in ("idle", "talking", "thinking", "profile"):
             for variant in ("", "-burned"):

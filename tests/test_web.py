@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from macromellow.umd import HALLS, save_json
-from macromellow.web import DataApp, UNAVAILABLE_MESSAGE
+from macromellow.web import DataApp, UNAVAILABLE_MESSAGE, capture_runtime_identity
 
 
 def dataset(errors=None):
@@ -22,6 +22,17 @@ def dataset(errors=None):
 
 
 class WebDataTests(unittest.TestCase):
+    def test_runtime_identity_is_a_snapshot_and_handles_missing_git(self):
+        from types import SimpleNamespace
+        with patch("macromellow.web.subprocess.run", return_value=SimpleNamespace(returncode=0, stdout="a" * 40)):
+            first = capture_runtime_identity()
+        with patch("macromellow.web.subprocess.run", side_effect=FileNotFoundError):
+            second = capture_runtime_identity()
+        self.assertEqual(first["commit"], "a" * 40)
+        self.assertIsNone(second["commit"])
+        self.assertEqual(first["pid"], second["pid"])
+        self.assertTrue(first["started_at"])
+
     def test_loads_saved_json_from_data_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "umd-2026-10-19.json"

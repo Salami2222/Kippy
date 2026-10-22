@@ -51,25 +51,26 @@ The toasted/crying appearance is a separate visual modifier: it appears only whe
 
 The eight PNGs live in `macromellow/static/assets/mellow/`; their [asset notes](macromellow/static/assets/mellow/README.md) document preparation and the overlapping reference sheet's limitations. Each state has one clean pose, animated with small CSS movements rather than a multi-frame sprite strip. The subtle breathing, laptop movement, talking bounce, and toasted shimmer/smoke stop under **prefers-reduced-motion**. `mascot.js` contains the small presentation controller. Python serves only its explicit static routes and eight allowed image filenames; arbitrary paths are not exposed.
 
-### Update the existing Windows server
+### Automatic Windows deployment and Ollama recovery
 
-Use **`mellow-update`** from your Mac Terminal after the [one-time Mac setup](docs/remote-deployment.md).
-It connects using the existing SSH key to `tommy@100.81.130.10`, updates
-`C:\Users\tommy\MacroMellow` from main with fast-forward-only Git operations,
-checks dependencies in the existing `.venv`, runs tests, safely restarts
-`\MacroMellow Web`, and verifies HTTP 200 on Windows port **8000**. Dirty
-checkouts and unidentified port listeners are refused. Failed updates attempt
-guarded code recovery; no application data is restored or deleted.
+After the [one-time Windows setup](docs/remote-deployment.md), Windows checks
+GitHub main every **two minutes**, tests each new release in a staging checkout,
+safely restarts the web task and verifies the running commit plus API/mascot assets.
+An independent **one-minute Ollama monitor** checks `qwen3.5:9b`, preserves healthy
+instances and recovers failures through the existing boot task. Both run without
+an interactive login. Ollama outages do not prevent website availability or deployment.
+The browser checks AI connection status every 30 seconds while visible.
 
 ```bash
-mellow-update --check  # tests + current service health; no pull/install/restart
-mellow-update         # deploy latest GitHub main, test, restart, verify
+mellow-update --check  # optional Mac fallback: tests + running release checks
+mellow-update         # explicit deploy/retry of main (alias: deploy-now)
 ```
 
-The [deployment guide](docs/remote-deployment.md) covers setup, dependencies,
-failure recovery, limits, and the isolated Windows deployment tests. The existing
-launcher, data directory, task credentials, SSH settings, and Tailscale settings
-remain in place. Refresh the browser after an update (`Ctrl+F5` if needed).
+See the [deployment guide](docs/remote-deployment.md) for exact installation,
+monitoring, disable/recovery commands, logs, safeguards and limitations. Existing
+data, task credentials, launchers, model files/environment, SSH and Tailscale
+settings are preserved. `/api/version` reports the process's startup commit/PID.
+Refresh the browser after an update (`Ctrl+F5` if needed).
 
 ## Daily macro tracker
 
@@ -115,7 +116,7 @@ Developer debugging distinguishes malformed JSON, missing/empty content, invalid
 
 The merged planner recovery also supports compact model replies and a JSON-only repair. After two syntax/envelope failures, a literal single-food report can be recovered from the original text only when there is no earlier meal or clarification context. Multi-food, negated, date-dependent, and rejected unsafe plans do not use that recovery. Official matching, portion checks, and logging authorization still run in Python. Explicit **update my macros** requests reuse the guarded meal logging path; **don't update my macros** cancels a pending log.
 
-Remaining limits: only saved UMD menus are supported; short/generic names, unknown dishes, ambiguous past meals, and unmeasured portions can still require clarification. Matching scores are conservative heuristics, not calibrated probabilities. An unsupported answer stays unresolved. Model parsing is tested with deterministic fixtures; real Qwen behavior can vary. Restart the app manually after updating to run the changes; no automatic deployment or network configuration changes are performed.
+Remaining limits: only saved UMD menus are supported; short/generic names, unknown dishes, ambiguous past meals, and unmeasured portions can still require clarification. Matching scores are conservative heuristics, not calibrated probabilities. An unsupported answer stays unresolved. Model parsing is tested with deterministic fixtures; real Qwen behavior can vary. The optional Windows automation deploys tested main-branch changes; it does not alter network configuration.
 
 ### Message reactions and acknowledgments
 
@@ -129,7 +130,7 @@ Every new chat turn is now saved as messages with stable IDs in the existing SQL
 
 The Ollama planner now returns a validated response type (`acknowledgment`, `message`, `clarification`, or `action`) alongside its operation. Conversation replies do not bypass deterministic nutrition and action tools. Relevant reaction events include the referenced message ID and text in the bounded conversation context. Invalid model responses produce an explicit error without executing an action. No new dependencies or configuration are needed; restart the Python server after updating the checkout. Automated planner fixtures live only in tests, not in an application mock mode.
 
-Local tests do not verify deployment on the Windows host. Pull the GitHub changes and restart that application's Python process on the host where it runs to deploy them; the Ollama model itself does not need a new installation.
+Local tests alone do not verify Windows deployment. The automation verifies the running commit and HTTP assets after each restart; see its guide for live task checks. The Ollama model does not need reinstalling for code updates.
 
 ### Developer debugging
 

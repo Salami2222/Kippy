@@ -665,7 +665,10 @@ function appendResult(data) {
   return bubble;
 }
 
+let aiStatusPending = false;
 async function checkAI() {
+  if (aiStatusPending) return;
+  aiStatusPending = true;
   try {
     const status = await request('/api/ollama/status');
     els.aiStatus.classList.toggle('offline', !status.model_available);
@@ -676,6 +679,7 @@ async function checkAI() {
     els.aiTitle.textContent = 'Mellow status unavailable';
     els.aiDetail.textContent = error.message;
   }
+  finally { aiStatusPending = false; }
 }
 
 function setChatBusy(busy) {
@@ -1036,6 +1040,8 @@ window.addEventListener('storage', event => {
 window.addEventListener('focus', () => { checkTrackerDay(); loadBackendTracker().catch(error => trackerMessage(error.message, true)); scheduleTrackerRollover(); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkTrackerDay(); loadBackendTracker().catch(error => trackerMessage(error.message, true)); scheduleTrackerRollover(); } });
 setInterval(checkTrackerDay, 60000);
+// Reconnect status after an independent Ollama restart, without resending chat requests.
+setInterval(() => { if (!document.hidden) checkAI(); }, 30000);
 scheduleTrackerRollover();
 if (!trackerPersists) trackerMessage('Browser storage is unavailable; SQLite still saves totals and goals locally.', true);
 els.chatTab.addEventListener('click', () => switchView('chat'));

@@ -192,12 +192,17 @@ try {
         Assert-Throws { Wait-MellowHealthy 'unused' 'unused' 'unused' -TimeoutSeconds 0 }
     }
 
-    foreach ($scenario in @('dirty-checkout', 'deps-fail', 'tests-fail', 'success', 'startup-fails', 'recovery-fails', 'check-only')) {
+    foreach ($scenario in @('dirty-checkout', 'deps-fail', 'tests-fail', 'success', 'startup-fails', 'recovery-fails', 'check-only', 'unchanged', 'held-release')) {
         Case "deployment orchestration: $scenario" {
             $root = Join-Path $script:Scratch ([guid]::NewGuid().ToString('N'))
             $null = New-Item -ItemType Directory -Path (Join-Path $root '.venv\Scripts') -Force
             $null = New-Item -ItemType File -Path (Join-Path $root '.venv\Scripts\python.exe')
             if ($scenario -eq 'deps-fail') { [IO.File]::WriteAllText((Join-Path $root 'requirements.txt'), 'test-only') }
+            $lockDirectory = Join-Path $root 'lock'
+            if ($scenario -eq 'held-release') {
+                $null = New-Item -ItemType Directory -Path $lockDirectory
+                Save-AutomationState (Join-Path $lockDirectory 'deployment-state.json') @{failed_commit=('b' * 40)}
+            }
             $script:FakeRoot = $root
             $script:Commit = ('a' * 40)
             $script:Stops = 0; $script:Starts = 0; $script:Restores = 0; $script:HealthChecks = 0
@@ -210,15 +215,21 @@ try {
                 param($Executable, $Arguments)
                 if ($Arguments[0] -ceq '-c') { return (@{prefix = (Join-Path $script:FakeRoot '.venv'); base = 'C:\Python313\python.exe'; version = @(3,13)} | ConvertTo-Json -Compress) }
                 if ($Arguments[0] -eq '--version') { return 'v22.0.0' }
-                return ('b' * 40)
+                if ($scenario -eq 'unchanged') { return ('a' * 40) }; return ('b' * 40)
             }
             function Invoke-Native {
                 param($Executable, $Arguments)
                 $script:Events += $Arguments[2]
+                if ($Arguments[2] -eq 'worktree' -and $Arguments[3] -eq 'add') { $null = New-Item -ItemType Directory -Path $Arguments[5] }
                 if ($Arguments[2] -eq 'merge') { $script:Commit = ('b' * 40) }
                 if ($scenario -eq 'deps-fail' -and $Arguments[2] -eq 'install') { throw 'Dependency installation failed' }
             }
+            function Prepare-CandidateDependencies {
+                if ($scenario -eq 'deps-fail') { throw 'Dependency preparation failed' }
+                return $null
+            }
             function Assert-IncomingPathsSafe {}
+            function Invoke-RestMethod { @{connected=$false;model_available=$false} }
             function Get-ScheduledTask { [pscustomobject]@{State = 'Running'} }
             function Get-VerifiedListeners { @() }
             function Invoke-DeploymentTests {
@@ -233,11 +244,15 @@ try {
                 if ($scenario -eq 'startup-fails' -and $script:HealthChecks -eq 1) { throw 'New version unhealthy' }
             }
             function Restore-DeploymentCode { $script:Restores++; $script:Commit = ('a' * 40) }
-            $result = Invoke-MacroMellowUpdate -Root $root -ValidateOnly:($scenario -eq 'check-only') -LockDirectory (Join-Path $root 'lock')
-            if ($scenario -eq 'dirty-checkout') {
+            $result = Invoke-MacroMellowUpdate -Root $root -ValidateOnly:($scenario -eq 'check-only') -LockDirectory $lockDirectory -Auto:($scenario -in @('unchanged','held-release'))
+            if ($scenario -in @('unchanged','held-release')) {
+                Assert-True ($script:Stops -eq 0 -and $script:Starts -eq 0)
+                Assert-True ('tests' -notin $script:Events)
+                Assert-True ($result -eq $(if ($scenario -eq 'held-release') { 1 } else { 0 }))
+            } elseif ($scenario -eq 'dirty-checkout') {
                 Assert-True ($result -eq 1 -and $script:Stops -eq 0 -and $script:Starts -eq 0 -and $script:Restores -eq 0 -and $script:Events.Count -eq 0)
             } elseif ($scenario -in @('tests-fail', 'deps-fail')) {
-                Assert-True ($result -eq 1 -and $script:Stops -eq 0 -and $script:Starts -eq 0 -and $script:Restores -eq 1)
+                Assert-True ($result -eq 1 -and $script:Stops -eq 0 -and $script:Starts -eq 0 -and $script:Restores -eq 0)
             } elseif ($scenario -in @('startup-fails', 'recovery-fails')) {
                 Assert-True ($result -eq 1 -and $script:Stops -eq 2 -and $script:Starts -eq 2 -and $script:Restores -eq 1 -and $script:HealthChecks -eq 2)
             } elseif ($scenario -eq 'check-only') {
@@ -251,6 +266,24 @@ try {
                 Assert-True ($result -eq 0 -and $script:Stops -eq 2 -and $script:Starts -eq 2)
             }
         }
+    }
+    Case 'release identity and all asset MIME types are required; AI is not a release gate' {
+        $script:Expected = 'a' * 40; $script:WrongCommit = $false; $script:WrongMime = $false
+        function Invoke-RestMethod { @{commit=$(if ($script:WrongCommit) {'b' * 40} else {$script:Expected});pid=123} }
+        function Invoke-WebRequest {
+            param($Uri)
+            if ($Uri -match 'ollama') { throw 'AI must not be checked here' }
+            $mime = if ($Uri -match 'idle.png') {'image/png'} elseif ($Uri -match 'mascot.js') {'text/javascript'} else {'application/json'}
+            if ($script:WrongMime) {$mime='text/html'}
+            @{StatusCode=200;Headers=@{'Content-Type'=$mime}}
+        }
+        Assert-ReleaseEndpoints $script:Expected @(@{ProcessId=123})
+        $script:WrongCommit=$true
+        Assert-Throws { Assert-ReleaseEndpoints $script:Expected @(@{ProcessId=123}) }
+        $script:WrongCommit=$false
+        Assert-Throws { Assert-ReleaseEndpoints $script:Expected @(@{ProcessId=999}) }
+        $script:WrongMime=$true
+        Assert-Throws { Assert-ReleaseEndpoints $script:Expected @(@{ProcessId=123}) }
     }
     Case 'concurrent deployment lock refuses work' {
         $lockDir = Join-Path $script:Scratch 'lock-check'

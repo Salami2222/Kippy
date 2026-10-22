@@ -26,18 +26,17 @@ identity="$HOME/.ssh/macromellow_windows"
 [[ -r "$identity" ]] || { printf 'SSH key is missing or unreadable: %s\n' "$identity" >&2; exit 1; }
 [[ -r "$windows_script" ]] || { printf 'Windows updater is missing: %s\n' "$windows_script" >&2; exit 1; }
 
-# Stream the reviewed local script: first use needs no manual Windows bootstrap.
-# EncodedCommand avoids cmd.exe/PowerShell quoting of paths and script contents.
-bootstrap='$ErrorActionPreference="Stop"; $ProgressPreference="SilentlyContinue"; try { $source=[Console]::In.ReadToEnd(); & ([ScriptBlock]::Create($source))'
+# Invoke the reviewed updater already installed in the Windows checkout.
+bootstrap='$ErrorActionPreference="Stop"; try { & "C:\Users\tommy\MacroMellow\scripts\Update-MacroMellow.ps1"'
 bootstrap+="$check_argument"
-bootstrap+=' } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }'
+bootstrap+='; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }'
 encoded=$(printf '%s' "$bootstrap" | iconv -f UTF-8 -t UTF-16LE | base64 | tr -d '\r\n')
 
 if ssh -T -i "$identity" \
     -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
     -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
     tommy@100.81.130.10 \
-    "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand $encoded" < "$windows_script"; then
+    "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand $encoded" < /dev/null; then
   exit 0
 else
   result=$?

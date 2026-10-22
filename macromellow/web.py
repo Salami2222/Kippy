@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 import threading
 import time
 import uuid
@@ -411,6 +413,7 @@ class DataApp:
 
 class AppHandler(BaseHTTPRequestHandler):
     app: DataApp
+    runtime_identity: dict | None = None
 
     def _send(self, status: int, content: bytes, content_type: str) -> None:
         self.send_response(status)
@@ -426,7 +429,9 @@ class AppHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         route = urlsplit(self.path).path
-        if route == "/api/datasets":
+        if route == "/api/version":
+            self._json(200, self.runtime_identity or {"commit": None, "pid": os.getpid()})
+        elif route == "/api/datasets":
             self._json(200, self.app.datasets())
         elif route == "/api/status":
             self._json(200, self.app.get_status())
@@ -559,9 +564,25 @@ class AppHandler(BaseHTTPRequestHandler):
             super().log_message(format, *args)
 
 
+def capture_runtime_identity() -> dict:
+    """Freeze code identity at process startup; never report a later checkout as live."""
+    commit = None
+    try:
+        result = subprocess.run(["git", "-C", str(STATIC_DIR.parent.parent), "rev-parse", "HEAD"],
+                                capture_output=True, text=True, timeout=3, check=False)
+        value = result.stdout.strip()
+        if result.returncode == 0 and re.fullmatch(r"[0-9a-f]{40,64}", value):
+            commit = value
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return {"commit": commit, "pid": os.getpid(),
+            "started_at": datetime.now(ZoneInfo("UTC")).isoformat()}
+
+
 def serve(port: int, data_dir: Path | None = None, open_browser: bool = True) -> int:
+    identity = capture_runtime_identity()
     app = DataApp((data_dir or DEFAULT_DATA_DIR).resolve())
-    handler = type("MacroMellowHandler", (AppHandler,), {"app": app})
+    handler = type("MacroMellowHandler", (AppHandler,), {"app": app, "runtime_identity": identity})
     try:
         server = ThreadingHTTPServer(("127.0.0.1", port), handler)
     except OSError as exc:

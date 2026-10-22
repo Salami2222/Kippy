@@ -1,162 +1,198 @@
-# Remote updates from your MacBook
+# Automatic Windows deployment and Ollama recovery
 
-Run **`mellow-update`** in Mac Terminal to update the existing Windows installation.
-Run **`mellow-update --check`** to validate it without pulling, installing packages,
-or stopping/restarting the app.
+Windows checks GitHub `Salami2222/MacroMellow` **main every two minutes**. A new
+commit is tested in a detached staging checkout, then deployed through the
+existing `\MacroMellow Web` task. Your Mac can be off. No public webhook is used.
 
-## Existing configuration
+Ollama is monitored **independently every minute**. Both services have boot
+triggers and run with the existing Windows user's noninteractive S4U identity.
+The existing command files, credentials, model storage/environment/GPU settings,
+SQLite/menu data, backup task, SSH, Tailscale Serve, and power settings are retained.
 
-The helper uses these existing values:
+## One-time Windows installation
 
-| Setting | Value |
-| --- | --- |
-| SSH destination | `tommy@100.81.130.10` |
-| SSH identity | `~/.ssh/macromellow_windows` |
-| Windows checkout | `C:\Users\tommy\MacroMellow` |
-| Existing environment | `C:\Users\tommy\MacroMellow\.venv` |
-| Scheduled task | `\MacroMellow Web` |
-| Health endpoint | `http://127.0.0.1:8000/` on Windows |
+Prerequisites: existing working Web/Ollama tasks owned by `tommy` with S4U logon,
+Windows PowerShell 5.1, Git, Node 18+, existing Python 3.10+ venv with New York
+timezone data, existing Ollama and `qwen3.5:9b`. The installer inspects these
+existing tasks; unfamiliar launchers/principals are refused rather than replaced.
 
-The scheduled task still launches its existing `MacroMellowService` command file,
-which selects the existing data directory and environment settings. The updater
-does not replace that launcher, recreate the task, or change credentials. Your
-current launcher uses `C:\Users\tommy\MacroMellowData`; the scripts never open,
-copy, delete, or restore its database or menu files.
+After safely updating the Windows checkout to this release, run as the existing
+Windows user in an **elevated PowerShell** (the configured SSH account already has
+administrator access):
 
-## One-time Mac setup
+```powershell
+& 'C:\Users\tommy\MacroMellow\scripts\Install-WindowsAutomation.ps1'
+& 'C:\Users\tommy\MacroMellow\scripts\Update-MacroMellow.ps1'
+```
 
-From your **Mac MacroMellow checkout**, run:
+The second command activates and verifies the new web process supervisor. The
+installer itself does not stop a healthy Web or Ollama process. Original Web and
+Ollama task XML is saved once under `MacroMellowService\automation\original-tasks`.
+Rerunning installation updates the same managed tasks, without duplicating them.
+Existing Web/Ollama task principals, credentials, triggers and settings remain;
+only their actions are wrapped to supervise the **original** command files.
+
+From Mac Terminal, the equivalent commands (using the existing trusted SSH host):
+
+```bash
+ssh -i ~/.ssh/macromellow_windows tommy@100.81.130.10 \
+  'powershell.exe -NoProfile -NonInteractive -Command "& C:\Users\tommy\MacroMellow\scripts\Install-WindowsAutomation.ps1"'
+mellow-update
+```
+
+No new passwords, model downloads, service manager installation or inbound ports
+are required. If your task configuration differs, inspect the refusal and use an
+administrator session under the existing task owner; do not change task credentials
+just to get past a check. Installation does not weaken PowerShell execution policy.
+
+### Optional Mac manual fallback
+
+From your Mac MacroMellow checkout:
 
 ```bash
 chmod +x scripts/mellow-update
 mkdir -p "$HOME/.local/bin"
 ln -s "$PWD/scripts/mellow-update" "$HOME/.local/bin/mellow-update"
-command -v mellow-update
-mellow-update --check
+ln -s "$PWD/scripts/mellow-update" "$HOME/.local/bin/deploy-now"
 ```
 
-The symlink command deliberately refuses to overwrite an existing command. If it
-already exists, inspect it with `ls -l ~/.local/bin/mellow-update` before deciding
-what to do. Keep this Mac checkout at the same location, or recreate the symlink
-after moving it. The helper resolves symlinks and paths containing spaces.
-
-If `command -v` cannot find the command, add this line **once** to `~/.zprofile`,
-then open a new Terminal window:
+These commands refuse existing destinations; inspect existing symlinks before
+changing them. If necessary, add `export PATH="$HOME/.local/bin:$PATH"` once to
+`~/.zprofile` and open a new Terminal. The checkout must stay at the symlink target.
+The helper uses the **Windows checkout's installed updater**, requires the existing
+`~/.ssh/macromellow_windows` key and trusted host key, and uses strict host checking
+and batch authentication. No SSH/Tailscale settings are changed.
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
+mellow-update --check  # tests + live commit/assets; no fetch, install or restart
+mellow-update          # explicit retry, even for a previously failed commit
+# deploy-now is the same manual fallback
 ```
 
-No Homebrew package is needed on the Mac: the helper uses Bash, SSH, `iconv`,
-`base64`, and `readlink`. It requires the existing SSH key and trusted Windows
-host key. It uses batch authentication and strict host-key checking, so it fails
-instead of accepting a new/changed host key or prompting for credentials. Resolve
-an SSH trust/authentication problem through your existing SSH setup; the updater
-does not edit SSH or Tailscale configuration.
+## Safety and release identity
 
-There is **no initial Windows script-copy step**. The helper streams the reviewed
-local `scripts/Update-MacroMellow.ps1` over SSH, using a UTF-16LE encoded bootstrap
-command to avoid shell quoting problems. Update this Mac checkout with
-`git pull --ff-only origin main` when you want new deployment-script changes.
-Application updates themselves always fetch GitHub main directly on Windows.
+- An OS-held exclusive file lock prevents overlapping updates. The recurring task
+  also uses `IgnoreNew`. Crashes release locks automatically; do not delete locks
+  to force overlapping work.
+- A clean main branch and expected GitHub origin are mandatory. Dirty/untracked
+  files, divergence, protected data/venv paths and collisions with ignored local
+  files are refused. There is no automatic stash, branch switch or hard reset.
+- Fetch main, verify ancestry, stage its exact commit outside the live checkout,
+  then run pip integrity/timezone/import checks, **all Python and Node tests**, and
+  both isolated Windows safeguard suites. A failed candidate never advances live
+  code or stops the website.
+- Current runtime dependencies are Python stdlib plus the existing timezone data;
+  no requirements installation is currently necessary. Future `requirements.txt`
+  additions are dry-run checked, installed into a staging overlay, tested, then
+  added to the existing venv. Replacement/upgrade/downgrade of any installed package
+  is refused and requires a reviewed environment migration. Unsupported packaging
+  layouts fail closed. New packages are retained on code rollback; partially failed
+  installs may need manual venv repair. The serving environment is never recreated.
+- Promote only with fast-forward merge, recheck for concurrent edits, then stop
+  the Web task. A Windows **Job Object with kill-on-close** owns its full child
+  tree (cmd, venv launcher, base Python). Stopping the supervisor closes the job.
+  Legacy orphan listeners/venv parents must match exact executable, command line,
+  owner SID and creation time, then are stopped through a pinned process handle.
+  Unknown port occupants cause refusal. No hardcoded PIDs or broad Python kills.
+- Wait for port 8000 to be empty, start the task and require a fresh verified
+  listener plus two successful passes of `/`, `/api/status`, `/mascot.js` (JS MIME),
+  `/assets/mellow/idle.png` (PNG MIME) and `/api/version`. The last endpoint freezes
+  Git commit, PID and startup time **once at server startup**. Changing files under
+  an old process cannot make it report the new commit. AI readiness is not a
+  release gate.
+- A failed restart attempts **one** cleanup/guarded `git reset --keep` to the
+  previous clean commit and restart. Data is never rolled back. The failed target
+  is held until a newer main commit or explicit manual retry, preventing loops.
+  An unchanged healthy release skips tests and restart. An unchanged unhealthy
+  release is reported/held for manual diagnosis, not restarted every two minutes.
+- The last-good commit stays in local Git and is recorded in deployment state;
+  scripts do not prune it. Abrupt power loss is not an atomic deployment: after
+  an interruption, inspect state and run an explicit retry. Never assume a failed
+  SSH session completed successfully.
 
-## Normal use
+## Ollama/Qwen monitoring
 
-```bash
-mellow-update --check  # optional: current installation, tests, and HTTP check
-mellow-update         # pull, dependencies if declared, tests, restart, verify
-```
+The monitor checks `http://127.0.0.1:11434/api/tags` and exact installed model
+`qwen3.5:9b`. It never pulls models or changes model files/environment variables.
+It launches the existing `\MacroMellow Ollama` task only when needed. Its original
+launcher retains `OLLAMA_HOST=127.0.0.1:11434`; no public exposure is introduced.
+Healthy servers are preserved, including any existing tray application.
 
-A successful update ends with:
+An absent server can be recovered immediately. A live but unresponsive verified
+server gets a 60-second startup grace and three failed probes before recovery.
+Attempts are limited to once per ten minutes and three per hour. The monitor
+serializes recovery, checks server executable/command/owner/creation before
+termination, refuses unknown port owners or multiple servers, and waits for port
+11434 to become free. The task supervisor prevents duplicate managed launches
+and contains Ollama descendants. A missing model or failed optional inference is
+reported without restarting a responding server or downloading anything.
 
-```text
-SUCCESS: deployed <commit>; \MacroMellow Web is running; http://127.0.0.1:8000/ returned HTTP 200.
-```
+Web startup and deployment verify/start Ollama before checking app AI connectivity.
+Ollama failure is a warning: the website still starts and deployment can succeed.
+The browser refreshes its AI connection status every 30 seconds while visible,
+without retrying or duplicating chat messages.
 
-The command returns exit code **0** only after success. Failures, including a
-successful recovery to the previous code, return a nonzero status. Check with
-`echo $?` immediately afterward if using it in another script.
-
-## What happens and what is protected
-
-1. Acquire an exclusive, per-user deployment lock under
-   `%LOCALAPPDATA%\MacroMellow\deployment.lock`. Concurrent runs refuse to start;
-   the OS releases the handle when the updater exits. The file may remain safely.
-2. Require a clean **main** checkout with the expected GitHub origin. Staged,
-   unstaged, and nonignored untracked files cause refusal. Existing ignored venv
-   and data directories are expected. Other branches are never switched.
-3. Fetch only main and verify the current commit is its ancestor. Advance using
-   `git merge --ff-only --no-autostash --no-overwrite-ignore` to the exact fetched commit. This
-   is the controlled equivalent of a fast-forward-only pull. Local ahead/diverged
-   commits cause refusal. Incoming database/data/venv paths and collisions with
-   existing ignored files also cause refusal.
-4. If `requirements.txt` exists, run the existing venv's
-   `python -m pip install --no-input -r requirements.txt`, without a blanket
-   upgrade. Already-satisfied dependencies stay installed. The current app has
-   no requirements manifest, so this step currently skips installation. Future
-   runtime dependencies must be declared there. A new unsupported packaging
-   layout causes refusal rather than an improvised install. The venv is never
-   created or replaced.
-5. Run `pip check`, verify Python 3.10+, New York timezone availability and app
-   imports, then run **all Python unit tests**, **all `test_*.cjs` Node tests**,
-   and the isolated Windows deployment tests. Node 18+ and Windows PowerShell
-   5.1+ must already be installed. Missing tools or any failed test prevent a stop.
-6. Recheck the checkout, then stop only `\MacroMellow Web`. Wait for its task and
-   child processes to exit. If a listener remains on port 8000, require the exact
-   venv command prefix `-m macromellow web`, the expected Python executable/base
-   interpreter, the current user's SID, and matching process creation times.
-   Termination uses a pinned process handle to guard against PID reuse. Unknown
-   or inaccessible listeners cause refusal; there is no broad Python kill or
-   process-tree kill.
-7. Start the existing task and poll for a **fresh verified process**, a running
-   task, and two HTTP-200 responses containing the MacroMellow page title. The
-   startup deadline is 45 seconds. Redirects, unrelated servers, and an old
-   listener cannot satisfy the check. No model request or nutrition refresh runs.
-
-Repeated runs are safe: tests rerun, already-satisfied requirements remain, and
-the existing instance is stopped before another instance is started. A repeat
-with no new commits still performs a tested restart.
-
-## Failures and recovery
-
-- Before a stop, the running service remains running. If this deployment advanced
-  the checkout, it attempts to restore the previous commit using **`git reset
-  --keep`**, only if main is still clean and HEAD is still the exact deployed
-  commit. It never hard-resets, cleans, stashes, or overwrites user edits.
-- After a stop/start failure, it attempts verified cleanup, the same guarded code
-  restoration, and a restart with HTTP verification. It reports **RECOVERY** or
-  **RECOVERY INCOMPLETE**, and still exits unsuccessfully.
-- Installed dependencies are **not automatically downgraded** during code
-  recovery. A failed/partial pip change or incompatible dependency may require
-  manual repair of the existing venv. No rollback of application data is attempted.
-- If another user changes the checkout, permissions prevent task/process control,
-  the port belongs to something else, or recovery fails, the script stops and
-  identifies the problem. Review the existing launcher's service logs and task
-  state before retrying. It does not elevate privileges or alter task credentials.
-- If SSH disconnects, do not assume success. Run `mellow-update --check` after
-  reconnecting. A concurrent update will still hold its lock; otherwise a normal
-  `mellow-update` can retry the clean checkout and restart a stopped task. Abrupt
-  machine shutdowns cannot be made atomic by this script.
-
-`--check` runs tests and verifies the current service; it does not check remote
-GitHub availability or install missing requirements. Test fixtures and scratch
-repositories use temporary directories, and the real scheduled task and its
-listener are not stopped by the deployment test suite.
-
-## Test the deployment safeguards separately on Windows
+Optional inference check (may load the existing model into GPU/RAM normally):
 
 ```powershell
-powershell.exe -NoProfile -NonInteractive -File C:\Users\tommy\MacroMellow\tests\Test-Deployment.ps1
+& 'C:\Users\tommy\MacroMellow\scripts\windows\Monitor-Ollama.ps1' -InferenceCheck
 ```
 
-This needs Git and Node available on the Windows PATH. It covers dirty checkouts,
-wrong branches/origins, divergence, protected data, ignored-file collisions,
-rollback guards, ownership/PID checks, test/dependency failures, startup failure,
-failed recovery, health checks, concurrent locking, and repeat deployments. It
-does not need Pester or a real model connection.
+This sends one eight-token request, not a download. Monitor exit `0` means the
+model is present/healthy (or another monitor owns the lock); `2` means degraded,
+failed inference, refused/cooling-down recovery, or recovery not yet ready.
+Deployment exit `0` means verified release success; `1` includes held/failed
+releases even if recovery succeeded.
 
-The implementation checks native exit codes explicitly, as described by
-[PowerShell's `$LASTEXITCODE` documentation](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_automatic_variables?view=powershell-5.1#lastexitcode).
-It uses the existing task's [stop](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/stop-scheduledtask)
-and [asynchronous start](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/start-scheduledtask)
-operations, followed by independent process and HTTP checks.
+## Monitor, disable and recover
+
+Run in Windows PowerShell, locally or over the existing SSH connection:
+
+```powershell
+Get-ScheduledTask -TaskName 'MacroMellow*' | Select-Object TaskName, State
+Get-ScheduledTaskInfo -TaskName 'MacroMellow Auto Deploy'
+Get-ScheduledTaskInfo -TaskName 'MacroMellow Ollama Monitor'
+Invoke-RestMethod http://127.0.0.1:8000/api/version
+Invoke-RestMethod http://127.0.0.1:8000/api/ollama/status
+Get-Content C:\Users\tommy\MacroMellowService\automation\deployment-state.json
+Get-Content C:\Users\tommy\MacroMellowService\automation\logs\deploy-*.jsonl -Tail 15
+Get-Content C:\Users\tommy\MacroMellowService\automation\logs\ollama-*.jsonl -Tail 15
+
+Disable-ScheduledTask -TaskName 'MacroMellow Auto Deploy'
+Disable-ScheduledTask -TaskName 'MacroMellow Ollama Monitor'
+# Disable prevents future launches; it does not interrupt a deployment already running.
+# Re-enable with Enable-ScheduledTask after diagnosing the problem.
+```
+
+Automation state/logs stay outside Git under
+`C:\Users\tommy\MacroMellowService\automation`. Daily JSONL files record source,
+target, test results/failures, restart/endpoint checks, final successful or recovered
+commit, connection failures and recovery attempts. Existing application/Ollama
+output remains in `MacroMellowService\logs`. Logs are not automatically deleted;
+review disk usage periodically. Do not edit state while tasks are active.
+
+For a failed release, fix main and push, or review the error and run
+`mellow-update` once to retry explicitly. Do not discard local changes to bypass
+the dirty-tree guard. If recovery is incomplete, inspect task/server logs and port
+ownership first. Existing data/backups remain authoritative. S4U has no reusable
+network credentials: verify Git fetch in the actual unattended task (this public
+GitHub repository works anonymously). A future private repository may require a
+separately reviewed Git authentication arrangement.
+
+## Verification
+
+```powershell
+& C:\Users\tommy\MacroMellow\tests\Test-Deployment.ps1
+& C:\Users\tommy\MacroMellow\tests\Test-OllamaMonitor.ps1
+```
+
+These tests use temporary Git repos and mocked task/process operations. Live
+installation and recovery verification are separate; a configured boot trigger
+alone does not prove a real reboot occurred. See the delivery report for actual
+Windows checks performed.
+
+Implementation references: [Windows Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects),
+[Task Scheduler S4U](https://learn.microsoft.com/en-us/windows/win32/taskschd/principal-logontype),
+[Ollama on Windows](https://docs.ollama.com/windows),
+[Ollama tags](https://docs.ollama.com/api/tags) and
+[generate](https://docs.ollama.com/api/generate).
