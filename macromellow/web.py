@@ -51,6 +51,43 @@ def validate_adjustment(message: str, intent: dict, today: str) -> tuple[str, di
     return mode, values
 
 
+
+def allowed_request_origin(headers, peer_ip: str) -> bool:
+    """Check browser Origin for local HTTP or HTTPS through Tailscale Serve.
+
+    Serve terminates HTTPS and forwards to our loopback-only HTTP listener.
+    Trust its X-Forwarded-Host/Proto only when the actual TCP peer is loopback.
+    Never allow arbitrary external origins or infer authorization from an
+    unverified X-Forwarded-* header.
+    """
+    origin = headers.get("Origin")
+    if not origin:
+        return True  # Retain existing behavior for local CLI / non-browser requests.
+    host = headers.get("Host", "")
+    if origin == f"http://{host}" and host:
+        return True
+    if peer_ip not in {"127.0.0.1", "::1"}:
+        return False
+    try:
+        parsed = urlsplit(origin)
+        return (
+            parsed.scheme == "https"
+            and parsed.hostname is not None
+            and parsed.hostname.endswith(".ts.net")
+            and parsed.hostname != "ts.net"
+            and parsed.port is None
+            and not parsed.username
+            and not parsed.password
+            and not parsed.path
+            and not parsed.query
+            and not parsed.fragment
+            and headers.get("X-Forwarded-Proto", "").lower() == "https"
+            and headers.get("X-Forwarded-Host", "").lower() == parsed.netloc.lower()
+        )
+    except ValueError:
+        return False
+
+
 class ChatError(RuntimeError):
     def __init__(self, message: str, debug: dict, status: int) -> None:
         super().__init__(message)
@@ -430,10 +467,9 @@ class AppHandler(BaseHTTPRequestHandler):
         if route not in ("/api/refresh", "/api/chat", *actions):
             self._json(404, {"error": "Not found"})
             return
-        origin = self.headers.get("Origin")
-        expected = f"http://{self.headers.get('Host')}"
         kind = "refresh" if route == "/api/refresh" else "chat" if route == "/api/chat" else "state"
-        if (origin and origin != expected) or self.headers.get("X-MacroMellow-Request") != kind:
+        if (not allowed_request_origin(self.headers, self.client_address[0])
+                or self.headers.get("X-MacroMellow-Request") != kind):
             self._json(403, {"error": "This action is only available from the local interface"})
             return
         if self.headers.get("Content-Type", "").split(";")[0] != "application/json":
