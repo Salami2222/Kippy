@@ -158,7 +158,7 @@ class AgentTests(unittest.TestCase):
                 self.assertEqual(payload["model"], "qwen3.5:9b")
                 self.assertEqual(payload["format"]["type"], "object")
                 self.assertIn("operation", payload["format"]["required"])
-                self.assertIn("log_date", payload["format"]["required"])
+                self.assertNotIn("log_date", payload["format"]["required"])  # optional fields default in Python
                 self.assertEqual(json.loads(payload["messages"][1]["content"])["today"], DAY)
                 self.assertFalse(payload["stream"])
 
