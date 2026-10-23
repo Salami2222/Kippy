@@ -32,6 +32,10 @@ STATIC_ROUTES = {
     "/tracker.js": ("tracker.js", "text/javascript; charset=utf-8"),
     "/mascot.js": ("mascot.js", "text/javascript; charset=utf-8"),
     **{
+        f"/assets/mellow/{name}.png": (f"assets/mellow/{name}.png", "image/png")
+        for name in ("idle-v2-atlas", "idle-v2-preview", *(f"idle-v2-frame-{n}" for n in range(1, 5)))
+    },
+    **{
         f"/assets/mellow/{state}{variant}.png":
         (f"assets/mellow/{state}{variant}.png", "image/png")
         for state in ("idle", "talking", "thinking", "profile")

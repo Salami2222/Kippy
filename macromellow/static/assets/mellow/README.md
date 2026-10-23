@@ -1,9 +1,9 @@
 # Mellow pixel mascot assets
 
 Eight transparent, single-pose PNGs retained for the lightweight frontend mascot controller.
-The application currently displays only idle/talking and their burned variants.
+The application uses the V2 atlas for normal idle, plus the original talking and burned idle/talking variants.
 Thinking uses the talking artwork; laptop and profile exports are retained for future use.
-Every file is a 1254 × 1254 RGBA square. The PNGs retain their transparent padding;
+Each of the original eight exports is a 1254 × 1254 RGBA square. The PNGs retain their transparent padding;
 render them with `image-rendering: pixelated` and a fixed square image box.
 
 | File | Pose |
@@ -121,3 +121,11 @@ Every burned prompt ended with:
 > no alert symbols, no extra props. Do not zoom or rescale the character. Genuinely
 > transparent background. Crisp pixel art, no smooth vector rendering. Keep
 > silhouette away from canvas edges.
+
+## Sleeping Mellow V2 (supplied artwork, no generation)
+
+`idle-v2-frame-1.png` through `idle-v2-frame-4.png` are exact RGBA crops from the user-supplied `sleeping_turtle_breathing_sprite_sheet.png` (2172×724). Uneven horizontal runs were detected using alpha > 10 solely to find the silhouettes; copying retains the original alpha/color pixels. Each crop includes a 2px safety margin. The original feet share an opaque baseline of y=581; the four 535×377 normalized canvases preserve that baseline at y=372, with a fixed rear-foot edge. No resampling, recoloring, alpha replacement, or generated artwork was used.
+
+`idle-v2-atlas.png` arranges the four frames left to right (2140×377). `idle-v2-preview.png` is an APNG preview with 700ms per frame. `idle-v2.json` records the source SHA-256, crop boxes, placements, and timing. `scripts/prepare_sleeping_mellow.py` reproduces these assets using Pillow (development only).
+
+The header animates atlas background positions with CSS `steps(4)` over 2.8 seconds, removing the atlas outside normal idle so returning to idle starts at frame one. No transform/scale is applied to this loop. Until the atlas loads, the first-frame PNG remains visible. Reduced motion fixes the atlas at frame one. Original burned artwork and other exported poses remain unchanged.

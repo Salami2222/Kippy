@@ -1,4 +1,5 @@
 import json
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -52,6 +53,13 @@ class MascotStaticRoutesTests(unittest.TestCase):
                     (self.assets / name).write_bytes(content)
                     self.assertEqual(self.get(f"/assets/mellow/{name}"),
                                      (200, content, "image/png"))
+
+    def test_sleeping_v2_assets_use_explicit_png_routes(self):
+        for name in ("idle-v2-atlas", "idle-v2-preview", *(f"idle-v2-frame-{n}" for n in range(1, 5))):
+            content = b"PNG test " + name.encode()
+            (self.assets / f"{name}.png").write_bytes(content)
+            self.assertEqual(self.get(f"/assets/mellow/{name}.png"), (200, content, "image/png"))
+        self.assertEqual(self.get("/assets/mellow/idle-v2-frame-5.png")[0], 404)
 
     def test_mascot_module_and_existing_interface_routes(self):
         for route, name, media_type in (
@@ -112,6 +120,35 @@ class MascotStaticRoutesTests(unittest.TestCase):
             status, body, _ = self.get("/assets/mellow/idle.png")
             self.assertEqual(status, 404)
             self.assertEqual(json.loads(body), {"error": "Not found"})
+
+
+class SleepingV2AssetTests(unittest.TestCase):
+    def test_shipped_frames_atlas_and_preview_have_consistent_dimensions(self):
+        root = Path(__file__).resolve().parents[1] / "macromellow/static/assets/mellow"
+        metadata = json.loads((root / "idle-v2.json").read_text())
+        expected = (535, 377)
+        for n in range(1, 5):
+            data = (root / f"idle-v2-frame-{n}.png").read_bytes()
+            self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+            self.assertEqual(struct.unpack(">II", data[16:24]), expected)
+        atlas = (root / "idle-v2-atlas.png").read_bytes()
+        self.assertEqual(struct.unpack(">II", atlas[16:24]), (expected[0] * 4, expected[1]))
+        preview = (root / "idle-v2-preview.png").read_bytes()
+        offset = 8
+        controls = []
+        while offset < len(preview):
+            size = struct.unpack(">I", preview[offset:offset + 4])[0]
+            kind = preview[offset + 4:offset + 8]
+            if kind == b"acTL":
+                self.assertEqual(struct.unpack(">II", preview[offset + 8:offset + 16]), (4, 0))
+            if kind == b"fcTL":
+                controls.append(preview[offset + 8:offset + 8 + size])
+            offset += size + 12
+        self.assertEqual(len(controls), 4)
+        self.assertEqual([numerator / denominator for numerator, denominator in
+                          (struct.unpack(">HH", control[20:24]) for control in controls)], [0.7] * 4)
+        self.assertEqual(metadata["frame_size"], list(expected))
+        self.assertEqual((metadata["rear_edge"], metadata["baseline"]), (6, 372))
 
 
 if __name__ == "__main__":

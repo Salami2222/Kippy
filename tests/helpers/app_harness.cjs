@@ -121,6 +121,7 @@ async function loadApp({compact = false, viewport = null} = {}) {
   let timerId = 0;
   let uuid = 0;
   const pendingChat = [];
+  const imageLoads = [];
   const clipboard = []; const dialogs = [];
   let clipboardError = null, confirmed = false;
   let stateHandler = null;
@@ -131,6 +132,7 @@ async function loadApp({compact = false, viewport = null} = {}) {
   }
   const context = vm.createContext({
     document, console, URL, Intl, Date: AppDate,
+    Image: class { constructor() { imageLoads.push(this); } },
     navigator: {clipboard: {async writeText(text) { if (clipboardError) throw clipboardError; clipboard.push(text); }}},
     confirm(message) { dialogs.push(message); return confirmed; },
     getSelection: () => ({toString: () => ''}),
@@ -174,7 +176,7 @@ async function loadApp({compact = false, viewport = null} = {}) {
   }
   await settle();
   return {
-    get, slots, requests, clipboard, dialogs, document,
+    get, slots, requests, imageLoads, clipboard, dialogs, document,
     setConfirmed: value => { confirmed = value; },
     setClipboardError: error => { clipboardError = error; },
     setStateHandler: handler => { stateHandler = handler; },

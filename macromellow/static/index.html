@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
   <title>MacroMellow · Meet Mellow</title>
   <link rel="stylesheet" href="/app.css">
+  <link rel="preload" as="image" href="/assets/mellow/idle-v2-atlas.png">
   <script src="/tracker.js" defer></script>
   <script src="/mascot.js" defer></script>
   <script src="/app.js" defer></script>
@@ -29,7 +30,7 @@
     <h1 id="page-title" class="sr-only">MacroMellow — Your AI-powered nutrition assistant.</h1>
 
     <section id="chat-view" class="chat-view" aria-label="Mellow nutrition chat">
-      <div class="chat-top"><div class="chat-identity"><span id="mellow-mascot" class="mellow-mascot" data-mellow-mascot data-state="idle" data-burned="false" aria-hidden="true"><img src="/assets/mellow/idle.png" alt="" width="64" height="64"></span><div><h2>Mellow</h2></div></div><div class="chat-header-actions"><button id="new-chat" class="quiet-button" type="button"><span aria-hidden="true">＋</span> New chat</button><button id="tracker-toggle" class="quiet-button tracker-toggle is-active" type="button" aria-expanded="true" aria-controls="daily-tracker" aria-label="Hide today’s macro summary" title="Hide macros"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V9m8 9V5m8 13v-7M2 20h20"/></svg><span>Macros</span></button></div></div>
+      <div class="chat-top"><div class="chat-identity"><span id="mellow-mascot" class="mellow-mascot" data-mellow-mascot data-state="idle" data-burned="false" aria-hidden="true"><img src="/assets/mellow/idle-v2-frame-1.png" alt="" width="64" height="64"></span><div><h2>Mellow</h2></div></div><div class="chat-header-actions"><button id="new-chat" class="quiet-button" type="button"><span aria-hidden="true">＋</span> New chat</button><button id="tracker-toggle" class="quiet-button tracker-toggle is-active" type="button" aria-expanded="true" aria-controls="daily-tracker" aria-label="Hide today’s macro summary" title="Hide macros"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V9m8 9V5m8 13v-7M2 20h20"/></svg><span>Macros</span></button></div></div>
       <section id="daily-tracker" class="daily-tracker" aria-labelledby="tracker-title">
         <div class="tracker-heading"><h3 id="tracker-title">Today’s macros <span id="tracker-date"></span></h3></div>
         <div id="tracker-totals" class="tracker-totals" aria-live="polite">

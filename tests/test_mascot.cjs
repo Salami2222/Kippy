@@ -57,11 +57,11 @@ test('sleeping is idle and both active states use talking artwork, with matching
   for (const burned of [false, true]) {
     const suffix = burned ? '-burned' : '';
     for (const [state, pose] of [['idle', 'idle'], ['thinking', 'talking'], ['talking', 'talking']]) {
-      assert.equal(assetFor(state, burned), `/assets/mellow/${pose}${suffix}.png`);
+      assert.equal(assetFor(state, burned), !burned && pose === 'idle' ? '/assets/mellow/idle-v2-frame-1.png' : `/assets/mellow/${pose}${suffix}.png`);
       assert.equal(assetFor(state, burned, true), `/assets/mellow/profile${suffix}.png`);
     }
   }
-  assert.equal(assetFor('unknown'), '/assets/mellow/idle.png');
+  assert.equal(assetFor('unknown'), '/assets/mellow/idle-v2-frame-1.png');
 });
 
 test('request lifecycle returns from talking to idle and cancels stale timers', () => {
@@ -106,7 +106,7 @@ test('burned state remains independent from thinking and response timing', () =>
   assert.equal(mascot.getState().burned, false);
   assert.deepEqual([...clock.pending.keys()], [responseTimer]);
   clock.finish();
-  assert.equal(mascot.getState().asset, '/assets/mellow/idle.png');
+  assert.equal(mascot.getState().asset, '/assets/mellow/idle-v2-frame-1.png');
 });
 
 test('tracker adjustments, reset, goal edits, and backend refresh all recompute burned state', () => {

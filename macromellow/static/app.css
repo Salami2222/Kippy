@@ -123,7 +123,23 @@ button, input, select, textarea, summary, a { -webkit-tap-highlight-color: trans
 /* Align the visible foot baseline at source y=1058 on each 1254px canvas. */
 .mellow-mascot[data-state="talking"], .mellow-mascot[data-state="thinking"] { --pose-offset: 1.276%; }
 .mellow-mascot[data-state="talking"][data-burned="true"], .mellow-mascot[data-state="thinking"][data-burned="true"] { --pose-offset: -.558%; }
-.mellow-mascot[data-state="idle"] img { animation: mellow-rest 3.8s steps(4, end) infinite; }
+.mellow-mascot[data-state="idle"][data-burned="true"] img { animation: mellow-rest 3.8s steps(4, end) infinite; }
+/* The first-frame image is a loading fallback until the atlas is available.
+   535×377 source cells advance exactly one frame every 700ms, without moving the slot. */
+.mellow-mascot { --sleep-width: 74px; --sleep-height: 52.15px; --sleep-top: 14px; }
+.mellow-mascot[data-state="idle"][data-burned="false"] img,
+.mellow-mascot[data-state="idle"][data-burned="false"]::before {
+  position: absolute; left: 2px; top: var(--sleep-top); width: var(--sleep-width); height: var(--sleep-height);
+  translate: none; transform: none; image-rendering: pixelated;
+}
+.mellow-mascot[data-state="idle"][data-burned="false"] img { animation: none; }
+.mellow-mascot.sleep-ready[data-state="idle"][data-burned="false"] img { visibility: hidden; }
+.mellow-mascot.sleep-ready[data-state="idle"][data-burned="false"]::before {
+  content: ''; z-index: 1; background-image: url('/assets/mellow/idle-v2-atlas.png');
+  background-size: 400% 100%; background-repeat: no-repeat; background-position: 0 0;
+  animation: mellow-breathe-frames 2.8s steps(4, end) infinite;
+}
+@keyframes mellow-breathe-frames { to { background-position-x: calc(var(--sleep-width) * -4); } }
 .mellow-mascot[data-state="thinking"] img { animation: mellow-process 1.2s steps(2, end) infinite; }
 .mellow-mascot[data-state="talking"] img { animation: mellow-talk .4s steps(4, end) infinite; }
 .mellow-mascot[data-burned="true"] { animation: mellow-ember 2.4s steps(3, end) infinite; }
@@ -403,8 +419,8 @@ body:has(#chat-view:not([hidden])) { overflow: hidden; }
   .chat-top { padding: 2px 9px; gap: 5px; }
   .chat-top h2 { font-size: 16px; }
   .chat-identity { gap: 5px; }
-  .chat-top .mellow-mascot { width: 72px; height: 64px; }
-  .chat-top .mellow-mascot img { width: 80px; height: 80px; left: -4px; top: -7px; }
+  .chat-top .mellow-mascot { width: 72px; height: 64px; --sleep-width: 68px; --sleep-height: 47.92px; --sleep-top: 12px; }
+  .chat-top .mellow-mascot:not([data-state="idle"][data-burned="false"]) img { width: 80px; height: 80px; left: -4px; top: -7px; }
   .chat-header-actions { gap: 4px; }
   .chat-header-actions .quiet-button { min-height: 32px; padding: 4px 6px; font-size: 10px; }
   .tracker-toggle svg { width: 13px; height: 13px; }
@@ -496,5 +512,6 @@ body:has(#chat-view:not([hidden])) { overflow: hidden; }
   button { transform: none !important; }
   .mellow-mascot, .mellow-mascot img, .mellow-mascot::after { animation: none !important; transform: none !important; filter: none !important; }
   .mellow-mascot::after { display: none; }
+  .mellow-mascot::before { animation: none !important; background-position: 0 0 !important; }
   .message-reaction-badge { animation: none !important; }
 }
