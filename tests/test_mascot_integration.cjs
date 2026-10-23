@@ -147,7 +147,7 @@ test('the single header slot uses only sleeping and talking artwork throughout n
       app.run(`mascot.${action}()`);
       assert.equal(slot.dataset.state, state);
       assert.equal(slot.dataset.burned, String(burned));
-      assert.equal(slot.querySelector('img').getAttribute('src'), !burned && pose === 'idle' ? '/assets/mellow/sleep_00.png' : `/assets/mellow/${pose}${burned ? '-burned' : ''}.png`);
+      assert.equal(slot.querySelector('img').getAttribute('src'), !burned ? (pose === 'idle' ? '/assets/mellow/sleep_00.png' : '/assets/mellow/talk_00.png') : `/assets/mellow/${pose}${burned ? '-burned' : ''}.png`);
     }
     app.finishTalking();
     assert.equal(slot.dataset.state, 'idle');
@@ -173,15 +173,34 @@ test('atlas readiness retains a static fallback until loaded and never changes a
   const slot = app.get('mellow-mascot');
   assert.equal(slot.classList.contains('sleep-ready'), false);
   assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/sleep_00.png');
-  assert.equal(app.imageLoads.length, 1);
+  assert.equal(app.imageLoads.length, 2);
   assert.equal(app.imageLoads[0].src, '/assets/mellow/mellow_sleeping_10frame_atlas.png');
   app.run('mascot.startThinking()');
   app.imageLoads[0].onload();
   assert.equal(slot.classList.contains('sleep-ready'), true);
   assert.equal(slot.dataset.state, 'thinking');
-  assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/talking.png');
+  assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/talk_00.png');
   app.run('mascot.respond()');
   app.finishTalking();
   assert.equal(slot.dataset.state, 'idle');
+  assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/sleep_00.png');
+});
+
+
+test('talking readiness is independent and never substitutes normal artwork for burned states', async () => {
+  const app = await loadApp();
+  const slot = app.get('mellow-mascot');
+  assert.equal(app.imageLoads[1].src, '/assets/mellow/talking-v1-atlas.png');
+  app.run('mascot.startThinking()');
+  assert.equal(slot.classList.contains('talk-ready'), false);
+  app.applyTracker({totals: {calories: 101, protein_g: 0, carbohydrates_g: 0, fat_g: 0}});
+  app.imageLoads[1].onload();
+  assert.equal(slot.classList.contains('talk-ready'), true);
+  assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/talking-burned.png');
+  app.applyTracker({totals: {calories: 100, protein_g: 0, carbohydrates_g: 0, fat_g: 0}});
+  assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/talk_00.png');
+  app.run('mascot.respond()');
+  assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/talk_00.png');
+  app.finishTalking();
   assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/sleep_00.png');
 });

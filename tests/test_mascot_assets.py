@@ -9,6 +9,34 @@ from unittest.mock import Mock, patch
 from macromellow.web import AppHandler
 
 
+def gif_frame_timing(data):
+    offset = 13 + (3 * (2 ** ((data[10] & 7) + 1)) if data[10] & 128 else 0)
+    frames, delays = 0, []
+    while offset < len(data):
+        marker = data[offset]
+        offset += 1
+        if marker == 0x3B:
+            break
+        if marker == 0x21:
+            label = data[offset]
+            offset += 1
+            if label == 0xF9:
+                delays.append(struct.unpack("<H", data[offset + 2:offset + 4])[0] * 10)
+        elif marker == 0x2C:
+            frames += 1
+            packed = data[offset + 8]
+            offset += 9
+            if packed & 128:
+                offset += 3 * (2 ** ((packed & 7) + 1))
+            offset += 1  # Minimum LZW code size.
+        else:
+            raise AssertionError(f"Unexpected GIF marker {marker}")
+        while data[offset]:
+            offset += data[offset] + 1
+        offset += 1
+    return frames, delays
+
+
 class MascotStaticRoutesTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -69,6 +97,14 @@ class MascotStaticRoutesTests(unittest.TestCase):
         (self.assets / "sleeping-v3-preview.gif").write_bytes(b"GIF89a")
         self.assertEqual(self.get("/assets/mellow/sleeping-v3-preview.gif"), (200, b"GIF89a", "image/gif"))
         self.assertEqual(self.get("/assets/mellow/sleep_10.png")[0], 404)
+
+    def test_seven_frame_talking_assets_use_explicit_routes(self):
+        for name in ("talking-v1-atlas", *(f"talk_{n:02d}" for n in range(7))):
+            (self.assets / f"{name}.png").write_bytes(b"PNG")
+            self.assertEqual(self.get(f"/assets/mellow/{name}.png"), (200, b"PNG", "image/png"))
+        (self.assets / "talking-v1-preview.gif").write_bytes(b"GIF89a")
+        self.assertEqual(self.get("/assets/mellow/talking-v1-preview.gif"), (200, b"GIF89a", "image/gif"))
+        self.assertEqual(self.get("/assets/mellow/talk_07.png")[0], 404)
 
     def test_mascot_module_and_existing_interface_routes(self):
         for route, name, media_type in (
@@ -177,32 +213,25 @@ class SleepingV3AssetTests(unittest.TestCase):
         data = (root / "sleeping-v3-preview.gif").read_bytes()
         self.assertEqual(data[:6], b"GIF89a")
         self.assertEqual(struct.unpack("<HH", data[6:10]), (576, 450))
-        offset = 13 + (3 * (2 ** ((data[10] & 7) + 1)) if data[10] & 128 else 0)
-        frames, delays = 0, []
-        while offset < len(data):
-            marker = data[offset]
-            offset += 1
-            if marker == 0x3B:
-                break
-            if marker == 0x21:
-                label = data[offset]
-                offset += 1
-                if label == 0xF9:
-                    delays.append(struct.unpack("<H", data[offset + 2:offset + 4])[0] * 10)
-            elif marker == 0x2C:
-                frames += 1
-                packed = data[offset + 8]
-                offset += 9
-                if packed & 128:
-                    offset += 3 * (2 ** ((packed & 7) + 1))
-                offset += 1  # Minimum LZW code size.
-            else:
-                self.fail(f"Unexpected GIF marker {marker}")
-            while data[offset]:
-                offset += data[offset] + 1
-            offset += 1
+        frames, delays = gif_frame_timing(data)
         self.assertEqual(frames, 10)
         self.assertEqual(delays, [250] * 10)
+
+
+class TalkingV1AssetTests(unittest.TestCase):
+    def test_seven_normalized_frames_and_preview_timing(self):
+        root = Path(__file__).resolve().parents[1] / "macromellow/static/assets/mellow"
+        metadata = json.loads((root / "talking-v1.json").read_text())
+        self.assertEqual((metadata["frame_count"], metadata["frame_ms"], metadata["cycle_ms"]), (7, 150, 1050))
+        for n in range(7):
+            data = (root / f"talk_{n:02d}.png").read_bytes()
+            self.assertEqual(struct.unpack(">II", data[16:24]), (324, 228))
+        atlas = (root / "talking-v1-atlas.png").read_bytes()
+        self.assertEqual(struct.unpack(">II", atlas[16:24]), (324 * 7, 228))
+        frames, delays = gif_frame_timing((root / "talking-v1-preview.gif").read_bytes())
+        self.assertEqual(frames, 7)
+        self.assertEqual(delays, [150] * 7)
+        self.assertEqual((metadata["rear_edge"], metadata["baseline"]), (6, 224))
 
 
 if __name__ == "__main__":

@@ -94,10 +94,15 @@ let savedMemories = [];
 let memoryEditingId = null;
 const mascot = MellowMascot.createController({render: renderMascot});
 mascot.syncTracker(tracker);
-// Show a static first frame until the entire atlas is decoded; never layer two poses.
-const sleepAtlas = new Image();
-sleepAtlas.onload = () => document.getElementById('mellow-mascot').classList.add('sleep-ready');
-sleepAtlas.src = '/assets/mellow/mellow_sleeping_10frame_atlas.png';
+// Each pose keeps a static first-frame fallback until its complete atlas is loaded.
+for (const [asset, readyClass] of [
+  ['/assets/mellow/mellow_sleeping_10frame_atlas.png', 'sleep-ready'],
+  ['/assets/mellow/talking-v1-atlas.png', 'talk-ready']
+]) {
+  const atlas = new Image();
+  atlas.onload = () => document.getElementById('mellow-mascot').classList.add(readyClass);
+  atlas.src = asset;
+}
 
 function renderMascot(snapshot) {
   const slot = document.getElementById('mellow-mascot');

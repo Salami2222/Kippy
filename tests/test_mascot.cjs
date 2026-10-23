@@ -57,7 +57,7 @@ test('sleeping is idle and both active states use talking artwork, with matching
   for (const burned of [false, true]) {
     const suffix = burned ? '-burned' : '';
     for (const [state, pose] of [['idle', 'idle'], ['thinking', 'talking'], ['talking', 'talking']]) {
-      assert.equal(assetFor(state, burned), !burned && pose === 'idle' ? '/assets/mellow/sleep_00.png' : `/assets/mellow/${pose}${suffix}.png`);
+      assert.equal(assetFor(state, burned), !burned ? (pose === 'idle' ? '/assets/mellow/sleep_00.png' : '/assets/mellow/talk_00.png') : `/assets/mellow/${pose}${suffix}.png`);
       assert.equal(assetFor(state, burned, true), `/assets/mellow/profile${suffix}.png`);
     }
   }
