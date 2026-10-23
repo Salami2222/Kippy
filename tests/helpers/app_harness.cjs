@@ -96,9 +96,9 @@ async function loadApp({compact = false, viewport = null} = {}) {
   const label = new Element('span'); label.className = 'button-label'; get('refresh').append(label);
   get('browse-view').hidden = true;
   get('tracker-expand').append(new Element('span'));
-  const slots = [new Element(), new Element()];
-  for (const slot of slots) { slot.dataset.mellowMascot = ''; slot.append(new Element('img')); nodes.push(slot); }
-  const profile = new Element('img'); profile.dataset.mellowProfile = ''; nodes.push(profile);
+  const slots = [get('mellow-mascot')];
+  slots[0].dataset.mellowMascot = '';
+  slots[0].append(new Element('img'));
   const selectorNodes = new Map();
   const documentListeners = new Map();
   const document = {
@@ -174,7 +174,7 @@ async function loadApp({compact = false, viewport = null} = {}) {
   }
   await settle();
   return {
-    get, slots, profile, requests, clipboard, dialogs, document,
+    get, slots, requests, clipboard, dialogs, document,
     setConfirmed: value => { confirmed = value; },
     setClipboardError: error => { clipboardError = error; },
     setStateHandler: handler => { stateHandler = handler; },

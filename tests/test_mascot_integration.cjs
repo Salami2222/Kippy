@@ -76,22 +76,24 @@ test('new chat clears a response animation and its delayed idle callback cannot 
   assert.equal(app.state().state, 'talking');
 });
 
-test('backend totals synchronize all avatars and historical profiles without changing conversation state', async () => {
+test('backend totals update the sole header mascot without adding artwork to history', async () => {
   const app = await loadApp();
   app.setHistory([{id: 'old-answer', role: 'assistant', reactions: {},
     payload: {kind: 'answer', message: 'Earlier answer'}}]);
   await app.run('conversationId = "restored-conversation"; loadConversation()');
   const profiles = () => app.run('document.querySelectorAll("[data-mellow-profile]")');
-  assert.equal(profiles().length, 2);
+  assert.equal(app.slots.length, 1);
+  assert.equal(profiles().length, 0);
+  assert.equal(app.get('chat-messages').querySelectorAll('img').length, 0);
   app.run('mascot.startThinking()');
   app.applyTracker({totals: {calories: 101, protein_g: 0, carbohydrates_g: 0, fat_g: 0}});
   assert.equal(app.state().state, 'thinking');
   assert.equal(app.state().burned, true);
   assert.ok(app.slots.every(slot => slot.dataset.burned === 'true' && slot.querySelector('img').src.endsWith('thinking-burned.png')));
-  assert.ok(profiles().every(img => img.src.endsWith('profile-burned.png')));
+  assert.equal(profiles().length, 0);
   app.applyTracker({totals: {calories: 100, protein_g: 0, carbohydrates_g: 0, fat_g: 0}});
   assert.equal(app.state().burned, false);
-  assert.ok(profiles().every(img => img.src.endsWith('/profile.png')));
+  assert.equal(profiles().length, 0);
   app.applyTracker({totals: {calories: 101, protein_g: 0, carbohydrates_g: 0, fat_g: 0}});
   app.applyTracker({goals: {calories: 200, protein_g: null, carbohydrates_g: null, fat_g: null}});
   assert.equal(app.state().burned, false);
@@ -134,4 +136,33 @@ test('independent AI polling shows offline/recovery without duplicate checks or 
   await app.pollAI();
   assert.equal(app.requests.length, hiddenCount);
   assert.equal(app.requests.filter(request => request.url === '/api/chat').length, 0);
+});
+
+test('the single header slot renders all six poses and restores the normal variant after corrections', async () => {
+  const app = await loadApp();
+  const slot = app.get('mellow-mascot');
+  for (const burned of [false, true]) {
+    app.applyTracker({totals: {calories: burned ? 101 : 100, protein_g: 0, carbohydrates_g: 0, fat_g: 0}});
+    for (const [action, pose] of [['reset', 'idle'], ['startThinking', 'thinking'], ['respond', 'talking']]) {
+      app.run(`mascot.${action}()`);
+      assert.equal(slot.dataset.state, pose);
+      assert.equal(slot.dataset.burned, String(burned));
+      assert.equal(slot.querySelector('img').getAttribute('src'), `/assets/mellow/${pose}${burned ? '-burned' : ''}.png`);
+    }
+    app.finishTalking();
+    assert.equal(slot.dataset.state, 'idle');
+  }
+  app.applyTracker({totals: {calories: 50, protein_g: 0, carbohydrates_g: 0, fat_g: 0}});
+  assert.equal(slot.dataset.burned, 'false');
+  assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/idle.png');
+});
+
+test('application markup has one mascot, immediately before its header name, and no other artwork', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const html = fs.readFileSync(path.join(__dirname, '../macromellow/static/index.html'), 'utf8');
+  assert.equal((html.match(/data-mellow-mascot/g) || []).length, 1);
+  assert.equal((html.match(/<img\b/g) || []).length, 1);
+  assert.match(html, /class="chat-identity"><span id="mellow-mascot"[^]*?<\/span><div><h2>Mellow<\/h2>/);
+  assert.doesNotMatch(html, /data-mellow-profile|welcome-icon/);
 });

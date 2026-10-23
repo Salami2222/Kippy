@@ -115,9 +115,10 @@ button, input, select, textarea, summary, a { -webkit-tap-highlight-color: trans
 .tracker-toggle.is-active { background: var(--surface-soft); color: var(--accent-dark); }
 .chat-top { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 3px 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .chat-identity { display: flex; align-items: center; gap: 9px; min-width: 0; }
-/* Fixed transparent canvases keep pose changes from moving nearby controls. */
-.mellow-mascot { --pose-offset: 0%; position: relative; display: inline-block; flex: none; width: 64px; height: 64px; pointer-events: none; }
-.mellow-mascot img, .mellow-profile { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+/* One fixed header slot. The 88px canvas doubles the former 44px scale;
+   negative offsets reclaim only transparent padding, retaining flame, feet and laptop. */
+.mellow-mascot { --pose-offset: 0%; position: relative; display: inline-block; flex: none; width: 78px; height: 70px; pointer-events: none; }
+.mellow-mascot img { position: absolute; left: -5px; top: -8px; display: block; width: 88px; height: 88px; max-width: none; object-fit: contain; image-rendering: pixelated; }
 .mellow-mascot img { transform-origin: 50% 88%; translate: 0 var(--pose-offset); }
 /* Align the visible foot baseline at source y=1058 on each 1254px canvas. */
 .mellow-mascot[data-state="talking"] { --pose-offset: 1.276%; }
@@ -129,9 +130,6 @@ button, input, select, textarea, summary, a { -webkit-tap-highlight-color: trans
 .mellow-mascot[data-state="talking"] img { animation: mellow-talk .4s steps(4, end) infinite; }
 .mellow-mascot[data-burned="true"] { animation: mellow-ember 2.4s steps(3, end) infinite; }
 .mellow-mascot[data-burned="true"]::after { content: ""; position: absolute; width: 3px; height: 4px; left: 49%; top: 14%; background: var(--muted); border-radius: 50%; opacity: 0; animation: mellow-smoke 3.4s steps(6, end) infinite; }
-.mellow-profile { flex: none; width: 24px; height: 24px; }
-.brand-mark.mellow-profile { width: 32px; height: 32px; }
-.chat-top .mellow-mascot { width: 44px; height: 44px; }
 .chat-top h2 { color: var(--accent-dark); margin: 0; font: 800 18px/1.1 var(--rounded); letter-spacing: -.025em; }
 .quiet-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); font-size: 11px; font-weight: 750; white-space: nowrap; transition: background .2s var(--ease), border-color .2s var(--ease), box-shadow .2s var(--ease), transform .28s var(--spring); }
 .quiet-button:hover { border-color: var(--line-strong); background: var(--accent-soft); box-shadow: 0 5px 11px rgb(var(--shadow-color) / 0.071); transform: translateY(-1px); }
@@ -147,7 +145,6 @@ button, input, select, textarea, summary, a { -webkit-tap-highlight-color: trans
 .message p { margin: 0 0 9px; }
 .message p:last-child { margin-bottom: 0; }
 .chat-welcome { grid-column: 1; grid-row: 2; align-self: center; width: 100%; min-height: 0; max-height: 100%; overflow-y: auto; padding: 10px 20px; text-align: center; }
-.welcome-icon { display: block; width: 96px; height: 96px; margin: 0 auto 2px; }
 .welcome-kicker { margin: 0 0 4px !important; color: var(--accent-dark) !important; font-size: 10px; font-weight: 800; letter-spacing: .13em; }
 .chat-welcome h3 { color: var(--accent-dark); margin: 0 0 5px; font: 800 clamp(21px, 2.5vw, 26px)/1.2 var(--rounded); letter-spacing: -.035em; }
 .chat-welcome p { max-width: 470px; margin: 0 auto 11px; color: var(--muted); font-size: 12px; }
@@ -157,7 +154,6 @@ button, input, select, textarea, summary, a { -webkit-tap-highlight-color: trans
 .prompt::after { content: "↗"; color: var(--accent); font-size: 15px; }
 .prompt:hover, .match-options button:hover { border-color: var(--line-strong); background: var(--accent-soft); box-shadow: 0 6px 15px rgb(var(--shadow-color) / 0.071); transform: translateY(-2px); }
 .chat-loading { grid-column: 1; grid-row: 3; display: flex; align-items: center; gap: 9px; width: calc(100% - 32px); max-width: 1040px; justify-self: center; margin: 0 0 7px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 18px; background: var(--accent-soft); color: var(--muted); font-size: 11px; }
-.chat-loading .mellow-mascot { width: 48px; height: 48px; }
 .typing-dots { display: inline-flex; align-items: center; gap: 3px; flex: none; }
 .typing-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: pulse .8s ease-in-out infinite alternate; }
 .typing-dots i:nth-child(2) { animation-delay: .15s; }
@@ -402,24 +398,23 @@ body:has(#chat-view:not([hidden])) { overflow: hidden; }
   .connection summary { min-height: 32px; gap: 6px; padding: 4px 8px; }
   .connection strong { font-size: 10px; }
   .brand { gap: 5px; font-size: 16px; }
-  .brand-mark.mellow-profile { width: 26px; height: 26px; }
   .tabs { grid-column: 1 / -1; grid-row: 2; display: flex; width: 100%; padding: 2px; }
   .tab { flex: 1; min-height: 36px; gap: 5px; min-width: 0; padding: 0 7px; font-size: 11px; }
   .tab svg { width: 14px; height: 14px; }
   .chat-view { border-radius: 17px; }
   .chat-top { padding: 2px 9px; gap: 5px; }
   .chat-top h2 { font-size: 16px; }
-  .chat-top .mellow-mascot { width: 40px; height: 40px; }
+  .chat-identity { gap: 5px; }
+  .chat-top .mellow-mascot { width: 72px; height: 64px; }
+  .chat-top .mellow-mascot img { width: 80px; height: 80px; left: -4px; top: -7px; }
   .chat-header-actions { gap: 4px; }
-  .chat-header-actions .quiet-button { min-height: 32px; padding: 4px 8px; font-size: 10px; }
+  .chat-header-actions .quiet-button { min-height: 32px; padding: 4px 6px; font-size: 10px; }
   .tracker-toggle svg { width: 13px; height: 13px; }
-  .welcome-icon { width: 80px; height: 80px; }
   .chat-messages { padding: 10px 10px 8px; }
   .message { padding: 12px 13px; }
   .chat-welcome { padding: 10px 12px; }
   .chat-welcome h3 { font-size: 23px; }
   .chat-loading { width: calc(100% - 20px); margin-bottom: 6px; padding: 4px 8px; }
-  .chat-loading .mellow-mascot { width: 32px; height: 32px; }
   .composer { width: calc(100% - 16px); }
   .composer textarea { min-height: 40px; }
   .composer button { min-height: 40px; padding: 8px 12px; }

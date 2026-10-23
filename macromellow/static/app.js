@@ -96,15 +96,11 @@ const mascot = MellowMascot.createController({render: renderMascot});
 mascot.syncTracker(tracker);
 
 function renderMascot(snapshot) {
-  document.querySelectorAll('[data-mellow-mascot]').forEach(slot => {
-    slot.dataset.state = snapshot.state;
-    slot.dataset.burned = String(snapshot.burned);
-    const img = slot.querySelector('img');
-    if (img.getAttribute('src') !== snapshot.asset) img.setAttribute('src', snapshot.asset);
-  });
-  document.querySelectorAll('[data-mellow-profile]').forEach(img => {
-    if (img.getAttribute('src') !== snapshot.profileAsset) img.setAttribute('src', snapshot.profileAsset);
-  });
+  const slot = document.getElementById('mellow-mascot');
+  slot.dataset.state = snapshot.state;
+  slot.dataset.burned = String(snapshot.burned);
+  const img = slot.querySelector('img');
+  if (img.getAttribute('src') !== snapshot.asset) img.setAttribute('src', snapshot.asset);
 }
 
 async function stateRequest(path, payload) {
@@ -391,16 +387,6 @@ function appendBubble(role, text, reference = null) {
   const label = document.createElement('span');
   label.className = 'message-label';
   label.textContent = role === 'user' ? 'You' : 'Mellow';
-  if (role === 'assistant') {
-    const profile = document.createElement('img');
-    profile.className = 'mellow-profile';
-    profile.dataset.mellowProfile = '';
-    profile.src = mascot.getState().profileAsset;
-    profile.alt = '';
-    profile.width = 24;
-    profile.height = 24;
-    label.prepend(profile);
-  }
   const body = document.createElement('p');
   body.textContent = text;
   bubble.append(label);
