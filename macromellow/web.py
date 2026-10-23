@@ -21,7 +21,8 @@ from .agent import HALL_NAMES, tokens
 from .ollama import OllamaClient, OllamaError, PlanError, normalize_plan
 from .memory import MemoryStore, numbers
 from .conversation import Conversations, identifier
-from .meals import nutrition_turn, local_reply
+from .meals import nutrition_turn, local_reply, explicit_log
+from .usda import USDAClient, SOURCE as USDA_SOURCE, is_common_food, common_turn
 
 
 STATIC_DIR = Path(__file__).with_name("static")
@@ -162,6 +163,7 @@ class DataApp:
         self.lock = threading.Lock()
         self.status = {"state": "idle", "message": "", "date": None}
         self.memory = MemoryStore(data_dir / "macromellow.sqlite3")
+        self.usda = USDAClient(self.memory.path)
         self.conversations = Conversations(self)
 
     def _meal_target(self, target: str, session: dict) -> dict | None:
@@ -177,9 +179,9 @@ class DataApp:
     @staticmethod
     def _safe_to_log(result: dict, requested: list[dict], day: str) -> str | None:
         if result["kind"] != "result" or not result.get("cards") or not result.get("total"):
-            return "I need a reliable UMD match for every food before logging it."
+            return "I need a reliable source match for every food before logging it."
         if any(result["total"].get(key) is None for key in ("calories", "protein_g", "carbohydrates_g", "fat_g")):
-            return "UMD nutrition is incomplete, so I cannot add this meal automatically."
+            return "Source nutrition is incomplete, so I cannot add this meal automatically."
         if any(card["menu_date"] != day for card in result["cards"]):
             return "The saved menu date does not match the day you want to log. Which date should I use?"
         if len(result["cards"]) != len(requested):
@@ -253,6 +255,31 @@ class DataApp:
                 result = {"kind": "clarification", "message": intent.get("question") or intent.get("response_text") or "Could you clarify what you would like me to do?",
                           "cards": [], "total": None, "options": []}
                 debug["warnings"].append("The model requested clarification; no action was executed.")
+            elif (operation in {"lookup", "log"} and intent["action"] == "set"
+                  and len(intent["foods"]) == 1 and is_common_food(intent["foods"][0]["name"])
+                  and not intent["foods"][0].get("hall") and not intent["foods"][0].get("date")
+                  and not re.search(r"\b(umd|dining hall|south campus|251 north|the y|yahentamitsi)\b", message, re.I)
+                  and not session.get("pending")):
+                stage = "USDA common-food lookup"
+                result = common_turn(self, intent, session, conversation_id, data["today"], debug, message)
+                requested = session["foods"]
+            elif (operation == "log" and not intent["foods"] and not intent["updates"]
+                  and explicit_log(message) and session.get("last_result_id")
+                  and not reply_context):
+                previous = self.memory.result(session["last_result_id"])
+                if (previous and previous.get("source") == USDA_SOURCE
+                        and all(c.get("menu_date") == data["today"] for c in previous.get("cards", []))):
+                    entry, added = self.memory.log_result(session["last_result_id"], data["today"], conversation_id)
+                    session["working_logged_id"] = session["last_logged_id"] = entry["id"]
+                    if added:
+                        session["last_action"] = {"type": "log", "entry_id": entry["id"]}
+                    result = {"kind": "meal_logged" if added else "already_logged",
+                              "message": "Added the verified USDA food to today's macros." if added else "That food was already logged.",
+                              "cards": [], "total": None, "tracker": self.memory.tracker()}
+                    debug["tool_action"] = {"operation": "log", "entry_id": entry["id"], "added": added}
+                else:
+                    result = {"kind": "clarification", "message": "Please name the food and portion you want to log today.",
+                              "cards": [], "total": None}
             elif operation == "converse":
                 response_type = intent["response_type"]
                 text = intent.get("response_text", "").strip()

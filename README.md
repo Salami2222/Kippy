@@ -93,6 +93,44 @@ data, task credentials, launchers, model files/environment, SSH and Tailscale
 settings are preserved. `/api/version` reports the process's startup commit/PID.
 Refresh the browser after an update (`Ctrl+F5` if needed).
 
+
+## USDA common foods (initial integration)
+
+Mellow can look up a conservative starter set of common foods using the official
+[USDA FoodData Central API](https://fdc.nal.usda.gov/api-guide/): eggs (including
+boiled eggs), bananas, apples, broccoli, white/brown rice, chicken breast,
+strawberries, oranges, almonds, peanut butter, and black beans. The source
+remains distinct from the existing saved UMD menus. A named UMD dining hall
+continues to use UMD labels.
+
+The server makes a FoodData Central search for an **exact USDA description** in
+Foundation or SR Legacy data. An uncertain match or missing nutrient is not
+silently substituted. All four macros come from the returned USDA record,
+scaled in Python from per-100 g values; Qwen never supplies macro numbers.
+
+Try: "How much protein in 2 eggs?", "Add 2 eggs to my macros", then "What are my
+macros today?". Two standard large eggs are assumed to be 2 × 50.3 g of edible
+egg. One medium banana defaults to 118 g; an apple to 182 g; an orange to
+131 g. Other mapped foods require an explicit gram/ounce quantity, e.g.
+"How much protein in 150 g chicken breast?". USDA results say what portions
+were assumed and link directly to the source. They may be logged with an
+explicit request or the existing Add result button, and obey existing same-day
+and duplicate protections. This first pass does not support multi-food mixed
+USDA/UMD meals or editing a USDA food's portion by a follow-up correction;
+send a fresh request with the new portion instead.
+
+For a personal production API key, obtain one from the USDA's
+[API guide](https://fdc.nal.usda.gov/api-guide/) and set it only in the
+**Windows server process environment**, not in the repository or browser:
+
+    USDA_API_KEY=your_private_key
+
+Restart the MacroMellow web task after setting the environment variable.
+With no environment key, DEMO_KEY is used strictly for initial experimentation
+and is subject to very low shared rate limits. Successful food searches are
+cached for 90 days in the existing SQLite database. The API key is never
+returned to the browser or saved in the database.
+
 ## Daily macro tracker
 
 **Today’s macros** stays in a compact sidebar beside the assistant conversation on desktop. On smaller screens, a compact four-number summary sits above chat; tap **View details** or **Daily macros** to open the drawer containing goals, adjustments, logged meals, and personal memory. Close it with **Close** or Escape; drafts and expanded sections are retained. Open **Adjust totals manually** to add, subtract, or set any combination of calories, protein, carbs, and fat. Leave a field blank to keep it unchanged; zero is a valid direct value. The four totals are independent, and manual entries can be negative for testing corrections. **Reset to zero** clears the current day's totals.

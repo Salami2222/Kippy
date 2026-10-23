@@ -604,13 +604,13 @@ function appendResult(data) {
     panel.className = 'nutrition-card';
     const kicker = document.createElement('div');
     kicker.className = 'card-kicker';
-    kicker.textContent = `${hallLabel(card.dining_hall)} · ${humanDate(card.menu_date)}`;
+    kicker.textContent = card.source === 'USDA FoodData Central' ? 'USDA FoodData Central · reference estimate' : `${hallLabel(card.dining_hall)} · ${humanDate(card.menu_date)}`;
     const title = document.createElement('h3');
     title.textContent = card.name;
     const serving = document.createElement('p');
     serving.className = 'card-serving';
     const portionKnown = card.portion_confirmed !== false;
-    serving.textContent = portionKnown ? `${card.reported_quantity ?? card.quantity} ${card.unit || 'serving'} → ${card.quantity} listed serving${card.quantity === 1 ? '' : 's'} × ${card.serving_size || 'size unavailable'} · ${card.match}` :
+    serving.textContent = card.source === 'USDA FoodData Central' ? `${card.portion_description} ≈ ${card.grams} g · ${card.match}` : portionKnown ? `${card.reported_quantity ?? card.quantity} ${card.unit || 'serving'} → ${card.quantity} listed serving${card.quantity === 1 ? '' : 's'} × ${card.serving_size || 'size unavailable'} · ${card.match}` :
       `Reported ${card.reported_quantity} ${card.unit} · UMD serving: ${card.serving_size || 'unavailable'} · portion needs confirmation`;
     panel.append(kicker, title, serving);
     if (!portionKnown) {
@@ -625,7 +625,7 @@ function appendResult(data) {
       link.href = linkUrl;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
-      link.textContent = 'Open official UMD label ↗';
+      link.textContent = card.source === 'USDA FoodData Central' ? 'Open USDA food record ↗' : 'Open official UMD label ↗';
       panel.append(link);
     }
     bubble.append(panel);
@@ -666,7 +666,7 @@ function appendResult(data) {
         if (!url) continue;
         const link = document.createElement('a'); link.className = 'source-link';
         link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer';
-        link.textContent = `${card.name} · UMD label ↗`; bubble.append(link);
+        link.textContent = `${card.name} · ${card.source === 'USDA FoodData Central' ? 'USDA record' : 'UMD label'} ↗`; bubble.append(link);
       }
     }
   }
@@ -699,7 +699,7 @@ function appendResult(data) {
     } else {
       const note = document.createElement('p');
       note.className = 'result-note';
-      note.textContent = 'Some UMD values are missing, so this result cannot be added automatically. You can enter your own test values above.';
+      note.textContent = 'Some source values are missing, so this result cannot be added automatically. You can enter your own test values above.';
       bubble.append(note);
     }
   }
