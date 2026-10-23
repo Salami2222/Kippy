@@ -31,6 +31,15 @@ STATIC_ROUTES = {
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/tracker.js": ("tracker.js", "text/javascript; charset=utf-8"),
     "/mascot.js": ("mascot.js", "text/javascript; charset=utf-8"),
+    **{
+        f"/assets/mellow/burned-{pose}-{name}.png": (f"assets/mellow/burned-{pose}-{name}.png", "image/png")
+        for pose, count in (("sleep", 10), ("talk", 7))
+        for name in ("atlas", *(f"{n:02d}" for n in range(count)))
+    },
+    **{
+        f"/assets/mellow/burned-{pose}-preview.gif": (f"assets/mellow/burned-{pose}-preview.gif", "image/gif")
+        for pose in ("sleep", "talk")
+    },
     "/assets/mellow/talking-v1-preview.gif": ("assets/mellow/talking-v1-preview.gif", "image/gif"),
     **{
         f"/assets/mellow/{name}.png": (f"assets/mellow/{name}.png", "image/png")

@@ -1,7 +1,7 @@
 # Mellow pixel mascot assets
 
 Eight transparent, single-pose PNGs retained for the lightweight frontend mascot controller.
-The application uses the V3 atlas for normal idle, the seven-frame Talking V1 atlas for normal activity, and the original burned idle/talking variants.
+The application uses the V3 atlas for normal idle, the seven-frame Talking V1 atlas for normal activity, and the Burned V1 sleeping/talking atlases.
 Thinking uses the talking artwork; laptop and profile exports are retained for future use.
 Each of the original eight exports is a 1254 × 1254 RGBA square. The PNGs retain their transparent padding;
 render them with `image-rendering: pixelated` and a fixed square image box.
@@ -136,7 +136,7 @@ Imported directly from the supplied `mellow_sleeping_10frame_v3.zip`. `sleep_00.
 
 The app preloads the atlas and uses `steps(10,end)` for a 2.5s cycle (250ms per frame), without transform animation. The first PNG is a loading fallback and reduced motion shows the first atlas cell. `sleeping-v3-preview.gif` is generated from the ten supplied frames at the same timing; GIF palette reduction affects only this review artifact, not the production PNGs. `scripts/import_sleeping_v3.py` checks that each atlas cell matches its corresponding PNG and regenerates this preview. Original V2 and other pose assets remain available.
 
-A burned ten-frame source was not included in the V3 bundle. Existing burned sleeping/talking artwork remains in use. Preparing a reliable burned V3 requires matching ten-frame artwork or editable layers so breathing can preserve the shell, flame, smoke, tears, and face consistently.
+The normal V3 bundle itself contained no burned frames. The separately supplied Burned V1 sheets below now supply those animations.
 
 ## Talking Mellow V1 (seven supplied poses)
 
@@ -144,4 +144,17 @@ The user confirmed the supplied `Mellow Turtle Talking Sprite Sheet.png` contain
 
 `talking-v1-atlas.png` places those cells left-to-right (2268×228); `talking-v1-preview.gif` loops at 150ms/frame, matching the 1.05-second CSS `steps(7,end)` cycle. `talking-v1.json` records source SHA-256, crop rectangles, placements, and timing. `scripts/prepare_talking_v1.py` reproduces the assets using Pillow (development only).
 
-Thinking and responding use the same animation properties so the loop continues across the response transition. Each atlas has an independent preload/fallback. Normal talking has no extra transform animation; reduced motion shows cell zero. Sleeping V3 and all original burned artwork/behavior remain intact. Crops and actual Qwen-backed website playback were visually checked at desktop/mobile sizes; no noticeable mouth/outline interpolation artifacts were observed.
+Thinking and responding use the same animation properties so the loop continues across the response transition. Each atlas has an independent preload/fallback. Normal talking has no extra transform animation; reduced motion shows cell zero. Sleeping V3 remains unchanged, and original single-pose exports remain archived. Crops and actual Qwen-backed website playback were visually checked at desktop/mobile sizes; no noticeable mouth/outline interpolation artifacts were observed.
+
+## Burned Mellow V1 (current)
+
+Source mapping:
+
+- Sleeping: `ChatGPT Image Oct 22, 2026, 09_28_11 PM-1.png` (1983×793), 10 poses in two rows of five.
+- Talking: `ChatGPT Image Oct 22, 2026, 09_28_12 PM-2.png` (1774×887), seven poses in rows of four and three.
+
+Frames are ordered left-to-right, top-to-bottom. `scripts/prepare_burned_v1.py` finds row/column alpha silhouettes (>32 for detection only), includes a 3px safety margin, copies the original RGBA pixels unchanged, and aligns the opaque rear edge/ground baseline (>128 for anchors only). No source alpha/colors are replaced, resampling applied, or new art generated. `burned-sleep-00.png`–`09.png` use 388×360 canvases with baseline y=351; `burned-talk-00.png`–`06.png` use 424×380 with baseline y=369. Both rear edges align at x=8. Full flame/smoke/feet/tears remain inside the canvases.
+
+`burned-sleep-atlas.png` (3880×360) uses 250ms/frame (2.5s). `burned-talk-atlas.png` (2968×380) uses 170ms/frame (1.19s). Matching GIF previews use the same timings; GIF palette reduction affects only the previews. JSON metadata records source SHA-256, crop boxes, placements, dimensions, baseline, and timing. All extracted crop pixels and anchors were checked against the original sheets.
+
+The existing presentation controller and goal logic select the appropriate atlas. Four independent preload/fallback flags prevent normal artwork being used for a burned state. CSS `steps(10)` / `steps(7)` supplies the frame motion only. The old static burned bounce, shimmer, and CSS smoke effects are removed. Reduced motion holds the first cell. The fixed header slot and per-atlas geometry keep the baseline stable and preserve complete smoke/flame shapes on desktop and narrow mobile screens. Normal atlas pixels and timings are unchanged.

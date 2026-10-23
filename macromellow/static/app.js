@@ -97,7 +97,9 @@ mascot.syncTracker(tracker);
 // Each pose keeps a static first-frame fallback until its complete atlas is loaded.
 for (const [asset, readyClass] of [
   ['/assets/mellow/mellow_sleeping_10frame_atlas.png', 'sleep-ready'],
-  ['/assets/mellow/talking-v1-atlas.png', 'talk-ready']
+  ['/assets/mellow/talking-v1-atlas.png', 'talk-ready'],
+  ['/assets/mellow/burned-sleep-atlas.png', 'burned-sleep-ready'],
+  ['/assets/mellow/burned-talk-atlas.png', 'burned-talk-ready']
 ]) {
   const atlas = new Image();
   atlas.onload = () => document.getElementById('mellow-mascot').classList.add(readyClass);

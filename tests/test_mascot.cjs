@@ -57,7 +57,7 @@ test('sleeping is idle and both active states use talking artwork, with matching
   for (const burned of [false, true]) {
     const suffix = burned ? '-burned' : '';
     for (const [state, pose] of [['idle', 'idle'], ['thinking', 'talking'], ['talking', 'talking']]) {
-      assert.equal(assetFor(state, burned), !burned ? (pose === 'idle' ? '/assets/mellow/sleep_00.png' : '/assets/mellow/talk_00.png') : `/assets/mellow/${pose}${suffix}.png`);
+      assert.equal(assetFor(state, burned), !burned ? (pose === 'idle' ? '/assets/mellow/sleep_00.png' : '/assets/mellow/talk_00.png') : `/assets/mellow/burned-${pose === "idle" ? "sleep" : "talk"}-00.png`);
       assert.equal(assetFor(state, burned, true), `/assets/mellow/profile${suffix}.png`);
     }
   }
@@ -96,7 +96,7 @@ test('burned state remains independent from thinking and response timing', () =>
   for (const [state, pose] of [['idle', 'idle'], ['thinking', 'talking'], ['talking', 'talking']]) {
     if (state === 'thinking') mascot.startThinking();
     if (state === 'talking') mascot.respond();
-    assert.equal(mascot.getState().asset, `/assets/mellow/${pose}-burned.png`);
+    assert.equal(mascot.getState().asset, `/assets/mellow/burned-${pose === "idle" ? "sleep" : "talk"}-00.png`);
     assert.equal(mascot.getState().profileAsset, '/assets/mellow/profile-burned.png');
   }
   const responseTimer = [...clock.pending.keys()][0];

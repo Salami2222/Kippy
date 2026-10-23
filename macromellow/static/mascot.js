@@ -18,8 +18,8 @@
   function assetFor(state, burned = false, profile = false) {
     // Processing and responding share the happy pose; keep their timing states distinct.
     const pose = profile ? 'profile' : state === 'thinking' ? 'talking' : STATES.includes(state) ? state : 'idle';
-    if (pose === 'idle' && !burned) return '/assets/mellow/sleep_00.png';
-    if (pose === 'talking' && !burned) return '/assets/mellow/talk_00.png';
+    if (pose === 'idle') return burned ? '/assets/mellow/burned-sleep-00.png' : '/assets/mellow/sleep_00.png';
+    if (pose === 'talking') return burned ? '/assets/mellow/burned-talk-00.png' : '/assets/mellow/talk_00.png';
     return `/assets/mellow/${pose}${burned ? '-burned' : ''}.png`;
   }
 

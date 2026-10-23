@@ -106,6 +106,17 @@ class MascotStaticRoutesTests(unittest.TestCase):
         self.assertEqual(self.get("/assets/mellow/talking-v1-preview.gif"), (200, b"GIF89a", "image/gif"))
         self.assertEqual(self.get("/assets/mellow/talk_07.png")[0], 404)
 
+    def test_burned_animation_routes_are_explicit(self):
+        for pose, count in (("sleep", 10), ("talk", 7)):
+            for name in ("atlas", *(f"{n:02d}" for n in range(count))):
+                asset = f"burned-{pose}-{name}.png"
+                (self.assets / asset).write_bytes(b"PNG")
+                self.assertEqual(self.get(f"/assets/mellow/{asset}"), (200, b"PNG", "image/png"))
+            asset = f"burned-{pose}-preview.gif"
+            (self.assets / asset).write_bytes(b"GIF89a")
+            self.assertEqual(self.get(f"/assets/mellow/{asset}"), (200, b"GIF89a", "image/gif"))
+            self.assertEqual(self.get(f"/assets/mellow/burned-{pose}-{count:02d}.png")[0], 404)
+
     def test_mascot_module_and_existing_interface_routes(self):
         for route, name, media_type in (
             ("/mascot.js", "mascot.js", "text/javascript; charset=utf-8"),
@@ -232,6 +243,30 @@ class TalkingV1AssetTests(unittest.TestCase):
         self.assertEqual(frames, 7)
         self.assertEqual(delays, [150] * 7)
         self.assertEqual((metadata["rear_edge"], metadata["baseline"]), (6, 224))
+
+
+class BurnedAnimationAssetTests(unittest.TestCase):
+    def check_assets(self, pose, count, dimensions, duration):
+        root = Path(__file__).resolve().parents[1] / "macromellow/static/assets/mellow"
+        metadata = json.loads((root / f"burned-{pose}.json").read_text())
+        self.assertEqual((metadata["frame_count"], metadata["frame_ms"]), (count, duration))
+        self.assertEqual(metadata["cycle_ms"], count * duration)
+        self.assertEqual(len(metadata["frames"]), count)
+        for n in range(count):
+            data = (root / f"burned-{pose}-{n:02d}.png").read_bytes()
+            self.assertEqual(struct.unpack(">II", data[16:24]), dimensions)
+            source = metadata["frames"][n]
+            self.assertEqual(source["source_baseline"] - source["source_box"][1] + source["paste_at"][1], metadata["baseline"])
+        atlas = (root / f"burned-{pose}-atlas.png").read_bytes()
+        self.assertEqual(struct.unpack(">II", atlas[16:24]), (dimensions[0] * count, dimensions[1]))
+        frames, delays = gif_frame_timing((root / f"burned-{pose}-preview.gif").read_bytes())
+        self.assertEqual((frames, delays), (count, [duration] * count))
+
+    def test_ten_sleeping_frames_and_250ms_preview(self):
+        self.check_assets("sleep", 10, (388, 360), 250)
+
+    def test_seven_talking_frames_and_170ms_preview(self):
+        self.check_assets("talk", 7, (424, 380), 170)
 
 
 if __name__ == "__main__":

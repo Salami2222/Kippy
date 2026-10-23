@@ -115,15 +115,10 @@ button, input, select, textarea, summary, a { -webkit-tap-highlight-color: trans
 .tracker-toggle.is-active { background: var(--surface-soft); color: var(--accent-dark); }
 .chat-top { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 3px 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .chat-identity { display: flex; align-items: center; gap: 9px; min-width: 0; }
-/* One fixed header slot. The 88px canvas doubles the former 44px scale;
-   negative offsets reclaim only transparent padding, retaining flame and feet. */
-.mellow-mascot { --pose-offset: 0%; position: relative; display: inline-block; flex: none; width: 78px; height: 70px; pointer-events: none; }
+/* One fixed header slot. Per-atlas geometry reclaims transparent padding while
+   retaining complete feet, flame, smoke and tears at a consistent ground baseline. */
+.mellow-mascot { position: relative; display: inline-block; flex: none; width: 78px; height: 70px; pointer-events: none; }
 .mellow-mascot img { position: absolute; left: -5px; top: -8px; display: block; width: 88px; height: 88px; max-width: none; object-fit: contain; image-rendering: pixelated; }
-.mellow-mascot img { transform-origin: 50% 88%; translate: 0 var(--pose-offset); }
-/* Align the visible foot baseline at source y=1058 on each 1254px canvas. */
-.mellow-mascot[data-state="talking"], .mellow-mascot[data-state="thinking"] { --pose-offset: 1.276%; }
-.mellow-mascot[data-state="talking"][data-burned="true"], .mellow-mascot[data-state="thinking"][data-burned="true"] { --pose-offset: -.558%; }
-.mellow-mascot[data-state="idle"][data-burned="true"] img { animation: mellow-rest 3.8s steps(4, end) infinite; }
 /* The first-frame image is a loading fallback until the atlas is available.
    576×450 source cells advance exactly one frame every 250ms, without moving the slot. */
 .mellow-mascot { --sleep-width: 80px; --sleep-height: 62.5px; --sleep-top: 10px; --sleep-left: -1px; }
@@ -154,10 +149,25 @@ button, input, select, textarea, summary, a { -webkit-tap-highlight-color: trans
   animation: mellow-talk-frames 1.05s steps(7, end) infinite;
 }
 @keyframes mellow-talk-frames { to { background-position-x: calc(var(--talk-width) * -7); } }
-.mellow-mascot[data-burned="true"][data-state="thinking"] img { animation: mellow-process 1.2s steps(2, end) infinite; }
-.mellow-mascot[data-burned="true"][data-state="talking"] img { animation: mellow-talk .4s steps(4, end) infinite; }
-.mellow-mascot[data-burned="true"] { animation: mellow-ember 2.4s steps(3, end) infinite; }
-.mellow-mascot[data-burned="true"]::after { content: ""; position: absolute; width: 3px; height: 4px; left: 49%; top: 14%; background: var(--muted); border-radius: 50%; opacity: 0; animation: mellow-smoke 3.4s steps(6, end) infinite; }
+/* Burned artwork includes its own breathing, flame/smoke and crying motion. */
+.mellow-mascot[data-burned="true"] { --burn-width: 74.01px; --burn-height: 68.66px; --burn-top: -1.45px; --burn-left: 1.27px; }
+.mellow-mascot[data-burned="true"]:is([data-state="thinking"], [data-state="talking"]) { --burn-width: 73.1px; --burn-height: 65.52px; --burn-top: 1.88px; --burn-left: 1.42px; }
+.mellow-mascot[data-burned="true"] img, .mellow-mascot[data-burned="true"]::before {
+  position: absolute; left: var(--burn-left); top: var(--burn-top); width: var(--burn-width); height: var(--burn-height);
+  translate: none; transform: none; animation: none; image-rendering: pixelated;
+}
+.mellow-mascot.burned-sleep-ready[data-burned="true"][data-state="idle"] img,
+.mellow-mascot.burned-talk-ready[data-burned="true"]:is([data-state="thinking"], [data-state="talking"]) img { visibility: hidden; }
+.mellow-mascot.burned-sleep-ready[data-burned="true"][data-state="idle"]::before {
+  content: ''; background-image: url('/assets/mellow/burned-sleep-atlas.png'); background-size: 1000% 100%;
+  background-repeat: no-repeat; background-position: 0 0; animation: mellow-burned-sleep-frames 2.5s steps(10, end) infinite;
+}
+.mellow-mascot.burned-talk-ready[data-burned="true"]:is([data-state="thinking"], [data-state="talking"])::before {
+  content: ''; background-image: url('/assets/mellow/burned-talk-atlas.png'); background-size: 700% 100%;
+  background-repeat: no-repeat; background-position: 0 0; animation: mellow-burned-talk-frames 1.19s steps(7, end) infinite;
+}
+@keyframes mellow-burned-sleep-frames { to { background-position-x: calc(var(--burn-width) * -10); } }
+@keyframes mellow-burned-talk-frames { to { background-position-x: calc(var(--burn-width) * -7); } }
 .chat-top h2 { color: var(--accent-dark); margin: 0; font: 800 18px/1.1 var(--rounded); letter-spacing: -.025em; }
 .quiet-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); font-size: 11px; font-weight: 750; white-space: nowrap; transition: background .2s var(--ease), border-color .2s var(--ease), box-shadow .2s var(--ease), transform .28s var(--spring); }
 .quiet-button:hover { border-color: var(--line-strong); background: var(--accent-soft); box-shadow: 0 5px 11px rgb(var(--shadow-color) / 0.071); transform: translateY(-1px); }
@@ -354,11 +364,6 @@ input, select, textarea { transition: border-color .18s var(--ease), box-shadow 
 @keyframes message-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
 @keyframes value-tick { 45% { color: var(--accent-dark); transform: translateY(-2px) scale(1.08); } 75% { transform: scale(.98); } }
 @keyframes pulse { to { opacity: .35; transform: translateY(-3px) scale(.85); } }
-@keyframes mellow-rest { 50% { transform: translateY(-1px); } }
-@keyframes mellow-process { 50% { transform: translateY(-1px); } }
-@keyframes mellow-talk { 50% { transform: translateY(-2px); } }
-@keyframes mellow-ember { 50% { filter: brightness(1.035); } }
-@keyframes mellow-smoke { 15% { opacity: .18; } 75%, 100% { transform: translate(3px, -7px); opacity: 0; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes toast-out { to { opacity: 0; transform: translateY(7px); } }
@@ -434,7 +439,8 @@ body:has(#chat-view:not([hidden])) { overflow: hidden; }
   .chat-top h2 { font-size: 16px; }
   .chat-identity { gap: 5px; }
   .chat-top .mellow-mascot { width: 72px; height: 64px; --sleep-width: 73.25px; --sleep-height: 57.23px; --sleep-top: 8.5px; --sleep-left: -.8px; --talk-width: 68px; --talk-height: 47.85px; --talk-top: 12.2px; }
-  .chat-top .mellow-mascot[data-burned="true"] img { width: 80px; height: 80px; left: -4px; top: -7px; }
+  .chat-top .mellow-mascot[data-burned="true"] { --burn-width: 67.66px; --burn-height: 62.78px; --burn-top: -1.91px; --burn-left: 1.4px; }
+  .chat-top .mellow-mascot[data-burned="true"]:is([data-state="thinking"], [data-state="talking"]) { --burn-width: 66.84px; --burn-height: 59.9px; --burn-top: 1.13px; --burn-left: 1.54px; }
   .chat-header-actions { gap: 4px; }
   .chat-header-actions .quiet-button { min-height: 32px; padding: 4px 6px; font-size: 10px; }
   .tracker-toggle svg { width: 13px; height: 13px; }
@@ -524,8 +530,7 @@ body:has(#chat-view:not([hidden])) { overflow: hidden; }
   html, .chat-messages { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   button { transform: none !important; }
-  .mellow-mascot, .mellow-mascot img, .mellow-mascot::after { animation: none !important; transform: none !important; filter: none !important; }
-  .mellow-mascot::after { display: none; }
+  .mellow-mascot, .mellow-mascot img, .mellow-mascot::before { animation: none !important; transform: none !important; filter: none !important; }
   .mellow-mascot::before { animation: none !important; background-position: 0 0 !important; }
   .message-reaction-badge { animation: none !important; }
 }

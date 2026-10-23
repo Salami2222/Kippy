@@ -1,0 +1,148 @@
+{
+  "source_sha256": "56e17887111558d0a03eeb694fc32c67e69d5cebfbc020165c68b0382245ce6f",
+  "source_size": [
+    1983,
+    793
+  ],
+  "frame_size": [
+    388,
+    360
+  ],
+  "frame_count": 10,
+  "frame_ms": 250,
+  "cycle_ms": 2500,
+  "rear_edge": 8,
+  "baseline": 351,
+  "frames": [
+    {
+      "source_box": [
+        25,
+        77,
+        394,
+        396
+      ],
+      "paste_at": [
+        4,
+        36
+      ],
+      "source_baseline": 392
+    },
+    {
+      "source_box": [
+        417,
+        64,
+        788,
+        396
+      ],
+      "paste_at": [
+        5,
+        23
+      ],
+      "source_baseline": 392
+    },
+    {
+      "source_box": [
+        809,
+        48,
+        1179,
+        395
+      ],
+      "paste_at": [
+        5,
+        7
+      ],
+      "source_baseline": 392
+    },
+    {
+      "source_box": [
+        1202,
+        48,
+        1574,
+        395
+      ],
+      "paste_at": [
+        5,
+        8
+      ],
+      "source_baseline": 391
+    },
+    {
+      "source_box": [
+        1595,
+        42,
+        1962,
+        393
+      ],
+      "paste_at": [
+        4,
+        4
+      ],
+      "source_baseline": 389
+    },
+    {
+      "source_box": [
+        25,
+        419,
+        394,
+        764
+      ],
+      "paste_at": [
+        4,
+        9
+      ],
+      "source_baseline": 761
+    },
+    {
+      "source_box": [
+        417,
+        421,
+        790,
+        764
+      ],
+      "paste_at": [
+        5,
+        12
+      ],
+      "source_baseline": 760
+    },
+    {
+      "source_box": [
+        809,
+        428,
+        1179,
+        764
+      ],
+      "paste_at": [
+        4,
+        18
+      ],
+      "source_baseline": 761
+    },
+    {
+      "source_box": [
+        1202,
+        434,
+        1574,
+        764
+      ],
+      "paste_at": [
+        4,
+        24
+      ],
+      "source_baseline": 761
+    },
+    {
+      "source_box": [
+        1595,
+        451,
+        1960,
+        764
+      ],
+      "paste_at": [
+        4,
+        41
+      ],
+      "source_baseline": 761
+    }
+  ]
+}
