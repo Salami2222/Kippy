@@ -136,6 +136,10 @@ class USDAClient:
 def common_turn(app, plan, session, conversation_id, day, debug, message):
     """Answer one mapped common-food question, and only explicitly log when asked."""
     item = {"quantity": 1, "unit": "unspecified", **plan["foods"][0]}
+    # Invalidate any prior result before attempting this new food, including if
+    # the new portion cannot be resolved or the API fails.
+    session["last_result_id"] = None
+    session["foods"] = []
     key = common_key(item["name"])
     if key is None:
         raise ValueError("Unknown common food")
