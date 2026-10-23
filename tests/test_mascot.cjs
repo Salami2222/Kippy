@@ -53,11 +53,11 @@ test('unconfigured, zero, negative, nonfinite, and nonnumeric goals do not burn'
   assert.equal(hasExceededGoal({calories: 100}, {}), false);
 });
 
-test('all animation and profile states use the corresponding normal or burned asset', () => {
+test('sleeping is idle and both active states use talking artwork, with matching burned variants', () => {
   for (const burned of [false, true]) {
     const suffix = burned ? '-burned' : '';
-    for (const state of ['idle', 'thinking', 'talking']) {
-      assert.equal(assetFor(state, burned), `/assets/mellow/${state}${suffix}.png`);
+    for (const [state, pose] of [['idle', 'idle'], ['thinking', 'talking'], ['talking', 'talking']]) {
+      assert.equal(assetFor(state, burned), `/assets/mellow/${pose}${suffix}.png`);
       assert.equal(assetFor(state, burned, true), `/assets/mellow/profile${suffix}.png`);
     }
   }
@@ -93,10 +93,10 @@ test('burned state remains independent from thinking and response timing', () =>
   tracker.adjust('set', {protein_g: 21});
   const mascot = createController({...clock});
   mascot.syncTracker(tracker);
-  for (const state of ['idle', 'thinking', 'talking']) {
+  for (const [state, pose] of [['idle', 'idle'], ['thinking', 'talking'], ['talking', 'talking']]) {
     if (state === 'thinking') mascot.startThinking();
     if (state === 'talking') mascot.respond();
-    assert.equal(mascot.getState().asset, `/assets/mellow/${state}-burned.png`);
+    assert.equal(mascot.getState().asset, `/assets/mellow/${pose}-burned.png`);
     assert.equal(mascot.getState().profileAsset, '/assets/mellow/profile-burned.png');
   }
   const responseTimer = [...clock.pending.keys()][0];

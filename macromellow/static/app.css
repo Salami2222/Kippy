@@ -116,17 +116,15 @@ button, input, select, textarea, summary, a { -webkit-tap-highlight-color: trans
 .chat-top { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 3px 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .chat-identity { display: flex; align-items: center; gap: 9px; min-width: 0; }
 /* One fixed header slot. The 88px canvas doubles the former 44px scale;
-   negative offsets reclaim only transparent padding, retaining flame, feet and laptop. */
+   negative offsets reclaim only transparent padding, retaining flame and feet. */
 .mellow-mascot { --pose-offset: 0%; position: relative; display: inline-block; flex: none; width: 78px; height: 70px; pointer-events: none; }
 .mellow-mascot img { position: absolute; left: -5px; top: -8px; display: block; width: 88px; height: 88px; max-width: none; object-fit: contain; image-rendering: pixelated; }
 .mellow-mascot img { transform-origin: 50% 88%; translate: 0 var(--pose-offset); }
 /* Align the visible foot baseline at source y=1058 on each 1254px canvas. */
-.mellow-mascot[data-state="talking"] { --pose-offset: 1.276%; }
-.mellow-mascot[data-state="thinking"] { --pose-offset: 3.589%; }
-.mellow-mascot[data-state="talking"][data-burned="true"] { --pose-offset: -.558%; }
-.mellow-mascot[data-state="thinking"][data-burned="true"] { --pose-offset: 3.509%; }
+.mellow-mascot[data-state="talking"], .mellow-mascot[data-state="thinking"] { --pose-offset: 1.276%; }
+.mellow-mascot[data-state="talking"][data-burned="true"], .mellow-mascot[data-state="thinking"][data-burned="true"] { --pose-offset: -.558%; }
 .mellow-mascot[data-state="idle"] img { animation: mellow-rest 3.8s steps(4, end) infinite; }
-.mellow-mascot[data-state="thinking"] img { animation: mellow-work 1.2s steps(2, end) infinite; }
+.mellow-mascot[data-state="thinking"] img { animation: mellow-process 1.2s steps(2, end) infinite; }
 .mellow-mascot[data-state="talking"] img { animation: mellow-talk .4s steps(4, end) infinite; }
 .mellow-mascot[data-burned="true"] { animation: mellow-ember 2.4s steps(3, end) infinite; }
 .mellow-mascot[data-burned="true"]::after { content: ""; position: absolute; width: 3px; height: 4px; left: 49%; top: 14%; background: var(--muted); border-radius: 50%; opacity: 0; animation: mellow-smoke 3.4s steps(6, end) infinite; }
@@ -327,7 +325,7 @@ input, select, textarea { transition: border-color .18s var(--ease), box-shadow 
 @keyframes value-tick { 45% { color: var(--accent-dark); transform: translateY(-2px) scale(1.08); } 75% { transform: scale(.98); } }
 @keyframes pulse { to { opacity: .35; transform: translateY(-3px) scale(.85); } }
 @keyframes mellow-rest { 50% { transform: translateY(-1px); } }
-@keyframes mellow-work { 50% { transform: translateY(1px); } }
+@keyframes mellow-process { 50% { transform: translateY(-1px); } }
 @keyframes mellow-talk { 50% { transform: translateY(-2px); } }
 @keyframes mellow-ember { 50% { filter: brightness(1.035); } }
 @keyframes mellow-smoke { 15% { opacity: .18; } 75%, 100% { transform: translate(3px, -7px); opacity: 0; } }

@@ -1,6 +1,8 @@
 # Mellow pixel mascot assets
 
-Eight transparent, single-pose PNGs for the lightweight frontend mascot controller.
+Eight transparent, single-pose PNGs retained for the lightweight frontend mascot controller.
+The application currently displays only idle/talking and their burned variants.
+Thinking uses the talking artwork; laptop and profile exports are retained for future use.
 Every file is a 1254 × 1254 RGBA square. The PNGs retain their transparent padding;
 render them with `image-rendering: pixelated` and a fixed square image box.
 

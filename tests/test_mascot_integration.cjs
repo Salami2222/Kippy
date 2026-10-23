@@ -89,7 +89,7 @@ test('backend totals update the sole header mascot without adding artwork to his
   app.applyTracker({totals: {calories: 101, protein_g: 0, carbohydrates_g: 0, fat_g: 0}});
   assert.equal(app.state().state, 'thinking');
   assert.equal(app.state().burned, true);
-  assert.ok(app.slots.every(slot => slot.dataset.burned === 'true' && slot.querySelector('img').src.endsWith('thinking-burned.png')));
+  assert.ok(app.slots.every(slot => slot.dataset.burned === 'true' && slot.querySelector('img').src.endsWith('talking-burned.png')));
   assert.equal(profiles().length, 0);
   app.applyTracker({totals: {calories: 100, protein_g: 0, carbohydrates_g: 0, fat_g: 0}});
   assert.equal(app.state().burned, false);
@@ -138,14 +138,14 @@ test('independent AI polling shows offline/recovery without duplicate checks or 
   assert.equal(app.requests.filter(request => request.url === '/api/chat').length, 0);
 });
 
-test('the single header slot renders all six poses and restores the normal variant after corrections', async () => {
+test('the single header slot uses only sleeping and talking artwork throughout normal and burned lifecycles', async () => {
   const app = await loadApp();
   const slot = app.get('mellow-mascot');
   for (const burned of [false, true]) {
     app.applyTracker({totals: {calories: burned ? 101 : 100, protein_g: 0, carbohydrates_g: 0, fat_g: 0}});
-    for (const [action, pose] of [['reset', 'idle'], ['startThinking', 'thinking'], ['respond', 'talking']]) {
+    for (const [action, state, pose] of [['reset', 'idle', 'idle'], ['startThinking', 'thinking', 'talking'], ['respond', 'talking', 'talking']]) {
       app.run(`mascot.${action}()`);
-      assert.equal(slot.dataset.state, pose);
+      assert.equal(slot.dataset.state, state);
       assert.equal(slot.dataset.burned, String(burned));
       assert.equal(slot.querySelector('img').getAttribute('src'), `/assets/mellow/${pose}${burned ? '-burned' : ''}.png`);
     }
