@@ -1,0 +1,24 @@
+{
+  "source_zip_sha256": "4f68fb9ff8eff794e08c2c97632bd792be9c428d98e414d80f73040d89494ad8",
+  "frame_size": [
+    576,
+    450
+  ],
+  "frame_count": 10,
+  "frame_ms": 250,
+  "cycle_ms": 2500,
+  "baseline": 400,
+  "source_sha256": {
+    "sleep_00.png": "80e5aa28f2617713bb3acb238ab714281927dd0edfce7a4baf3894641f1c03af",
+    "sleep_01.png": "bd75646b62a4e5076186517e9424c27a50f03e75eeaeb5393b8b20be1a126db6",
+    "sleep_02.png": "c6549a2338e81136fb6d0a0979eaf49a6b089f3319ce19300b21936aa588b29f",
+    "sleep_03.png": "49377e1d5550190ebb552358064e7906fc540780a50caf196bc901112db4acd1",
+    "sleep_04.png": "3bb0f9f15634cd7918c9d4cba3dfc832d2d6bac6731af04cb9350dfd40554dd7",
+    "sleep_05.png": "b2799c12b4b8039410a99e3b0e5acc4a119a990099f648f1f37e870af98073f4",
+    "sleep_06.png": "3bb0f9f15634cd7918c9d4cba3dfc832d2d6bac6731af04cb9350dfd40554dd7",
+    "sleep_07.png": "49377e1d5550190ebb552358064e7906fc540780a50caf196bc901112db4acd1",
+    "sleep_08.png": "c6549a2338e81136fb6d0a0979eaf49a6b089f3319ce19300b21936aa588b29f",
+    "sleep_09.png": "bd75646b62a4e5076186517e9424c27a50f03e75eeaeb5393b8b20be1a126db6",
+    "mellow_sleeping_10frame_atlas.png": "4ba9e976ce5f38cd7fe50f27568433c4e7108f63bae8a33240e2317e0637d5a8"
+  }
+}

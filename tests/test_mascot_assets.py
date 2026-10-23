@@ -1,4 +1,5 @@
 import json
+import hashlib
 import struct
 import tempfile
 import unittest
@@ -60,6 +61,14 @@ class MascotStaticRoutesTests(unittest.TestCase):
             (self.assets / f"{name}.png").write_bytes(content)
             self.assertEqual(self.get(f"/assets/mellow/{name}.png"), (200, content, "image/png"))
         self.assertEqual(self.get("/assets/mellow/idle-v2-frame-5.png")[0], 404)
+
+    def test_sleeping_v3_assets_use_allowlisted_routes(self):
+        for name in ("mellow_sleeping_10frame_atlas", *(f"sleep_{n:02d}" for n in range(10))):
+            (self.assets / f"{name}.png").write_bytes(b"PNG")
+            self.assertEqual(self.get(f"/assets/mellow/{name}.png"), (200, b"PNG", "image/png"))
+        (self.assets / "sleeping-v3-preview.gif").write_bytes(b"GIF89a")
+        self.assertEqual(self.get("/assets/mellow/sleeping-v3-preview.gif"), (200, b"GIF89a", "image/gif"))
+        self.assertEqual(self.get("/assets/mellow/sleep_10.png")[0], 404)
 
     def test_mascot_module_and_existing_interface_routes(self):
         for route, name, media_type in (
@@ -149,6 +158,51 @@ class SleepingV2AssetTests(unittest.TestCase):
                           (struct.unpack(">HH", control[20:24]) for control in controls)], [0.7] * 4)
         self.assertEqual(metadata["frame_size"], list(expected))
         self.assertEqual((metadata["rear_edge"], metadata["baseline"]), (6, 372))
+
+
+class SleepingV3AssetTests(unittest.TestCase):
+    def test_ten_original_frames_and_atlas_match_imported_hashes_and_dimensions(self):
+        root = Path(__file__).resolve().parents[1] / "macromellow/static/assets/mellow"
+        metadata = json.loads((root / "sleeping-v3.json").read_text())
+        self.assertEqual((metadata["frame_count"], metadata["frame_ms"], metadata["cycle_ms"]), (10, 250, 2500))
+        self.assertEqual(len(metadata["source_sha256"]), 11)
+        for name, expected_hash in metadata["source_sha256"].items():
+            data = (root / name).read_bytes()
+            self.assertEqual(hashlib.sha256(data).hexdigest(), expected_hash)
+            dimensions = (5760, 450) if "atlas" in name else (576, 450)
+            self.assertEqual(struct.unpack(">II", data[16:24]), dimensions)
+
+    def test_implemented_gif_contains_ten_frames_at_250ms(self):
+        root = Path(__file__).resolve().parents[1] / "macromellow/static/assets/mellow"
+        data = (root / "sleeping-v3-preview.gif").read_bytes()
+        self.assertEqual(data[:6], b"GIF89a")
+        self.assertEqual(struct.unpack("<HH", data[6:10]), (576, 450))
+        offset = 13 + (3 * (2 ** ((data[10] & 7) + 1)) if data[10] & 128 else 0)
+        frames, delays = 0, []
+        while offset < len(data):
+            marker = data[offset]
+            offset += 1
+            if marker == 0x3B:
+                break
+            if marker == 0x21:
+                label = data[offset]
+                offset += 1
+                if label == 0xF9:
+                    delays.append(struct.unpack("<H", data[offset + 2:offset + 4])[0] * 10)
+            elif marker == 0x2C:
+                frames += 1
+                packed = data[offset + 8]
+                offset += 9
+                if packed & 128:
+                    offset += 3 * (2 ** ((packed & 7) + 1))
+                offset += 1  # Minimum LZW code size.
+            else:
+                self.fail(f"Unexpected GIF marker {marker}")
+            while data[offset]:
+                offset += data[offset] + 1
+            offset += 1
+        self.assertEqual(frames, 10)
+        self.assertEqual(delays, [250] * 10)
 
 
 if __name__ == "__main__":

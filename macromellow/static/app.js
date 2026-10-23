@@ -97,7 +97,7 @@ mascot.syncTracker(tracker);
 // Show a static first frame until the entire atlas is decoded; never layer two poses.
 const sleepAtlas = new Image();
 sleepAtlas.onload = () => document.getElementById('mellow-mascot').classList.add('sleep-ready');
-sleepAtlas.src = '/assets/mellow/idle-v2-atlas.png';
+sleepAtlas.src = '/assets/mellow/mellow_sleeping_10frame_atlas.png';
 
 function renderMascot(snapshot) {
   const slot = document.getElementById('mellow-mascot');

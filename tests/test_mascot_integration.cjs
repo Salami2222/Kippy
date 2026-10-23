@@ -147,14 +147,14 @@ test('the single header slot uses only sleeping and talking artwork throughout n
       app.run(`mascot.${action}()`);
       assert.equal(slot.dataset.state, state);
       assert.equal(slot.dataset.burned, String(burned));
-      assert.equal(slot.querySelector('img').getAttribute('src'), !burned && pose === 'idle' ? '/assets/mellow/idle-v2-frame-1.png' : `/assets/mellow/${pose}${burned ? '-burned' : ''}.png`);
+      assert.equal(slot.querySelector('img').getAttribute('src'), !burned && pose === 'idle' ? '/assets/mellow/sleep_00.png' : `/assets/mellow/${pose}${burned ? '-burned' : ''}.png`);
     }
     app.finishTalking();
     assert.equal(slot.dataset.state, 'idle');
   }
   app.applyTracker({totals: {calories: 50, protein_g: 0, carbohydrates_g: 0, fat_g: 0}});
   assert.equal(slot.dataset.burned, 'false');
-  assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/idle-v2-frame-1.png');
+  assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/sleep_00.png');
 });
 
 test('application markup has one mascot, immediately before its header name, and no other artwork', () => {
@@ -172,9 +172,9 @@ test('atlas readiness retains a static fallback until loaded and never changes a
   const app = await loadApp();
   const slot = app.get('mellow-mascot');
   assert.equal(slot.classList.contains('sleep-ready'), false);
-  assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/idle-v2-frame-1.png');
+  assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/sleep_00.png');
   assert.equal(app.imageLoads.length, 1);
-  assert.equal(app.imageLoads[0].src, '/assets/mellow/idle-v2-atlas.png');
+  assert.equal(app.imageLoads[0].src, '/assets/mellow/mellow_sleeping_10frame_atlas.png');
   app.run('mascot.startThinking()');
   app.imageLoads[0].onload();
   assert.equal(slot.classList.contains('sleep-ready'), true);
@@ -183,5 +183,5 @@ test('atlas readiness retains a static fallback until loaded and never changes a
   app.run('mascot.respond()');
   app.finishTalking();
   assert.equal(slot.dataset.state, 'idle');
-  assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/idle-v2-frame-1.png');
+  assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/sleep_00.png');
 });

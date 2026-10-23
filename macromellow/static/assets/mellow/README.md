@@ -1,7 +1,7 @@
 # Mellow pixel mascot assets
 
 Eight transparent, single-pose PNGs retained for the lightweight frontend mascot controller.
-The application uses the V2 atlas for normal idle, plus the original talking and burned idle/talking variants.
+The application uses the V3 atlas for normal idle, plus the original talking and burned idle/talking variants.
 Thinking uses the talking artwork; laptop and profile exports are retained for future use.
 Each of the original eight exports is a 1254 × 1254 RGBA square. The PNGs retain their transparent padding;
 render them with `image-rendering: pixelated` and a fixed square image box.
@@ -122,10 +122,18 @@ Every burned prompt ended with:
 > transparent background. Crisp pixel art, no smooth vector rendering. Keep
 > silhouette away from canvas edges.
 
-## Sleeping Mellow V2 (supplied artwork, no generation)
+## Sleeping Mellow V2 (archived supplied artwork, no generation)
 
 `idle-v2-frame-1.png` through `idle-v2-frame-4.png` are exact RGBA crops from the user-supplied `sleeping_turtle_breathing_sprite_sheet.png` (2172×724). Uneven horizontal runs were detected using alpha > 10 solely to find the silhouettes; copying retains the original alpha/color pixels. Each crop includes a 2px safety margin. The original feet share an opaque baseline of y=581; the four 535×377 normalized canvases preserve that baseline at y=372, with a fixed rear-foot edge. No resampling, recoloring, alpha replacement, or generated artwork was used.
 
 `idle-v2-atlas.png` arranges the four frames left to right (2140×377). `idle-v2-preview.png` is an APNG preview with 700ms per frame. `idle-v2.json` records the source SHA-256, crop boxes, placements, and timing. `scripts/prepare_sleeping_mellow.py` reproduces these assets using Pillow (development only).
 
-The header animates atlas background positions with CSS `steps(4)` over 2.8 seconds, removing the atlas outside normal idle so returning to idle starts at frame one. No transform/scale is applied to this loop. Until the atlas loads, the first-frame PNG remains visible. Reduced motion fixes the atlas at frame one. Original burned artwork and other exported poses remain unchanged.
+The V2 implementation animated atlas background positions with CSS `steps(4)` over 2.8 seconds, removing the atlas outside normal idle so returning to idle starts at frame one. No transform/scale is applied to this loop. Until the atlas loads, the first-frame PNG remains visible. Reduced motion fixes the atlas at frame one. Original burned artwork and other exported poses remain unchanged.
+
+## Sleeping Mellow V3 (current)
+
+Imported directly from the supplied `mellow_sleeping_10frame_v3.zip`. `sleep_00.png` through `sleep_09.png` and `mellow_sleeping_10frame_atlas.png` are byte-for-byte copies. All ten source cells are 576×450; the atlas is 5760×450. Solid character bounds have x=28..547 and baseline y=400 throughout. No crops, recoloring, resampling, or generated replacement artwork were applied. SHA-256 hashes are recorded in `sleeping-v3.json`.
+
+The app preloads the atlas and uses `steps(10,end)` for a 2.5s cycle (250ms per frame), without transform animation. The first PNG is a loading fallback and reduced motion shows the first atlas cell. `sleeping-v3-preview.gif` is generated from the ten supplied frames at the same timing; GIF palette reduction affects only this review artifact, not the production PNGs. `scripts/import_sleeping_v3.py` checks that each atlas cell matches its corresponding PNG and regenerates this preview. Original V2 and other pose assets remain available.
+
+A burned ten-frame source was not included in the V3 bundle. Existing burned sleeping/talking artwork remains in use. Preparing a reliable burned V3 requires matching ten-frame artwork or editable layers so breathing can preserve the shell, flame, smoke, tears, and face consistently.
