@@ -7,6 +7,7 @@ import math
 import sqlite3
 import uuid
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -39,6 +40,7 @@ def numbers(values: dict, *, complete: bool = False, nonnegative: bool = False) 
 
 class MemoryStore:
     def __init__(self, path: Path, now=None) -> None:
+        self._celebrations = ContextVar("protein_celebrations", default=None)
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.now = now or (lambda: datetime.now(timezone.utc))
@@ -61,6 +63,10 @@ class MemoryStore:
                     UNIQUE(profile_id, source_result_id)
                 );
                 CREATE INDEX IF NOT EXISTS entries_day ON entries(profile_id, log_date, created_at);
+                CREATE TABLE IF NOT EXISTS protein_celebrations (
+                    profile_id TEXT NOT NULL, log_date TEXT NOT NULL,
+                    PRIMARY KEY(profile_id, log_date)
+                );
                 CREATE TABLE IF NOT EXISTS goals (
                     profile_id TEXT PRIMARY KEY, payload_json TEXT NOT NULL
                 );
@@ -87,6 +93,34 @@ class MemoryStore:
             raise
         finally:
             con.close()
+
+    @contextmanager
+    def capture_celebrations(self):
+        """Request-local events: never stored in conversation responses or replayed by GET."""
+        events = []
+        token = self._celebrations.set(events)
+        try:
+            yield events
+        finally:
+            self._celebrations.reset(token)
+
+    def _protein_crossing(self, con, day, previous):
+        # Called within the ledger's write transaction, before committing either change.
+        if day != self.today():
+            return None
+        row = con.execute("SELECT payload_json FROM goals WHERE profile_id=?", (PROFILE,)).fetchone()
+        goal = json.loads(row["payload_json"]).get("protein_g") if row else None
+        if (not isinstance(goal, (int, float)) or isinstance(goal, bool)
+                or not math.isfinite(goal) or goal <= 0
+                or not previous < goal <= self._totals(con, day)["protein_g"]):
+            return None
+        inserted = con.execute("INSERT OR IGNORE INTO protein_celebrations VALUES (?,?)", (PROFILE, day))
+        return {"date": day, "kind": "protein_goal"} if inserted.rowcount else None
+
+    def _emit_celebration(self, event):
+        events = self._celebrations.get()
+        if event and events is not None:
+            events.append(event)
 
     def timestamp(self) -> str:
         return self.now().astimezone(timezone.utc).isoformat()
@@ -195,12 +229,15 @@ class MemoryStore:
                     old_payload = json.loads(row["payload_json"])
                     if old_payload.get("fingerprint") == fingerprint and old_payload.get("label") == label:
                         return self._entry(row), False
+            previous = self._totals(con, day)["protein_g"]
             entry_id = uuid.uuid4().hex
             payload = {"label": label, "cards": result["cards"],
                        "delta": values, "fingerprint": fingerprint, "replaces_id": None}
             con.execute("INSERT INTO entries VALUES (?,?,?,?,?,?,?,?,?,?)",
                         (entry_id, PROFILE, day, "meal", "active", json.dumps(payload),
                          result_id, conversation_id, stamp, stamp))
+            event = self._protein_crossing(con, day, previous)
+        self._emit_celebration(event)
         return {"id": entry_id, "date": day, "kind": "meal", "status": "active",
                 "created_at": stamp, **payload}, True
 
@@ -222,6 +259,8 @@ class MemoryStore:
                         (uuid.uuid4().hex, PROFILE, day, "adjustment", "active",
                          json.dumps({"label": "Manual adjustment", "delta": delta, "mode": mode,
                                      "values": given}), None, None, stamp, stamp))
+            event = self._protein_crossing(con, day, current["protein_g"])
+        self._emit_celebration(event)
         return self.tracker(day)
 
     def reset(self) -> dict:
@@ -291,6 +330,7 @@ class MemoryStore:
                 raise ValueError("That active meal was not found.")
             if any(card.get("menu_date") != old["log_date"] for card in result["cards"]):
                 raise ValueError("The replacement menu date differs from the logged meal date.")
+            previous = self._totals(con, old["log_date"])["protein_g"]
             con.execute("UPDATE entries SET status='removed', updated_at=? WHERE id=?", (stamp, entry_id))
             payload = {"label": result.get("label") or json.loads(old["payload_json"]).get("label", "Meal"),
                        "cards": result["cards"], "delta": values,
@@ -299,6 +339,8 @@ class MemoryStore:
             con.execute("INSERT INTO entries VALUES (?,?,?,?,?,?,?,?,?,?)",
                         (new_id, PROFILE, old["log_date"], "meal", "active", json.dumps(payload),
                          result_id, old["conversation_id"], stamp, stamp))
+            event = self._protein_crossing(con, old["log_date"], previous)
+        self._emit_celebration(event)
         return {"id": new_id, "date": old["log_date"], "kind": "meal", "status": "active",
                 "created_at": stamp, **payload}
 

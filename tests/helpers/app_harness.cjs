@@ -185,6 +185,7 @@ async function loadApp({compact = false, viewport = null} = {}) {
       history = entries;
       await vm.runInContext("conversationId='c'.repeat(32); loadConversation()", context);
     },
+    finishCelebration() { for (const [id,timer] of [...timers]) if(timer.delay === 1685) {timers.delete(id);timer.callback();} },
     finishCopy() { for (const [id,timer] of [...timers]) if(timer.delay === 1400) {timers.delete(id);timer.callback();} },
     setAIStatus: status => { aiStatus = status; },
     setHidden: hidden => { document.hidden = hidden; },

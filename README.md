@@ -257,3 +257,19 @@ The JSON file contains `schema_version`, `source`, `menu_date`, `retrieved_at`, 
 The conversation layout uses a native modal drawer (keyboard focus is contained while open and returns to its opener when closed). Mobile chat follows the visual viewport when the keyboard changes its height; 16px composer/form text avoids automatic input zoom. Short mobile viewports condense the macro summary further. Reduced-motion preferences disable panel and message animations.
 
 Frontend tests cover drawer navigation, preserving drafts and totals while collapsing panels, summary taps, composer resizing, and simulated keyboard viewport changes. Visual checks cover 1280×720 desktop, 834×900 tablet, 390×844 and 320×780 mobile, and a 390×420 keyboard-sized viewport. Physical iOS/Android keyboard behavior still requires testing on those devices.
+
+### Protein-goal celebration
+
+A confirmed meal log, meal correction, or manual total change that crosses a **positive protein goal** (`before < goal <= after`) plays Mellow’s supplied 12-frame Happy Double Bounce once, with a small “Protein goal reached! 🎉” toast. The original 4 × 3 atlas uses its supplied uneven timing (1.685 seconds total). It appears in the existing header slot and temporarily takes priority over burned and conversation poses, then restores the current activity/goal state.
+
+SQLite records the milestone atomically with the ledger update, scoped to profile and New York tracker date. Refreshes, server restarts, duplicate logging, goal edits, imported/restored data, historical entries, and removing/re-adding protein cannot replay an already claimed daily celebration. The next New York day is eligible again; goals and history remain intact. Only the successful mutation response carries the transient animation event; conversation history and tracker reads do not replay it. An interrupted/lost response may mean the celebration is missed, rather than replayed later.
+
+Reduced-motion users see the first happy frame and the same toast. A first-frame PNG remains available if the preloaded atlas is unavailable. Review-only animation: [`happy-bounce-preview.gif`](macromellow/static/assets/mellow/happy-bounce-preview.gif). The app uses PNG sprites, not the GIF.
+
+To re-import the supplied artwork unchanged and validate the atlas against every frame (development only; requires Pillow):
+
+```sh
+python scripts/import_happy_bounce.py /path/to/mellow_happy_bounce_12_frames.zip
+```
+
+No new application dependencies are required. Run `python -m unittest discover -s tests -q` and `node --test tests/test_*.cjs` to check ledger triggers, persistence, midnight rollover, duplicate/concurrent writes, sprite timing, asset routes, and asynchronous mascot transitions.

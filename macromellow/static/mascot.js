@@ -3,6 +3,7 @@
   'use strict';
 
   const FIELDS = ['calories', 'protein_g', 'carbohydrates_g', 'fat_g'];
+  const CELEBRATION_DURATION = 1685; // Sum of happy-bounce-animation.json durations_ms.
   const STATES = ['idle', 'thinking', 'talking'];
 
   function hasExceededGoal(totals, goals) {
@@ -16,6 +17,7 @@
   }
 
   function assetFor(state, burned = false, profile = false) {
+    if (state === 'celebrating' && !profile) return '/assets/mellow/happy_bounce_00.png';
     // Processing and responding share the happy pose; keep their timing states distinct.
     const pose = profile ? 'profile' : state === 'thinking' ? 'talking' : STATES.includes(state) ? state : 'idle';
     if (pose === 'idle') return burned ? '/assets/mellow/burned-sleep-00.png' : '/assets/mellow/sleep_00.png';
@@ -34,9 +36,11 @@
     let timer = null;
     let revision = 0;
     let disposed = false;
+    let celebrationTimer = null;
 
     function getState() {
-      return {state, burned, asset: assetFor(state, burned), profileAsset: assetFor(state, burned, true)};
+      const visible = celebrationTimer !== null ? 'celebrating' : state;
+      return {state: visible, burned, asset: assetFor(visible, burned), profileAsset: assetFor(state, burned, true)};
     }
 
     function emit() { if (!disposed) render(getState()); }
@@ -70,6 +74,17 @@
       return getState();
     }
 
+    function celebrate() {
+      if (disposed || celebrationTimer !== null) return getState();
+      celebrationTimer = schedule(() => {
+        if (disposed) return;
+        celebrationTimer = null;
+        emit(); // The underlying activity/burned state may have changed during playback.
+      }, CELEBRATION_DURATION);
+      emit();
+      return getState();
+    }
+
     function reset() { return setState('idle'); }
 
     function syncTracker(tracker) {
@@ -85,14 +100,16 @@
 
     function dispose() {
       clearTimer();
+      if (celebrationTimer !== null) cancel(celebrationTimer);
+      celebrationTimer = null;
       disposed = true;
     }
 
     emit();
-    return {startThinking, respond, fail: reset, reset, syncTracker, getState, dispose};
+    return {celebrate, startThinking, respond, fail: reset, reset, syncTracker, getState, dispose};
   }
 
-  const api = {hasExceededGoal, assetFor, createController};
+  const api = {CELEBRATION_DURATION, hasExceededGoal, assetFor, createController};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MellowMascot = api;
 })(typeof window === 'undefined' ? globalThis : window);

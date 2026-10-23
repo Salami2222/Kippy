@@ -176,3 +176,42 @@ test('failure, reset, and disposal cancel pending callbacks', () => {
   assert.equal(clock.pending.size, 0);
   assert.equal(renders, previousRenders);
 });
+
+test('celebration overrides burned activity while async responses and tracker updates continue underneath', () => {
+  const clock = fakeClock();
+  const mascot = createController({...clock});
+  const tracker = createTracker(memoryStorage(), () => new Date('2026-10-22T16:00:00Z'));
+  tracker.setGoals({protein_g: 10});
+  tracker.adjust('set', {protein_g: 11});
+  mascot.syncTracker(tracker);
+  mascot.startThinking();
+  mascot.celebrate();
+  const celebration = [...clock.pending.values()].find(t => t.delay === 1685);
+  assert.equal(mascot.getState().state, 'celebrating');
+  assert.equal(mascot.getState().asset, '/assets/mellow/happy_bounce_00.png');
+  mascot.respond();
+  mascot.syncTracker(tracker);
+  mascot.celebrate();
+  assert.equal(clock.pending.size, 2); // Duplicate calls cannot restart the overlay.
+  assert.equal(mascot.getState().state, 'celebrating');
+  celebration.callback();
+  assert.equal(mascot.getState().state, 'talking');
+  assert.equal(mascot.getState().burned, true);
+  assert.equal(mascot.getState().asset, '/assets/mellow/burned-talk-00.png');
+});
+
+test('celebration completion restores the latest idle or thinking state and disposal cancels all timers', () => {
+  for (const next of ['idle', 'thinking']) {
+    const clock = fakeClock();
+    const mascot = createController({...clock});
+    mascot.celebrate();
+    if (next === 'idle') mascot.fail(); else mascot.startThinking();
+    assert.equal(mascot.getState().state, 'celebrating');
+    clock.finish();
+    assert.equal(mascot.getState().state, next);
+    mascot.celebrate(); mascot.respond(); mascot.dispose();
+    assert.equal(clock.pending.size, 0);
+    clock.callbacks.forEach(callback => callback());
+    assert.notEqual(mascot.getState().state, 'celebrating');
+  }
+});

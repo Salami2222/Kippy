@@ -173,7 +173,7 @@ test('atlas readiness retains a static fallback until loaded and never changes a
   const slot = app.get('mellow-mascot');
   assert.equal(slot.classList.contains('sleep-ready'), false);
   assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/sleep_00.png');
-  assert.equal(app.imageLoads.length, 4);
+  assert.equal(app.imageLoads.length, 5);
   assert.equal(app.imageLoads[0].src, '/assets/mellow/mellow_sleeping_10frame_atlas.png');
   app.run('mascot.startThinking()');
   app.imageLoads[0].onload();
@@ -209,7 +209,7 @@ test('talking readiness is independent and never substitutes normal artwork for 
 test('burned atlases preload independently and follow activity, correction, and return-to-idle', async () => {
   const app = await loadApp();
   const slot = app.get('mellow-mascot');
-  assert.deepEqual(app.imageLoads.slice(2).map(image => image.src), [
+  assert.deepEqual(app.imageLoads.slice(2, 4).map(image => image.src), [
     '/assets/mellow/burned-sleep-atlas.png', '/assets/mellow/burned-talk-atlas.png'
   ]);
   app.applyTracker({totals: {calories: 101, protein_g: 0, carbohydrates_g: 0, fat_g: 0}});
@@ -229,4 +229,48 @@ test('burned atlases preload independently and follow activity, correction, and 
   app.applyTracker({totals: {calories: 100, protein_g: 0, carbohydrates_g: 0, fat_g: 0}});
   assert.equal(slot.querySelector('img').getAttribute('src'), '/assets/mellow/sleep_00.png');
   assert.equal(slot.dataset.burned, 'false');
+});
+
+test('confirmed milestone plays once, preloads atlas, and never replays plain tracker restoration', async () => {
+  const app = await loadApp();
+  const snapshot = {date: '2026-10-21', totals: {calories: 0, protein_g: 10, carbohydrates_g: 0, fat_g: 0},
+    goals: {calories: null, protein_g: 10, carbohydrates_g: null, fat_g: null}, entries: []};
+  app.applyTracker(snapshot);
+  assert.equal(app.state().state, 'idle');
+  assert.equal(app.imageLoads[4].src, '/assets/mellow/happy_bounce_atlas.png');
+  app.applyTracker({...snapshot, celebration: {date: snapshot.date, kind: 'protein_goal'}});
+  assert.equal(app.state().state, 'celebrating');
+  assert.equal(app.get('mellow-mascot').querySelector('img').src, '/assets/mellow/happy_bounce_00.png');
+  app.imageLoads[4].onload();
+  assert.equal(app.get('mellow-mascot').classList.contains('happy-ready'), true);
+  assert.equal(app.get('mellow-mascot').dataset.happyAnimated, 'false'); // No mid-playback restart.
+  app.run('mascot.reset()'); // Regular reset cannot interrupt the celebration.
+  assert.equal(app.state().state, 'celebrating');
+  app.finishCelebration();
+  app.applyTracker({...snapshot, celebration: {date: snapshot.date, kind: 'protein_goal'}});
+  assert.equal(app.state().state, 'idle');
+  assert.equal(app.slots.length, 1);
+});
+
+
+test('real chat completion cannot interrupt a freshly confirmed protein celebration', async () => {
+  const app = await loadApp();
+  app.imageLoads[4].onload();
+  const response = app.enqueueChat();
+  const send = app.run('sendMessage("Confirm that meal")');
+  await settle();
+  assert.equal(app.state().state, 'thinking');
+  response.resolve({kind: 'answer', message: 'Meal logged.', tracker: {
+    date: '2026-10-21', totals: {calories: 101, protein_g: 11, carbohydrates_g: 0, fat_g: 0},
+    goals: {calories: 100, protein_g: 10, carbohydrates_g: null, fat_g: null}, entries: [],
+    celebration: {date: '2026-10-21', kind: 'protein_goal'}
+  }});
+  await send;
+  assert.equal(app.state().state, 'celebrating');
+  assert.equal(app.get('mellow-mascot').dataset.happyAnimated, 'true');
+  app.finishTalking();
+  assert.equal(app.state().state, 'celebrating');
+  app.finishCelebration();
+  assert.equal(app.state().state, 'idle');
+  assert.equal(app.state().asset, '/assets/mellow/burned-sleep-00.png');
 });

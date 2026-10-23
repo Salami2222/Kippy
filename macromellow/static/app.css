@@ -168,6 +168,37 @@ button, input, select, textarea, summary, a { -webkit-tap-highlight-color: trans
 }
 @keyframes mellow-burned-sleep-frames { to { background-position-x: calc(var(--burn-width) * -10); } }
 @keyframes mellow-burned-talk-frames { to { background-position-x: calc(var(--burn-width) * -7); } }
+/* The intentional jump can extend above the fixed header without resizing it. */
+.chat-view:has(.mellow-mascot[data-state="celebrating"]) { overflow: clip; overflow-clip-margin: 20px; }
+/* Supplied 4 × 3 atlas: discrete frames with the original, uneven timing. */
+.mellow-mascot { --happy-size: 86px; --happy-top: -18px; --happy-left: -4px; }
+.mellow-mascot[data-state="celebrating"] img,
+.mellow-mascot[data-state="celebrating"]::before {
+  position: absolute; width: var(--happy-size); height: var(--happy-size);
+  top: var(--happy-top); left: var(--happy-left); transform: none; translate: none;
+  animation: none; image-rendering: pixelated;
+}
+.mellow-mascot.happy-ready[data-happy-animated="true"][data-state="celebrating"] img { visibility: hidden; }
+.mellow-mascot.happy-ready[data-happy-animated="true"][data-state="celebrating"]::before {
+  content: ''; background-image: url('/assets/mellow/happy_bounce_atlas.png');
+  background-size: 400% 300%; background-repeat: no-repeat;
+  animation: mellow-happy 1685ms step-end 1 both;
+}
+@keyframes mellow-happy {
+  0.00000000% { background-position: calc(var(--happy-size) * 0) calc(var(--happy-size) * 0); }
+  6.52818991% { background-position: calc(var(--happy-size) * -1) calc(var(--happy-size) * 0); }
+  13.05637982% { background-position: calc(var(--happy-size) * -2) calc(var(--happy-size) * 0); }
+  18.69436202% { background-position: calc(var(--happy-size) * -3) calc(var(--happy-size) * 0); }
+  26.11275964% { background-position: calc(var(--happy-size) * 0) calc(var(--happy-size) * -1); }
+  32.04747774% { background-position: calc(var(--happy-size) * -1) calc(var(--happy-size) * -1); }
+  40.65281899% { background-position: calc(var(--happy-size) * -2) calc(var(--happy-size) * -1); }
+  46.88427300% { background-position: calc(var(--happy-size) * -3) calc(var(--happy-size) * -1); }
+  54.59940653% { background-position: calc(var(--happy-size) * 0) calc(var(--happy-size) * -2); }
+  60.83086053% { background-position: calc(var(--happy-size) * -1) calc(var(--happy-size) * -2); }
+  68.24925816% { background-position: calc(var(--happy-size) * -2) calc(var(--happy-size) * -2); }
+  75.07418398% { background-position: calc(var(--happy-size) * -3) calc(var(--happy-size) * -2); }
+  100% { background-position: calc(var(--happy-size) * -3) calc(var(--happy-size) * -2); }
+}
 .chat-top h2 { color: var(--accent-dark); margin: 0; font: 800 18px/1.1 var(--rounded); letter-spacing: -.025em; }
 .quiet-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); font-size: 11px; font-weight: 750; white-space: nowrap; transition: background .2s var(--ease), border-color .2s var(--ease), box-shadow .2s var(--ease), transform .28s var(--spring); }
 .quiet-button:hover { border-color: var(--line-strong); background: var(--accent-soft); box-shadow: 0 5px 11px rgb(var(--shadow-color) / 0.071); transform: translateY(-1px); }
@@ -439,6 +470,7 @@ body:has(#chat-view:not([hidden])) { overflow: hidden; }
   .chat-top h2 { font-size: 16px; }
   .chat-identity { gap: 5px; }
   .chat-top .mellow-mascot { width: 72px; height: 64px; --sleep-width: 73.25px; --sleep-height: 57.23px; --sleep-top: 8.5px; --sleep-left: -.8px; --talk-width: 68px; --talk-height: 47.85px; --talk-top: 12.2px; }
+  .chat-top .mellow-mascot { --happy-size: 79px; --happy-top: -17.3px; --happy-left: -3.5px; }
   .chat-top .mellow-mascot[data-burned="true"] { --burn-width: 67.66px; --burn-height: 62.78px; --burn-top: -1.91px; --burn-left: 1.4px; }
   .chat-top .mellow-mascot[data-burned="true"]:is([data-state="thinking"], [data-state="talking"]) { --burn-width: 66.84px; --burn-height: 59.9px; --burn-top: 1.13px; --burn-left: 1.54px; }
   .chat-header-actions { gap: 4px; }

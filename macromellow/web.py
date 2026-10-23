@@ -31,6 +31,11 @@ STATIC_ROUTES = {
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/tracker.js": ("tracker.js", "text/javascript; charset=utf-8"),
     "/mascot.js": ("mascot.js", "text/javascript; charset=utf-8"),
+    "/assets/mellow/happy-bounce-animation.json": ("assets/mellow/happy-bounce-animation.json", "application/json"),
+    **{
+        f"/assets/mellow/{name}.png": (f"assets/mellow/{name}.png", "image/png")
+        for name in ("happy_bounce_atlas", *(f"happy_bounce_{n:02d}" for n in range(12)))
+    },
     **{
         f"/assets/mellow/burned-{pose}-{name}.png": (f"assets/mellow/burned-{pose}-{name}.png", "image/png")
         for pose, count in (("sleep", 10), ("talk", 7))
@@ -460,6 +465,13 @@ class AppHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
     def _json(self, status: int, payload: dict) -> None:
+        events = getattr(self, "celebration_events", None)
+        if status == 200 and events:
+            # Copy at the HTTP boundary so persisted/cached chat responses stay event-free.
+            snapshot = payload.get("tracker", payload)
+            if snapshot.get("date") == events[-1]["date"] and "totals" in snapshot:
+                snapshot = {**snapshot, "celebration": events[-1]}
+                payload = {**payload, "tracker": snapshot} if "tracker" in payload else snapshot
         self._send(status, json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
     def do_GET(self) -> None:
@@ -500,6 +512,14 @@ class AppHandler(BaseHTTPRequestHandler):
             self._json(404, {"error": "Not found"})
 
     def do_POST(self) -> None:
+        with self.app.memory.capture_celebrations() as events:
+            self.celebration_events = events
+            try:
+                self._post()
+            finally:
+                self.celebration_events = None
+
+    def _post(self) -> None:
         route = urlsplit(self.path).path
         actions = {"/api/tracker/adjust", "/api/tracker/goals", "/api/tracker/reset",
                    "/api/tracker/import", "/api/tracker/add-result", "/api/meal/remove", "/api/meal/restore",

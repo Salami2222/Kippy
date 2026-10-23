@@ -1,0 +1,27 @@
+{
+  "frame_count": 12,
+  "grid": {
+    "columns": 4,
+    "rows": 3
+  },
+  "frame_size": [
+    362,
+    362
+  ],
+  "durations_ms": [
+    110,
+    110,
+    95,
+    125,
+    100,
+    145,
+    105,
+    130,
+    105,
+    125,
+    115,
+    420
+  ],
+  "loop": false,
+  "trigger": "daily protein goal first reached"
+}

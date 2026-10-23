@@ -99,7 +99,8 @@ for (const [asset, readyClass] of [
   ['/assets/mellow/mellow_sleeping_10frame_atlas.png', 'sleep-ready'],
   ['/assets/mellow/talking-v1-atlas.png', 'talk-ready'],
   ['/assets/mellow/burned-sleep-atlas.png', 'burned-sleep-ready'],
-  ['/assets/mellow/burned-talk-atlas.png', 'burned-talk-ready']
+  ['/assets/mellow/burned-talk-atlas.png', 'burned-talk-ready'],
+  ['/assets/mellow/happy_bounce_atlas.png', 'happy-ready']
 ]) {
   const atlas = new Image();
   atlas.onload = () => document.getElementById('mellow-mascot').classList.add(readyClass);
@@ -108,6 +109,10 @@ for (const [asset, readyClass] of [
 
 function renderMascot(snapshot) {
   const slot = document.getElementById('mellow-mascot');
+  if (snapshot.state === 'celebrating' && slot.dataset.state !== 'celebrating') {
+    // If the atlas is late, keep the static fallback for this entire celebration.
+    slot.dataset.happyAnimated = String(slot.classList.contains('happy-ready'));
+  }
   slot.dataset.state = snapshot.state;
   slot.dataset.burned = String(snapshot.burned);
   const img = slot.querySelector('img');
@@ -119,6 +124,7 @@ async function stateRequest(path, payload) {
     body: JSON.stringify(payload)});
 }
 
+const celebratedDates = new Set();
 function applyBackendTracker(snapshot) {
   backendEntries = snapshot.entries || [];
   const stateJSON = JSON.stringify({date: snapshot.date, totals: snapshot.totals,
@@ -130,6 +136,12 @@ function applyBackendTracker(snapshot) {
   tracker.reloadGoals();
   renderTracker();
   renderMealList();
+  const event = snapshot.celebration;
+  if (event?.kind === 'protein_goal' && event.date === tracker.getState().date && !celebratedDates.has(event.date)) {
+    celebratedDates.add(event.date);
+    mascot.celebrate();
+    showToast('Protein goal reached! 🎉');
+  }
 }
 
 async function loadBackendTracker() {
