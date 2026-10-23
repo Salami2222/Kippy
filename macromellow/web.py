@@ -265,6 +265,7 @@ class DataApp:
                 requested = session["foods"]
             elif (operation == "log" and not intent["foods"] and not intent["updates"]
                   and explicit_log(message) and session.get("last_result_id")
+                  and (self.memory.result(session["last_result_id"]) or {}).get("source") == USDA_SOURCE
                   and not reply_context):
                 previous = self.memory.result(session["last_result_id"])
                 if (previous and previous.get("source") == USDA_SOURCE

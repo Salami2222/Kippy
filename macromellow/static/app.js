@@ -412,7 +412,9 @@ function formatAmount(value, unit = '') {
 function safeSource(url) {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === 'https:' && parsed.hostname === 'nutrition.umd.edu' && parsed.pathname === '/label.aspx' ? parsed.href : null;
+    const umd = parsed.hostname === 'nutrition.umd.edu' && parsed.pathname === '/label.aspx';
+    const usda = parsed.hostname === 'fdc.nal.usda.gov' && /^\/food-details\/\d+\/nutrients$/.test(parsed.pathname);
+    return parsed.protocol === 'https:' && (umd || usda) ? parsed.href : null;
   } catch { return null; }
 }
 

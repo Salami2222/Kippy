@@ -82,5 +82,40 @@ class USDATests(unittest.TestCase):
             self.assertEqual(app.usda.calls, 0)
 
 
+    def test_usda_search_requires_exact_source_and_caches(self):
+        import io
+        import json
+        from unittest.mock import patch
+
+        class Reply(io.BytesIO):
+            pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            client = USDAClient(Path(directory) / "cache.sqlite3", api_key="fake-private-test-key")
+            foods = {"foods": [
+                {**EGG, "description": "Eggs, Grade A, Large, egg whole substitute"},
+                EGG,
+            ]}
+            with patch("macromellow.usda.urlopen", return_value=Reply(json.dumps(foods).encode())) as called:
+                one = client.lookup("eggs")
+                two = client.lookup("large eggs")
+            self.assertEqual(one["fdc_id"], 12345)
+            self.assertEqual(two["fdc_id"], 12345)
+            self.assertEqual(called.call_count, 1)
+            self.assertEqual(one["per_100g"]["protein_g"], 12.6)
+            with open(client.db_path, "rb") as handle:
+                self.assertNotIn(b"fake-private-test-key", handle.read())
+
+    def test_usda_missing_match_fails_closed(self):
+        import io
+        import json
+        with tempfile.TemporaryDirectory() as directory:
+            client = USDAClient(Path(directory) / "cache.sqlite3", api_key="test")
+            only_wrong = {"foods": [{**EGG, "description": "Egg substitute, raw"}]}
+            with patch("macromellow.usda.urlopen", return_value=io.BytesIO(json.dumps(only_wrong).encode())):
+                with self.assertRaises(USDAError):
+                    client.lookup("eggs")
+
+
 if __name__ == "__main__":
     unittest.main()
