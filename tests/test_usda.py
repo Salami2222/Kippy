@@ -11,10 +11,10 @@ from macromellow.web import DataApp
 EGG = {
     "fdcId": 12345, "description": "Eggs, Grade A, Large, egg whole", "dataType": "Foundation",
     "foodNutrients": [
-        {"nutrientId": 1008, "value": 143.0},
-        {"nutrientId": 1003, "value": 12.6},
-        {"nutrientId": 1005, "value": 0.7},
-        {"nutrientId": 1004, "value": 9.5},
+        {"nutrientId": 1008, "unitName": "KCAL", "value": 143.0},
+        {"nutrientId": 1003, "unitName": "G", "value": 12.6},
+        {"nutrientId": 1005, "unitName": "G", "value": 0.7},
+        {"nutrientId": 1004, "unitName": "G", "value": 9.5},
     ],
 }
 
@@ -43,7 +43,7 @@ class USDATests(unittest.TestCase):
         self.assertEqual(common_key("large eggs"), "egg")
         self.assertIsNone(common_key("chocolate eggs"))
         self.assertEqual(extract_macros(EGG)["protein_g"], 12.6)
-        self.assertIsNone(extract_macros({"foodNutrients": [{"nutrientId": 1003, "value": 2}]}))
+        self.assertIsNone(extract_macros({"foodNutrients": [{"nutrientId": 1003, "unitName": "G", "value": 2}]}))
 
     def test_two_eggs_lookup_and_explicit_log(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -63,7 +63,7 @@ class USDATests(unittest.TestCase):
             logged = app.chat("add that to today's macros", result["conversation_id"])
             self.assertEqual(logged["kind"], "meal_logged")
             self.assertEqual(app.memory.tracker()["totals"]["protein_g"], 12.7)
-            self.assertEqual(app.usda.calls, 1)
+            self.assertEqual(app.usda.calls, 2)  # Both turns validate; the real client reuses its HTTP cache.
 
     def test_unknown_or_unsupported_units_do_not_guess(self):
         with tempfile.TemporaryDirectory() as directory:

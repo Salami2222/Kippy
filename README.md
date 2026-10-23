@@ -115,9 +115,7 @@ egg. One medium banana defaults to 118 g; an apple to 182 g; an orange to
 "How much protein in 150 g chicken breast?". USDA results say what portions
 were assumed and link directly to the source. They may be logged with an
 explicit request or the existing Add result button, and obey existing same-day
-and duplicate protections. This first pass does not support multi-food mixed
-USDA/UMD meals or editing a USDA food's portion by a follow-up correction;
-send a fresh request with the new portion instead.
+and duplicate protections. This first pass supports one USDA food per request; multi-food USDA and mixed USDA/UMD meals require clarification. Explicit portion corrections and undo use the same guarded meal ledger as UMD. Requests for historical/future USDA logging are rejected rather than stamped as today. Unsupported preparation, missing nutrients, ambiguous exact records, and vague units such as “servings” require clarification; counted defaults apply to individual items only.
 
 For a personal production API key, obtain one from the USDA's
 [API guide](https://fdc.nal.usda.gov/api-guide/) and set it only in the
@@ -313,3 +311,11 @@ python scripts/import_happy_bounce.py /path/to/mellow_happy_bounce_12_frames.zip
 ```
 
 No new application dependencies are required. Run `python -m unittest discover -s tests -q` and `node --test tests/test_*.cjs` to check ledger triggers, persistence, midnight rollover, duplicate/concurrent writes, sprite timing, asset routes, and asynchronous mascot transitions.
+
+### USDA PR review checks
+
+The USDA client checks nutrient IDs **and units** (kcal and g), finite nonnegative values, supported data types, exact descriptions, and unambiguous IDs. Cache connections close promptly; legacy entries without the unit-validation version, malformed, mismatched, future-dated, or expired cache entries are revalidated via the API. API reads have a 12-second timeout and an 8 MiB response bound; authentication errors, rate limits, transport failures, and malformed payloads return safe clarification without exposing the server API key or writing a meal. Failed responses are not cached; an expired cache is not silently served as fresh data.
+
+USDA cards, logged meals, developer matching panels, and copied source links identify USDA separately from UMD. Default portions and preparation exclusions are disclosed. USDA duplicate protection compares canonical record/portion pairs even when labels, units, or legacy fingerprints differ. The same explicit-action, duplicate, approval, conversation persistence, undo, and protein-milestone protections apply to both sources. A plain “What are my macros today?” reads the ledger directly rather than reinterpreting the last food as a new lookup.
+
+Review validation used real Qwen and the live USDA API in a temporary database: two large whole eggs (2 × 50.3 g) matched USDA Foundation record **748967**, yielding **148.9 kcal, 12.5 g protein, 1.0 g carbs, and 10.0 g fat** at the time of the review. The question alone changed no totals; an explicit add logged once, a correction to three eggs replaced that entry, and the totals query read the ledger. Values can change with USDA updates; these are reference estimates, not prepared-dish measurements. For deployment, configure a private `USDA_API_KEY` in the server's existing unattended environment; DEMO_KEY has much lower limits (30 requests/hour and 50/day per IP per USDA documentation). No key or model was installed or changed during review.

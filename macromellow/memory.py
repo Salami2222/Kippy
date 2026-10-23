@@ -38,6 +38,15 @@ def numbers(values: dict, *, complete: bool = False, nonnegative: bool = False) 
     return result
 
 
+def usda_portions(cards):
+    """Canonical portions survive aliases, model labels, and older USDA fingerprints."""
+    if not cards or any(c.get("source") != "USDA FoodData Central"
+                        or not isinstance(c.get("record_key"), str) or not c["record_key"].startswith("usda:")
+                        or type(c.get("quantity")) not in (int, float) for c in cards):
+        return None
+    return sorted((c["record_key"], c["quantity"]) for c in cards)
+
+
 class MemoryStore:
     def __init__(self, path: Path, now=None) -> None:
         self._celebrations = ContextVar("protein_celebrations", default=None)
@@ -214,6 +223,7 @@ class MemoryStore:
         if any(card.get("menu_date") != day for card in result["cards"]):
             raise ValueError("The menu date differs from the log date. Specify a matching saved menu first.")
         fingerprint = result["fingerprint"]
+        canonical_usda = usda_portions(result["cards"])
         label = (label_override or result.get("label") or "Meal").strip()[:80]
         stamp = self.timestamp()
         with self.db() as con:
@@ -227,7 +237,8 @@ class MemoryStore:
                                    "AND status='active'", (PROFILE, day)).fetchall()
                 for row in rows:
                     old_payload = json.loads(row["payload_json"])
-                    if old_payload.get("fingerprint") == fingerprint and old_payload.get("label") == label:
+                    if ((old_payload.get("fingerprint") == fingerprint and old_payload.get("label") == label)
+                            or (canonical_usda and usda_portions(old_payload.get("cards")) == canonical_usda)):
                         return self._entry(row), False
             previous = self._totals(con, day)["protein_g"]
             entry_id = uuid.uuid4().hex

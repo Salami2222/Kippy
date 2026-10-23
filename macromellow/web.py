@@ -21,8 +21,8 @@ from .agent import HALL_NAMES, tokens
 from .ollama import OllamaClient, OllamaError, PlanError, normalize_plan
 from .memory import MemoryStore, numbers
 from .conversation import Conversations, identifier
-from .meals import nutrition_turn, local_reply, explicit_log
-from .usda import USDAClient, SOURCE as USDA_SOURCE, is_common_food, common_turn
+from .meals import nutrition_turn, local_reply, working_food
+from .usda import USDAClient
 
 
 STATIC_DIR = Path(__file__).with_name("static")
@@ -188,11 +188,11 @@ class DataApp:
             return "I still need to confirm every food in your meal."
         for card, item in zip(result["cards"], requested):
             if not card.get("portion_confirmed", True) or card.get("quantity") is None:
-                return f"How does your portion of {card['name']} compare with the listed UMD serving?"
+                return f"How does your portion of {card['name']} compare with the listed serving?"
             if card["match"] not in {"official name", "confirmed choice", "high-confidence name"}:
-                return f"Please confirm the exact UMD food name for {item['name']} before I log it."
+                return f"Please confirm the exact source food name for {item['name']} before I log it."
             if not card.get("serving_size"):
-                return f"UMD has no serving size for {card['name']}; please clarify the portion."
+                return f"The source has no serving size for {card['name']}; please clarify the portion."
         return None
 
     def chat(self, message: str, conversation_id: str | None, reply_context: dict | None = None) -> dict:
@@ -255,32 +255,6 @@ class DataApp:
                 result = {"kind": "clarification", "message": intent.get("question") or intent.get("response_text") or "Could you clarify what you would like me to do?",
                           "cards": [], "total": None, "options": []}
                 debug["warnings"].append("The model requested clarification; no action was executed.")
-            elif (operation in {"lookup", "log"} and intent["action"] == "set"
-                  and len(intent["foods"]) == 1 and is_common_food(intent["foods"][0]["name"])
-                  and not intent["foods"][0].get("hall") and not intent["foods"][0].get("date")
-                  and not re.search(r"\b(umd|dining hall|south campus|251 north|the y|yahentamitsi)\b", message, re.I)
-                  and not session.get("pending")):
-                stage = "USDA common-food lookup"
-                result = common_turn(self, intent, session, conversation_id, data["today"], debug, message)
-                requested = session["foods"]
-            elif (operation == "log" and not intent["foods"] and not intent["updates"]
-                  and explicit_log(message) and session.get("last_result_id")
-                  and (self.memory.result(session["last_result_id"]) or {}).get("source") == USDA_SOURCE
-                  and not reply_context):
-                previous = self.memory.result(session["last_result_id"])
-                if (previous and previous.get("source") == USDA_SOURCE
-                        and all(c.get("menu_date") == data["today"] for c in previous.get("cards", []))):
-                    entry, added = self.memory.log_result(session["last_result_id"], data["today"], conversation_id)
-                    session["working_logged_id"] = session["last_logged_id"] = entry["id"]
-                    if added:
-                        session["last_action"] = {"type": "log", "entry_id": entry["id"]}
-                    result = {"kind": "meal_logged" if added else "already_logged",
-                              "message": "Added the verified USDA food to today's macros." if added else "That food was already logged.",
-                              "cards": [], "total": None, "tracker": self.memory.tracker()}
-                    debug["tool_action"] = {"operation": "log", "entry_id": entry["id"], "added": added}
-                else:
-                    result = {"kind": "clarification", "message": "Please name the food and portion you want to log today.",
-                              "cards": [], "total": None}
             elif operation == "converse":
                 response_type = intent["response_type"]
                 text = intent.get("response_text", "").strip()
@@ -375,9 +349,7 @@ class DataApp:
                         restore_id = action.get("old_id") if action["type"] == "edit" else action.get("entry_id") if action["type"] == "remove" else None
                         restored = self.memory.entry(restore_id) if restore_id else None
                         if restored:
-                            session["foods"] = [{"name": c["name"], "quantity": c["quantity"], "unit": "serving",
-                                "hall": next((k for k, v in HALL_NAMES.items() if v == c["dining_hall"]), ""),
-                                "date": c["menu_date"]} for c in restored["cards"]]
+                            session["foods"] = [working_food(c, restored["date"]) for c in restored.get("cards", [])]
                             requested = session["foods"]
                             session["working_logged_id"] = session["last_logged_id"] = restored["id"]
                         else:
