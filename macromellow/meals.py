@@ -8,6 +8,7 @@ import re
 from datetime import date, timedelta
 
 from .agent import HALL_NAMES, normalize_intent, resolve, tokens, unit_name
+from .usda import SOURCE as USDA_SOURCE, common_candidate, resolve_common, mentions_umd
 
 
 def explicit_log(message):
@@ -16,7 +17,9 @@ def explicit_log(message):
 
 
 def local_reply(message, session):
-    """Resolve only unambiguous replies to an existing, specific question."""
+    """Resolve specific pending replies and unambiguous read-only tracker requests."""
+    if re.fullmatch(r"(?:what are|show(?: me)?) my (?:macros|macro totals|totals)(?: for)? today[?.!]*", message.strip(), re.I):
+        return {"operation": "today"}
     pending = session.get("pending") or {}
     foods = session.get("foods", [])
     text = message.strip().lower().rstrip('.!')
@@ -156,6 +159,16 @@ def apply_plan(plan, session, message=""):
     return requested, selected if action == "add" else {}
 
 
+def working_food(card, day):
+    """Restore the reported USDA portion, never interpret per-100g factors as egg counts."""
+    if card.get("source") == USDA_SOURCE:
+        return {"name": card["requested_name"], "quantity": card["reported_quantity"],
+                "unit": card["unit"], "hall": "", "date": day,
+                **{k: card[k] for k in ("portion_amount", "portion_unit") if k in card}}
+    return {"name": card["name"], "quantity": card["quantity"], "unit": "serving",
+            "hall": next((k for k, v in HALL_NAMES.items() if v == card["dining_hall"]), ""), "date": day}
+
+
 def historical_meal(app, message, plan):
     """Only real, verified meal records can provide 'same as yesterday' context."""
     meals = [m for m in app.memory.meals(100) if m["status"] == "active" and m.get("cards")
@@ -169,17 +182,17 @@ def historical_meal(app, message, plan):
     if len(meals) != 1 or (plan.get("previous_meal_id") and meals[0]["id"] != plan["previous_meal_id"]):
         raise ValueError("Which previous meal do you mean? Please name the meal and date so I don't pick the wrong one.")
     meal = meals[0]
-    return [{"name": c["name"], "quantity": c["quantity"], "unit": "serving",
-             "hall": next((k for k, v in HALL_NAMES.items() if v == c["dining_hall"]), ""),
-             "date": plan.get("log_date") or app.memory.today() if plan["operation"] == "log" else c["menu_date"]}
-            for c in meal["cards"]]
+    day = (plan.get("log_date") or app.memory.today()) if plan["operation"] == "log" else meal["date"]
+    return [working_food(c, day) for c in meal["cards"]]
 
 
 def nutrition_turn(app, message, plan, session, conversation_id, data, debug):
     pending = session.get("pending") or {}
     operation = plan["operation"]
+    if pending.get("requires_new_food") and (not plan["foods"] or not all(tokens(f["name"]) <= tokens(message) for f in plan["foods"])):
+        return {"kind": "clarification", "message": "Please name the exact supported food, preparation, and portion for today before I continue.", "cards": [], "total": None}
     following = bool(plan["updates"] or "selection" in plan or (not plan["foods"] and session.get("foods")))
-    if (plan["action"] in {"update", "drop"} and operation in {"lookup", "remove"}
+    if (plan["action"] in {"update", "drop"} and operation in {"lookup", "log", "remove"}
             and session.get("working_logged_id") and re.search(r"\b(actually|change|correct|edit|replace|remove|instead)\b|make that|was from", message, re.I)):
         operation = "edit"
         plan = {**plan, "target": session["working_logged_id"]}
@@ -205,7 +218,7 @@ def nutrition_turn(app, message, plan, session, conversation_id, data, debug):
         debug["warnings"].append(str(exc))
         return {"kind": "clarification", "message": str(exc), "cards": [], "total": None}
 
-    if plan.get("previous_meal_id") or re.search(r"\bsame (?:thing|meal|lunch|dinner).*yesterday\b", message, re.I):
+    if (plan.get("previous_meal_id") and not plan["updates"] and operation != "edit") or re.search(r"\bsame (?:thing|meal|lunch|dinner).*yesterday\b", message, re.I):
         try:
             requested, selections = historical_meal(app, message, plan), {}
         except ValueError as exc:
@@ -214,13 +227,27 @@ def nutrition_turn(app, message, plan, session, conversation_id, data, debug):
     if not requested:
         return {"kind": "clarification", "message": "What foods and portions should I use for this meal?", "cards": [], "total": None}
     # Old whole-meal corrections remain supported, but losing foods during a follow-up is never silent.
+    prior = app.memory.result(session.get("last_result_id")) if session.get("last_result_id") else None
+    source_context = session.get("nutrition_source")
+    if not source_context and prior and prior.get("cards"):
+        source_context = USDA_SOURCE if all(c.get("source") == USDA_SOURCE for c in prior["cards"]) else "UMD Dining Services"
+    if not source_context and pending:
+        source_context = "UMD Dining Services"  # Legacy pending questions predate USDA routing.
     changed = requested != session.get("foods")
     if changed:
         session["last_result_id"] = None
         if plan["action"] == "set" and not following and operation == "lookup":
             session["working_logged_id"] = None
     session["foods"] = requested
-    result = resolve(requested, data["datasets"], data["today"], selections)
+    known_umd = bool(following or pending) and source_context == "UMD Dining Services"
+    explicit_usda = bool(re.search(r"\b(usda|at home|from home|grocery)\b", message, re.I))
+    common = (explicit_usda and mentions_umd(message)) or (not mentions_umd(message) and not known_umd
+              and (explicit_usda or any(common_candidate(f["name"]) and not f.get("hall") for f in requested)))
+    session["nutrition_source"] = USDA_SOURCE if common else "UMD Dining Services"
+    if common:
+        result = resolve_common(app.usda, requested, data["today"], metadata.get("log_date"), message)
+    else:
+        result = resolve(requested, data["datasets"], data["today"], selections)
     session["selections"] = result.pop("selections")
     pending_result = result.pop("pending")
     debug.update(result.pop("debug"))
@@ -251,7 +278,7 @@ def nutrition_turn(app, message, plan, session, conversation_id, data, debug):
     caution = app._safe_to_log(result, requested, day)
     # A fresh log must name its foods, or explicitly refer to already established working context.
     if operation == "log" and plan["foods"] and not following and not all(tokens(f["name"]) <= tokens(message) for f in requested):
-        caution = "Please name the foods to log, or first verify their UMD labels with me."
+        caution = "Please name the foods to log, or first verify their source records with me."
     if not metadata.get("authorized") or caution or (operation == "edit" and not meal):
         result.update(kind="clarification", message=caution or ("Which logged meal should I correct?" if operation == "edit" and not meal else "Would you like me to log this verified meal? Please explicitly ask me to add it."))
         session["pending"] = {"focus": None, "unresolved": [], "operation": operation, "request": metadata}
@@ -261,7 +288,7 @@ def nutrition_turn(app, message, plan, session, conversation_id, data, debug):
         session["working_logged_id"] = updated["id"]
         session["last_logged_id"] = updated["id"]
         session["last_action"] = {"type": "edit", "new_id": updated["id"], "old_id": meal["id"]}
-        result.update(kind="meal_edited", message=f"Updated {updated['label']} on {updated['date']} using the linked UMD labels.")
+        result.update(kind="meal_edited", message=f"Updated {updated['label']} on {updated['date']} using the linked nutrition records.")
         debug["tool_action"] = {"operation": "edit", "entry_id": updated["id"]}
     else:
         logged, added = app.memory.log_result(result_id, day, conversation_id, label_override=label)

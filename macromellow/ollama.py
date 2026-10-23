@@ -295,7 +295,7 @@ class OllamaClient:
             "operation: lookup for reported meals and food questions; log ONLY for an explicit add/log/track request; "
             "edit/remove/undo for explicit logged-meal changes; today/history for tracker queries; "
             "remember/recall/forget for preferences; converse for ordinary conversation; adjust for literal manual macros. "
-            "Do not calculate or invent nutrition, labels, source URLs, or successful actions. Preferences never imply eating. "
+            "Do not calculate or invent nutrition, labels, source URLs, or successful actions. Preferences never imply eating. For ordinary food questions such as eggs, bananas and rice, use lookup; for explicit add/log requests use log. Preserve preparation, size, and edible-part words in the food name: scrambled eggs must not become eggs, and raw chicken breast must not become cooked chicken breast. Do not supply nutritional values or invented portion weights; Python resolves the official source and asks any necessary portion questions. "
             "Extract EVERY individual food and its reported portion. Preserve vague units such as scoop; never turn scoops "
             "or slices into servings without the user's confirmation or an exact listed unit. "
             "Example: I had a macaroni pizza slice, 2 scoops of cilantro lime rice, 1 chocolate chip cookie and a scoop of mac n cheese -> "

@@ -21,7 +21,8 @@ from .agent import HALL_NAMES, tokens
 from .ollama import OllamaClient, OllamaError, PlanError, normalize_plan
 from .memory import MemoryStore, numbers
 from .conversation import Conversations, identifier
-from .meals import nutrition_turn, local_reply
+from .meals import nutrition_turn, local_reply, working_food
+from .usda import USDAClient
 
 
 STATIC_DIR = Path(__file__).with_name("static")
@@ -162,6 +163,7 @@ class DataApp:
         self.lock = threading.Lock()
         self.status = {"state": "idle", "message": "", "date": None}
         self.memory = MemoryStore(data_dir / "macromellow.sqlite3")
+        self.usda = USDAClient(self.memory.path)
         self.conversations = Conversations(self)
 
     def _meal_target(self, target: str, session: dict) -> dict | None:
@@ -177,20 +179,20 @@ class DataApp:
     @staticmethod
     def _safe_to_log(result: dict, requested: list[dict], day: str) -> str | None:
         if result["kind"] != "result" or not result.get("cards") or not result.get("total"):
-            return "I need a reliable UMD match for every food before logging it."
+            return "I need a reliable source match for every food before logging it."
         if any(result["total"].get(key) is None for key in ("calories", "protein_g", "carbohydrates_g", "fat_g")):
-            return "UMD nutrition is incomplete, so I cannot add this meal automatically."
+            return "Source nutrition is incomplete, so I cannot add this meal automatically."
         if any(card["menu_date"] != day for card in result["cards"]):
             return "The saved menu date does not match the day you want to log. Which date should I use?"
         if len(result["cards"]) != len(requested):
             return "I still need to confirm every food in your meal."
         for card, item in zip(result["cards"], requested):
             if not card.get("portion_confirmed", True) or card.get("quantity") is None:
-                return f"How does your portion of {card['name']} compare with the listed UMD serving?"
+                return f"How does your portion of {card['name']} compare with the listed serving?"
             if card["match"] not in {"official name", "confirmed choice", "high-confidence name"}:
-                return f"Please confirm the exact UMD food name for {item['name']} before I log it."
+                return f"Please confirm the exact source food name for {item['name']} before I log it."
             if not card.get("serving_size"):
-                return f"UMD has no serving size for {card['name']}; please clarify the portion."
+                return f"The source has no serving size for {card['name']}; please clarify the portion."
         return None
 
     def chat(self, message: str, conversation_id: str | None, reply_context: dict | None = None) -> dict:
@@ -347,9 +349,7 @@ class DataApp:
                         restore_id = action.get("old_id") if action["type"] == "edit" else action.get("entry_id") if action["type"] == "remove" else None
                         restored = self.memory.entry(restore_id) if restore_id else None
                         if restored:
-                            session["foods"] = [{"name": c["name"], "quantity": c["quantity"], "unit": "serving",
-                                "hall": next((k for k, v in HALL_NAMES.items() if v == c["dining_hall"]), ""),
-                                "date": c["menu_date"]} for c in restored["cards"]]
+                            session["foods"] = [working_food(c, restored["date"]) for c in restored.get("cards", [])]
                             requested = session["foods"]
                             session["working_logged_id"] = session["last_logged_id"] = restored["id"]
                         else:

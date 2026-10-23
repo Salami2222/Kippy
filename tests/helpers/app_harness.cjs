@@ -19,6 +19,7 @@ class Element {
     this.scrollHeight = 200;
     this.clientHeight = 200;
     this.hidden = false;
+    this.disabled = false;
     this.classList = {
       contains: name => this.className.split(/\s+/).includes(name),
       add: name => { if (!this.classList.contains(name)) this.className += ` ${name}`; },
@@ -166,6 +167,7 @@ async function loadApp({compact = false, viewport = null} = {}) {
           data = {active: payload.active};
         }
       }
+      else if (stateHandler) data = await stateHandler(url, JSON.parse(options.body));
       else throw new Error(`Unexpected request: ${url}`);
       return {ok: true, status: 200, json: async () => data};
     }

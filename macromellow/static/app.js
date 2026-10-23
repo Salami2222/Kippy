@@ -188,7 +188,7 @@ function renderMealList() {
     const item = document.createElement('div'); item.className = 'personal-item';
     const title = document.createElement('strong'); title.textContent = meal.label;
     const detail = document.createElement('span');
-    detail.textContent = `${meal.status === 'removed' ? 'Removed · ' : ''}${meal.cards.map(card => `${card.quantity} × ${card.name}`).join(', ')} · ${trackerNumber(meal.delta.calories)} kcal`;
+    detail.textContent = `${meal.status === 'removed' ? 'Removed · ' : ''}${meal.cards.map(card => card.source === 'USDA FoodData Central' ? `${card.portion_description} · ${card.name}` : `${card.quantity} × ${card.name}`).join(', ')} · ${trackerNumber(meal.delta.calories)} kcal`;
     const actions = document.createElement('div'); actions.className = 'personal-actions';
     const remove = document.createElement('button'); remove.type = 'button';
     remove.textContent = meal.status === 'active' ? 'Remove meal' : 'Restore meal';
@@ -203,7 +203,7 @@ function renderMealList() {
       const url = safeSource(card.source_url);
       if (!url) continue;
       const link = document.createElement('a'); link.className = 'source-link'; link.href = url;
-      link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = `${card.name} · UMD label ↗`;
+      link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = `${card.name} · ${card.source === 'USDA FoodData Central' ? 'USDA record' : 'UMD label'} ↗`;
       item.append(link);
     }
     item.append(actions); els.mealList.append(item);
@@ -405,14 +405,17 @@ if (window.visualViewport) {
   syncChatViewport();
 }
 
-function formatAmount(value, unit = '') {
-  return value === null || value === undefined ? 'Unavailable' : `${Number(value).toLocaleString(undefined, {maximumFractionDigits: 1})}${unit}`;
+function formatAmount(value, unit = '', digits = 1) {
+  return value === null || value === undefined ? 'Unavailable' : `${Number(value).toLocaleString(undefined, {maximumFractionDigits: digits})}${unit}`;
 }
 
 function safeSource(url) {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === 'https:' && parsed.hostname === 'nutrition.umd.edu' && parsed.pathname === '/label.aspx' ? parsed.href : null;
+    const umd = parsed.hostname === 'nutrition.umd.edu' && parsed.pathname === '/label.aspx';
+    const usda = parsed.hostname === 'fdc.nal.usda.gov' && /^\/food-details\/\d+\/nutrients$/.test(parsed.pathname);
+    return parsed.protocol === 'https:' && !parsed.username && !parsed.password && !parsed.port &&
+      (umd || (usda && !parsed.search && !parsed.hash)) ? parsed.href : null;
   } catch { return null; }
 }
 
@@ -494,7 +497,7 @@ function debugSource(parent, candidate, prefix = '') {
     link.href = url;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
-    link.textContent = 'UMD label ↗';
+    link.textContent = candidate.source === 'USDA FoodData Central' ? 'USDA record ↗' : 'UMD label ↗';
     line.append(link);
   }
   parent.append(line);
@@ -538,8 +541,9 @@ function appendDebug(bubble, debug) {
   else requestSection.append(debugRow('Extracted foods', 'None'));
   if (debug.resolved_foods?.length) debug.resolved_foods.forEach((food, index) => requestSection.append(debugRow(`Meal item ${index + 1}`, debugFood(food))));
 
-  const matches = debugSection(body, 'UMD matching');
-  matches.append(debugRow('Scoring', 'Heuristic coverage, token precision, and character similarity; not a probability. Hall and date filter the records first.'));
+  const usdaMatch = debug.matches?.some(match => match.source === 'USDA FoodData Central');
+  const matches = debugSection(body, usdaMatch ? 'USDA source matching' : 'UMD matching');
+  matches.append(debugRow('Scoring', usdaMatch ? 'Exact mapped USDA description and data type; complete validated per-100 g nutrients. No fuzzy match or model-generated nutrition.' : 'Heuristic coverage, token precision, and character similarity; not a probability. Hall and date filter the records first.'));
   if (!debug.matches?.length) matches.append(debugRow('Match attempts', 'None'));
   for (const match of debug.matches || []) {
     const group = document.createElement('div');
@@ -549,7 +553,7 @@ function appendDebug(bubble, debug) {
     if (match.selected) {
       debugSource(group, match.selected, 'Selected: ');
       if (match.selected.signals) group.append(debugRow('Match signals', JSON.stringify(match.selected.signals)));
-      group.append(debugRow('Listed serving', match.selected.serving_size || 'Missing from UMD label'));
+      group.append(debugRow('Listed serving', match.selected.serving_size || 'Missing from source record'));
     }
     const alternatives = (match.candidates || []).filter(candidate => !match.selected || candidate.name !== match.selected.name || candidate.source_url !== match.selected.source_url || candidate.dining_hall !== match.selected.dining_hall);
     alternatives.slice(0, 3).forEach(candidate => debugSource(group, candidate, 'Alternative: '));
@@ -566,8 +570,8 @@ function appendDebug(bubble, debug) {
     for (const [label, key, unit] of [['Calories', 'calories', ''], ['Protein', 'protein_g', ' g'], ['Carbs', 'carbohydrates_g', ' g'], ['Fat', 'fat_g', ' g']]) {
       const per = calculation.per_serving?.[key];
       const value = calculation.result?.[key];
-      group.append(debugRow(label, per === null || per === undefined ? 'UMD value missing → total unavailable' :
-        `${formatAmount(per, unit)} per serving × ${calculation.quantity} = ${formatAmount(value, unit)}`));
+      group.append(debugRow(label, per === null || per === undefined ? 'Source value missing → total unavailable' :
+        `${formatAmount(per, unit, 6)} per serving × ${calculation.quantity} = ${formatAmount(value, unit)}`));
     }
     math.append(group);
   }
@@ -604,13 +608,13 @@ function appendResult(data) {
     panel.className = 'nutrition-card';
     const kicker = document.createElement('div');
     kicker.className = 'card-kicker';
-    kicker.textContent = `${hallLabel(card.dining_hall)} · ${humanDate(card.menu_date)}`;
+    kicker.textContent = card.source === 'USDA FoodData Central' ? 'USDA FoodData Central · reference estimate' : `${hallLabel(card.dining_hall)} · ${humanDate(card.menu_date)}`;
     const title = document.createElement('h3');
     title.textContent = card.name;
     const serving = document.createElement('p');
     serving.className = 'card-serving';
     const portionKnown = card.portion_confirmed !== false;
-    serving.textContent = portionKnown ? `${card.reported_quantity ?? card.quantity} ${card.unit || 'serving'} → ${card.quantity} listed serving${card.quantity === 1 ? '' : 's'} × ${card.serving_size || 'size unavailable'} · ${card.match}` :
+    serving.textContent = card.source === 'USDA FoodData Central' ? `${card.portion_description} ≈ ${card.grams} g · ${card.match}` : portionKnown ? `${card.reported_quantity ?? card.quantity} ${card.unit || 'serving'} → ${card.quantity} listed serving${card.quantity === 1 ? '' : 's'} × ${card.serving_size || 'size unavailable'} · ${card.match}` :
       `Reported ${card.reported_quantity} ${card.unit} · UMD serving: ${card.serving_size || 'unavailable'} · portion needs confirmation`;
     panel.append(kicker, title, serving);
     if (!portionKnown) {
@@ -625,7 +629,7 @@ function appendResult(data) {
       link.href = linkUrl;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
-      link.textContent = 'Open official UMD label ↗';
+      link.textContent = card.source === 'USDA FoodData Central' ? 'Open USDA food record ↗' : 'Open official UMD label ↗';
       panel.append(link);
     }
     bubble.append(panel);
@@ -634,7 +638,7 @@ function appendResult(data) {
     const total = document.createElement('div');
     total.className = 'total-card';
     const title = document.createElement('strong');
-    title.textContent = data.nutrition_complete === false ? 'Partial nutrition total · missing UMD values' : data.cards.length > 1 ? 'Meal total' : 'Estimated total';
+    title.textContent = data.nutrition_complete === false ? 'Partial nutrition total · missing source values' : data.cards.length > 1 ? 'Meal total' : 'Estimated total';
     total.append(title, nutritionGrid(data.total));
     bubble.append(total);
   }
@@ -666,7 +670,7 @@ function appendResult(data) {
         if (!url) continue;
         const link = document.createElement('a'); link.className = 'source-link';
         link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer';
-        link.textContent = `${card.name} · UMD label ↗`; bubble.append(link);
+        link.textContent = `${card.name} · ${card.source === 'USDA FoodData Central' ? 'USDA record' : 'UMD label'} ↗`; bubble.append(link);
       }
     }
   }
@@ -699,7 +703,7 @@ function appendResult(data) {
     } else {
       const note = document.createElement('p');
       note.className = 'result-note';
-      note.textContent = 'Some UMD values are missing, so this result cannot be added automatically. You can enter your own test values above.';
+      note.textContent = 'Some source values are missing, so this result cannot be added automatically. You can enter your own test values above.';
       bubble.append(note);
     }
   }
