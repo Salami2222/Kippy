@@ -274,3 +274,52 @@ test('real chat completion cannot interrupt a freshly confirmed protein celebrat
   assert.equal(app.state().state, 'idle');
   assert.equal(app.state().asset, '/assets/mellow/burned-sleep-00.png');
 });
+
+test('dashboard distinguishes calorie allowance and positive protein completion at every boundary', async () => {
+  const app = await loadApp();
+  const goals = {calories: 2500, protein_g: 180, carbohydrates_g: 200, fat_g: 70};
+  const cases = [
+    [2100, 150, '400 kcal remaining', '30 g remaining', false, false],
+    [2500, 180, 'Calorie limit reached.', 'Protein goal reached!', false, true],
+    [2600, 195, 'Over calorie limit by 100 kcal.', 'Protein goal reached!', true, true],
+    [2100, 195, '400 kcal remaining', 'Protein goal reached!', false, true],
+  ];
+  for (const [calories, protein_g, calorieText, proteinText, burned, complete] of cases) {
+    app.applyTracker({totals: {calories, protein_g, carbohydrates_g: 0, fat_g: 0}, goals});
+    assert.equal(app.get('balance-calories').textContent, calorieText);
+    assert.equal(app.get('balance-protein').textContent, proteinText);
+    assert.equal(app.get('goal-calories').textContent, `Limit: ${calories.toLocaleString('en-US')} / 2,500 kcal`);
+    assert.equal(app.get('goal-protein').textContent, `Goal: ${protein_g} / 180 g`);
+    assert.equal(app.get('progress-protein').classList.contains('completed'), complete);
+    assert.equal(app.get('balance-protein').classList.contains('completed'), complete);
+    assert.equal(app.get('balance-protein').classList.contains('exceeded'), false);
+    assert.equal(app.get('progress-protein').classList.contains('exceeded'), false);
+    assert.equal(app.get('progress-calories').classList.contains('exceeded'), burned);
+    assert.equal(app.state().burned, burned);
+    assert.equal(app.state().state, 'idle'); // Loading a reached goal never fabricates a milestone.
+  }
+  app.applyTracker({goals: {calories: null, protein_g: null, carbohydrates_g: null, fat_g: null}});
+  assert.equal(app.get('goal-calories').textContent, 'No limit set');
+  assert.equal(app.get('progress-protein').classList.contains('completed'), false);
+});
+
+test('protein celebration returns to the correct normal or calorie-burned pose without changing stored values', async () => {
+  for (const calories of [2500, 2501]) {
+    const app = await loadApp();
+    app.imageLoads[4].onload();
+    const snapshot = {date: '2026-10-21', totals: {calories, protein_g: 195, carbohydrates_g: 0, fat_g: 0},
+      goals: {calories: 2500, protein_g: 180, carbohydrates_g: null, fat_g: null}, entries: [],
+      celebration: {date: '2026-10-21', kind: 'protein_goal'}};
+    app.applyTracker(snapshot);
+    const saved = app.run('JSON.stringify([tracker.getState(),tracker.getGoals()])');
+    assert.equal(app.state().state, 'celebrating');
+    app.finishCelebration();
+    assert.equal(app.state().state, 'idle');
+    assert.equal(app.state().burned, calories > 2500);
+    assert.equal(app.get('balance-protein').textContent, 'Protein goal reached!');
+    app.run('renderTracker(); tracker.reload(); tracker.reloadGoals(); renderTracker()');
+    app.applyTracker(snapshot); // Duplicate delivery cannot replay it either.
+    assert.equal(app.state().state, 'idle');
+    assert.equal(app.run('JSON.stringify([tracker.getState(),tracker.getGoals()])'), saved);
+  }
+});

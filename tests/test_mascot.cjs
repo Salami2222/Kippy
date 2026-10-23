@@ -32,8 +32,8 @@ function fakeClock() {
   };
 }
 
-test('each positive configured goal burns only when strictly exceeded', () => {
-  for (const field of fields) {
+test('calorie limits and unchanged carb/fat goals burn only when strictly exceeded', () => {
+  for (const field of fields.filter(field => field !== 'protein_g')) {
     assert.equal(hasExceededGoal({[field]: 9}, {[field]: 10}), false);
     assert.equal(hasExceededGoal({[field]: 10}, {[field]: 10}), false);
     assert.equal(hasExceededGoal({[field]: 10.01}, {[field]: 10}), true);
@@ -41,8 +41,8 @@ test('each positive configured goal burns only when strictly exceeded', () => {
   }
 });
 
-test('unconfigured, zero, negative, nonfinite, and nonnumeric goals do not burn', () => {
-  for (const goal of [undefined, null, 0, -1, NaN, Infinity, -Infinity, '10']) {
+test('unconfigured, negative, nonfinite, and nonnumeric limits do not burn', () => {
+  for (const goal of [undefined, null, -1, NaN, Infinity, -Infinity, '10']) {
     assert.equal(hasExceededGoal({calories: 100}, {calories: goal}), false);
   }
   for (const total of [undefined, null, NaN, Infinity, -Infinity, '100']) {
@@ -89,8 +89,8 @@ test('request lifecycle returns from talking to idle and cancels stale timers', 
 test('burned state remains independent from thinking and response timing', () => {
   const clock = fakeClock();
   const tracker = createTracker(memoryStorage(), () => new Date('2026-10-21T16:00:00Z'));
-  tracker.setGoals({protein_g: 20});
-  tracker.adjust('set', {protein_g: 21});
+  tracker.setGoals({calories: 20});
+  tracker.adjust('set', {calories: 21});
   const mascot = createController({...clock});
   mascot.syncTracker(tracker);
   for (const [state, pose] of [['idle', 'idle'], ['thinking', 'talking'], ['talking', 'talking']]) {
@@ -100,7 +100,7 @@ test('burned state remains independent from thinking and response timing', () =>
     assert.equal(mascot.getState().profileAsset, '/assets/mellow/profile-burned.png');
   }
   const responseTimer = [...clock.pending.keys()][0];
-  tracker.adjust('subtract', {protein_g: 1});
+  tracker.adjust('subtract', {calories: 1});
   mascot.syncTracker(tracker);
   assert.equal(mascot.getState().state, 'talking');
   assert.equal(mascot.getState().burned, false);
@@ -181,8 +181,8 @@ test('celebration overrides burned activity while async responses and tracker up
   const clock = fakeClock();
   const mascot = createController({...clock});
   const tracker = createTracker(memoryStorage(), () => new Date('2026-10-22T16:00:00Z'));
-  tracker.setGoals({protein_g: 10});
-  tracker.adjust('set', {protein_g: 11});
+  tracker.setGoals({protein_g: 10, calories: 100});
+  tracker.adjust('set', {protein_g: 11, calories: 101});
   mascot.syncTracker(tracker);
   mascot.startThinking();
   mascot.celebrate();
@@ -213,5 +213,18 @@ test('celebration completion restores the latest idle or thinking state and disp
     assert.equal(clock.pending.size, 0);
     clock.callbacks.forEach(callback => callback());
     assert.notEqual(mascot.getState().state, 'celebrating');
+  }
+});
+
+test('protein above its minimum never burns; a configured zero calorie limit is still a limit', () => {
+  for (const total of [9, 10, 11, 999]) {
+    assert.equal(hasExceededGoal({protein_g: total, calories: 2500}, {protein_g: 10, calories: 2500}), false);
+  }
+  assert.equal(hasExceededGoal({protein_g: 200, calories: 2501}, {protein_g: 180, calories: 2500}), true);
+  assert.equal(hasExceededGoal({calories: 0}, {calories: 0}), false);
+  assert.equal(hasExceededGoal({calories: 1}, {calories: 0}), true);
+  for (const field of ['carbohydrates_g', 'fat_g']) {
+    assert.equal(hasExceededGoal({[field]: 1}, {[field]: 0}), false);
+    assert.equal(hasExceededGoal({[field]: 11}, {[field]: 10}), true);
   }
 });

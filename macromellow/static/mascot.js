@@ -2,7 +2,8 @@
 (function (root) {
   'use strict';
 
-  const FIELDS = ['calories', 'protein_g', 'carbohydrates_g', 'fat_g'];
+  // Protein is a minimum target, never a burned-state condition.
+  const FIELDS = ['calories', 'carbohydrates_g', 'fat_g'];
   const CELEBRATION_DURATION = 1685; // Sum of happy-bounce-animation.json durations_ms.
   const STATES = ['idle', 'thinking', 'talking'];
 
@@ -11,7 +12,7 @@
     return FIELDS.some(field => {
       const goal = goals[field];
       const total = totals[field];
-      return typeof goal === 'number' && Number.isFinite(goal) && goal > 0 &&
+      return typeof goal === 'number' && Number.isFinite(goal) && (field === 'calories' ? goal >= 0 : goal > 0) &&
         typeof total === 'number' && Number.isFinite(total) && total > goal;
     });
   }

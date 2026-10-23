@@ -90,3 +90,14 @@ test('goal progress reports remaining or exceeded without deriving calories', ()
   assert.equal(tracker.getState().totals.calories, 0);
   assert.equal(tracker.getGoals().calories, null);
 });
+
+test('protein target progress never reports an excess while other macros keep their previous arithmetic', () => {
+  assert.deepEqual(goalProgress(150, 180, 'protein_g'), {remaining: 30, exceeded: 0, percent: 83.33});
+  for (const total of [180, 195]) {
+    assert.deepEqual(goalProgress(total, 180, 'protein_g'), {remaining: 0, exceeded: 0, percent: 100});
+  }
+  assert.deepEqual(goalProgress(2100, 2500, 'calories'), {remaining: 400, exceeded: 0, percent: 84});
+  assert.deepEqual(goalProgress(2600, 2500, 'calories'), {remaining: 0, exceeded: 100, percent: 100});
+  assert.equal(goalProgress(195, 180, 'carbohydrates_g').exceeded, 15);
+  assert.equal(goalProgress(195, 180, 'fat_g').exceeded, 15);
+});

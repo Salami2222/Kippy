@@ -42,11 +42,11 @@
     return Math.round((value + Number.EPSILON) * 100) / 100;
   }
 
-  function goalProgress(consumed, goal) {
+  function goalProgress(consumed, goal, field = null) {
     if (goal === null) return null;
     return {
       remaining: round(Math.max(0, goal - consumed)),
-      exceeded: round(Math.max(0, consumed - goal)),
+      exceeded: field === 'protein_g' ? 0 : round(Math.max(0, consumed - goal)),
       percent: goal === 0 ? (consumed >= 0 ? 100 : 0) : Math.min(100, Math.max(0, round(consumed / goal * 100)))
     };
   }
@@ -87,13 +87,13 @@
     function getGoals() { return {...goals}; }
     function reloadGoals() { goals = readGoals(); return getGoals(); }
     function setGoals(changes) {
-      if (!changes || typeof changes !== 'object') throw new Error('Enter goal values to save.');
+      if (!changes || typeof changes !== 'object') throw new Error('Enter a calorie limit or macro goals to save.');
       const next = {...goals};
       for (const field of FIELDS) {
         if (!Object.hasOwn(changes, field)) continue;
         const value = changes[field];
         if (value !== null && (!validNumber(value) || value < 0))
-          throw new Error('Goals must be zero or positive numbers.');
+          throw new Error('The calorie limit and macro goals must be zero or positive numbers.');
         next[field] = value === null ? null : round(value);
       }
       goals = next;

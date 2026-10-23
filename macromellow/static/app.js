@@ -291,19 +291,32 @@ function renderTracker() {
       void value.offsetWidth;
       value.classList.add('value-change');
     }
-    els.goalValues[field].textContent = goal === null ? 'No goal set' : `Goal ${trackerNumber(goal)} ${unit}`;
+    const isCalories = field === 'calories';
+    const isProtein = field === 'protein_g';
+    const targetLabel = isCalories ? 'Limit' : 'Goal';
+    els.goalValues[field].textContent = goal === null ? (isCalories ? 'No limit set' : 'No goal set') :
+      isCalories || isProtein ? `${targetLabel}: ${trackerNumber(consumed)} / ${trackerNumber(goal)} ${unit}` :
+        `Goal ${trackerNumber(goal)} ${unit}`;
     const bar = els.goalBars[field];
     const balance = els.goalBalances[field];
     bar.hidden = goal === null;
+    const complete = isProtein && goal !== null && consumed >= goal;
+    const warning = isCalories && goal !== null && consumed > goal;
+    bar.classList.toggle('completed', complete);
+    bar.classList.toggle('exceeded', warning);
+    balance.classList.toggle('completed', complete);
     if (goal === null) {
       balance.textContent = '';
       balance.classList.remove('exceeded');
     } else {
-      const progress = MacroTracker.goalProgress(consumed, goal);
+      const progress = MacroTracker.goalProgress(consumed, goal, field);
       bar.querySelector('i').style.width = `${progress.percent}%`;
       bar.setAttribute('aria-valuenow', String(progress.percent));
-      const wording = progress.exceeded > 0 ? `Exceeded by ${trackerNumber(progress.exceeded)} ${unit}` :
-        `${trackerNumber(progress.remaining)} ${unit} remaining`;
+      const wording = complete ? 'Protein goal reached!' :
+        isCalories && consumed === goal ? 'Calorie limit reached.' :
+        progress.exceeded > 0 ? (isCalories ? `Over calorie limit by ${trackerNumber(progress.exceeded)} kcal.` :
+          `Exceeded by ${trackerNumber(progress.exceeded)} ${unit}`) :
+          `${trackerNumber(progress.remaining)} ${unit} remaining`;
       balance.textContent = wording;
       balance.classList.toggle('exceeded', progress.exceeded > 0);
       bar.setAttribute('aria-valuetext', `${trackerNumber(consumed)} of ${trackerNumber(goal)} ${unit} consumed; ${wording}`);
@@ -640,7 +653,7 @@ function appendResult(data) {
     const title = document.createElement('strong'); title.textContent = 'Today’s tracked totals';
     total.append(title, nutritionGrid(data.total)); bubble.append(total);
     const goals = document.createElement('p'); goals.className = 'result-note';
-    goals.textContent = `Goals: calories ${data.tracker.goals.calories ?? 'not set'} kcal · protein ${data.tracker.goals.protein_g ?? 'not set'} g · carbs ${data.tracker.goals.carbohydrates_g ?? 'not set'} g · fat ${data.tracker.goals.fat_g ?? 'not set'} g`;
+    goals.textContent = `Calorie limit: ${data.tracker.goals.calories ?? 'not set'} kcal · protein goal: ${data.tracker.goals.protein_g ?? 'not set'} g · carbs ${data.tracker.goals.carbohydrates_g ?? 'not set'} g · fat ${data.tracker.goals.fat_g ?? 'not set'} g`;
     bubble.append(goals);
   }
   if (data.kind === 'history' && data.meals?.length) {
@@ -1185,7 +1198,7 @@ els.goalForm.addEventListener('submit', async event => {
   try {
     const updated = await stateRequest('/api/tracker/goals', {goals: changes});
     applyBackendTracker(updated);
-    trackerMessage('Daily goals saved. They will stay when today’s totals reset.');
+    trackerMessage('Calorie limit and macro goals saved. They will stay when today’s totals reset.');
   } catch (error) { trackerMessage(error.message, true); }
 });
 els.trackerReset.addEventListener('click', async () => {
@@ -1219,7 +1232,7 @@ setInterval(checkTrackerDay, 60000);
 // Reconnect status after an independent Ollama restart, without resending chat requests.
 setInterval(() => { if (!document.hidden) checkAI(); }, 30000);
 scheduleTrackerRollover();
-if (!trackerPersists) trackerMessage('Browser storage is unavailable; SQLite still saves totals and goals locally.', true);
+if (!trackerPersists) trackerMessage('Browser storage is unavailable; SQLite still saves totals, calorie limit, and macro goals locally.', true);
 els.chatTab.addEventListener('click', () => switchView('chat'));
 els.trackerTab.addEventListener('click', () => switchView('tracker'));
 els.browseTab.addEventListener('click', () => switchView('browse'));
