@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
   <title>MacroMellow · Meet Mellow</title>
   <link rel="stylesheet" href="/app.css">
   <script src="/tracker.js" defer></script>
@@ -29,57 +29,17 @@
     <h1 id="page-title" class="sr-only">MacroMellow — Your AI-powered nutrition assistant.</h1>
 
     <section id="chat-view" class="chat-view" aria-label="Mellow nutrition chat">
-      <div class="chat-top"><div class="chat-identity"><span class="mellow-mascot" data-mellow-mascot data-state="idle" data-burned="false" aria-hidden="true"><img src="/assets/mellow/idle.png" alt="" width="64" height="64"></span><div><h2>Mellow</h2></div></div><button id="new-chat" class="quiet-button" type="button"><span aria-hidden="true">＋</span> New chat</button></div>
-      <section class="daily-tracker is-collapsed" aria-labelledby="tracker-title">
-        <div class="tracker-heading"><div><p class="eyebrow">DAILY OVERVIEW</p><h3 id="tracker-title">Today’s macros <span id="tracker-date"></span></h3></div><div class="tracker-heading-actions"><span class="tracker-timezone">Resets midnight ET</span><button id="tracker-expand" class="tracker-expand" type="button" aria-expanded="false" aria-controls="tracker-totals tracker-controls goal-controls">Show details <span aria-hidden="true">⌄</span></button></div></div>
+      <div class="chat-top"><div class="chat-identity"><span class="mellow-mascot" data-mellow-mascot data-state="idle" data-burned="false" aria-hidden="true"><img src="/assets/mellow/idle.png" alt="" width="64" height="64"></span><div><h2>Mellow</h2></div></div><div class="chat-header-actions"><button id="new-chat" class="quiet-button" type="button"><span aria-hidden="true">＋</span> New chat</button><button id="tracker-toggle" class="quiet-button tracker-toggle is-active" type="button" aria-expanded="true" aria-controls="daily-tracker" aria-label="Hide today’s macro summary" title="Hide macros"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V9m8 9V5m8 13v-7M2 20h20"/></svg><span>Macros</span></button></div></div>
+      <section id="daily-tracker" class="daily-tracker" aria-labelledby="tracker-title">
+        <div class="tracker-heading"><h3 id="tracker-title">Today’s macros <span id="tracker-date"></span></h3></div>
         <div id="tracker-totals" class="tracker-totals" aria-live="polite">
-          <div class="tracker-stat"><strong id="tracker-calories">0</strong><span>Calories <small>kcal consumed</small></span><div id="goal-calories" class="tracker-goal-line">No goal set</div><div id="progress-calories" class="tracker-progress" role="progressbar" aria-label="Calories goal progress" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div><div id="balance-calories" class="tracker-balance"></div></div>
-          <div class="tracker-stat"><strong id="tracker-protein">0</strong><span>Protein <small>g consumed</small></span><div id="goal-protein" class="tracker-goal-line">No goal set</div><div id="progress-protein" class="tracker-progress" role="progressbar" aria-label="Protein goal progress" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div><div id="balance-protein" class="tracker-balance"></div></div>
-          <div class="tracker-stat"><strong id="tracker-carbs">0</strong><span>Carbs <small>g consumed</small></span><div id="goal-carbs" class="tracker-goal-line">No goal set</div><div id="progress-carbs" class="tracker-progress" role="progressbar" aria-label="Carbohydrate goal progress" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div><div id="balance-carbs" class="tracker-balance"></div></div>
-          <div class="tracker-stat"><strong id="tracker-fat">0</strong><span>Fat <small>g consumed</small></span><div id="goal-fat" class="tracker-goal-line">No goal set</div><div id="progress-fat" class="tracker-progress" role="progressbar" aria-label="Fat goal progress" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div><div id="balance-fat" class="tracker-balance"></div></div>
+          <div class="tracker-stat"><strong id="tracker-calories">0</strong><span>Calories <small>kcal</small></span><div id="goal-calories" class="tracker-goal-line">No goal set</div><div id="progress-calories" class="tracker-progress" role="progressbar" aria-label="Calories goal progress" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div><div id="balance-calories" class="tracker-balance"></div></div>
+          <div class="tracker-stat"><strong id="tracker-protein">0</strong><span>Protein <small>g</small></span><div id="goal-protein" class="tracker-goal-line">No goal set</div><div id="progress-protein" class="tracker-progress" role="progressbar" aria-label="Protein goal progress" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div><div id="balance-protein" class="tracker-balance"></div></div>
+          <div class="tracker-stat"><strong id="tracker-carbs">0</strong><span>Carbs <small>g</small></span><div id="goal-carbs" class="tracker-goal-line">No goal set</div><div id="progress-carbs" class="tracker-progress" role="progressbar" aria-label="Carbohydrate goal progress" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div><div id="balance-carbs" class="tracker-balance"></div></div>
+          <div class="tracker-stat"><strong id="tracker-fat">0</strong><span>Fat <small>g</small></span><div id="goal-fat" class="tracker-goal-line">No goal set</div><div id="progress-fat" class="tracker-progress" role="progressbar" aria-label="Fat goal progress" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div><div id="balance-fat" class="tracker-balance"></div></div>
         </div>
-        <details class="tracker-controls" id="tracker-controls">
-          <summary>Adjust totals manually</summary>
-          <form id="tracker-form">
-            <label class="tracker-mode">Change<select id="tracker-mode"><option value="add">Add</option><option value="subtract">Subtract</option><option value="set">Set totals to</option></select></label>
-            <div class="tracker-inputs">
-              <label>Calories <small>kcal</small><input id="tracker-input-calories" type="number" step="any" placeholder="Leave blank" inputmode="decimal"></label>
-              <label>Protein <small>g</small><input id="tracker-input-protein" type="number" step="any" placeholder="Leave blank" inputmode="decimal"></label>
-              <label>Carbs <small>g</small><input id="tracker-input-carbs" type="number" step="any" placeholder="Leave blank" inputmode="decimal"></label>
-              <label>Fat <small>g</small><input id="tracker-input-fat" type="number" step="any" placeholder="Leave blank" inputmode="decimal"></label>
-            </div>
-            <div class="tracker-actions"><button class="tracker-apply" type="submit">Apply change</button><button id="tracker-reset" class="quiet-button" type="button">Reset to zero</button></div>
-          </form>
-        </details>
-        <details class="tracker-controls" id="goal-controls">
-          <summary>Edit daily goals</summary>
-          <form id="goal-form">
-            <p class="goal-help">Each goal is independent. Leave a field blank to remove that goal.</p>
-            <div class="tracker-inputs">
-              <label>Calories <small>kcal</small><input id="goal-input-calories" type="number" min="0" step="any" placeholder="No goal" inputmode="decimal"></label>
-              <label>Protein <small>g</small><input id="goal-input-protein" type="number" min="0" step="any" placeholder="No goal" inputmode="decimal"></label>
-              <label>Carbs <small>g</small><input id="goal-input-carbs" type="number" min="0" step="any" placeholder="No goal" inputmode="decimal"></label>
-              <label>Fat <small>g</small><input id="goal-input-fat" type="number" min="0" step="any" placeholder="No goal" inputmode="decimal"></label>
-            </div>
-            <div class="tracker-actions"><button class="tracker-apply" type="submit">Save goals</button></div>
-          </form>
-        </details>
-        <details class="tracker-controls" id="meal-controls">
-          <summary>Logged meals</summary>
-          <div id="meal-list" class="personal-list"><p class="list-empty">No meals logged today.</p></div>
-        </details>
-        <details class="tracker-controls" id="memory-controls">
-          <summary>Personal memory</summary>
-          <div id="memory-list" class="personal-list"><p class="list-empty">No saved preferences or favorites.</p></div>
-          <form id="memory-form" class="memory-form">
-            <label>Type<select id="memory-category"><option value="preference">Preference</option><option value="favorite_food">Favorite food</option><option value="favorite_meal">Favorite meal</option><option value="favorite_restaurant">Favorite restaurant</option><option value="common_meal">Common meal</option><option value="frequent_food">Frequently chosen food</option></select></label>
-            <label>Name<input id="memory-key" maxlength="100" placeholder="e.g. Usual breakfast" required></label>
-            <label>What to remember<textarea id="memory-value" rows="2" maxlength="500" placeholder="A personal preference, not a meal log" required></textarea></label>
-            <div class="tracker-actions"><button class="tracker-apply" type="submit">Save memory</button><button id="memory-cancel" class="quiet-button" type="button" hidden>Cancel edit</button></div>
-          </form>
-        </details>
-        <p id="tracker-status" class="tracker-status" role="status" aria-live="polite"></p>
-        <p class="tracker-disclaimer">User-adjustable estimates for testing. Tracked totals are not necessarily official UMD values.</p>
+        <button id="tracker-expand" class="tracker-expand" type="button" aria-expanded="false" aria-controls="tracker-details">View details <span aria-hidden="true">↗</span></button>
+        <p class="tracker-summary-note">Estimates · resets midnight ET</p>
       </section>
       <div id="chat-messages" class="chat-messages" role="log" aria-live="polite"></div>
       <div id="chat-welcome" class="chat-welcome">
@@ -101,7 +61,7 @@
         </div>
         <div class="composer-input-row">
           <label class="sr-only" for="chat-input">Ask Mellow about your meal</label>
-          <textarea id="chat-input" rows="2" placeholder="Tell Mellow what you ate…" maxlength="1000" required></textarea>
+          <textarea id="chat-input" rows="1" placeholder="Tell Mellow what you ate…" maxlength="1000" required></textarea>
           <button id="send" type="submit">Send <span aria-hidden="true">↗</span></button>
         </div>
       </form>
@@ -159,6 +119,53 @@
 
     <footer>Current nutrition source: UMD dining. Check each linked label for official serving details.</footer>
   </main>
+  <dialog id="tracker-details" class="tracker-drawer" aria-labelledby="tracker-details-title">
+    <div class="tracker-drawer-heading"><div><p class="eyebrow">TODAY & YOUR PREFERENCES</p><h2 id="tracker-details-title">Daily macros</h2></div><button id="tracker-details-close" class="quiet-button" type="button" aria-label="Close macro details">Close <span aria-hidden="true">×</span></button></div>
+    <div class="tracker-drawer-body">
+        <details class="tracker-controls" id="tracker-controls">
+          <summary>Adjust totals manually</summary>
+          <form id="tracker-form">
+            <label class="tracker-mode">Change<select id="tracker-mode"><option value="add">Add</option><option value="subtract">Subtract</option><option value="set">Set totals to</option></select></label>
+            <div class="tracker-inputs">
+              <label>Calories <small>kcal</small><input id="tracker-input-calories" type="number" step="any" placeholder="Leave blank" inputmode="decimal"></label>
+              <label>Protein <small>g</small><input id="tracker-input-protein" type="number" step="any" placeholder="Leave blank" inputmode="decimal"></label>
+              <label>Carbs <small>g</small><input id="tracker-input-carbs" type="number" step="any" placeholder="Leave blank" inputmode="decimal"></label>
+              <label>Fat <small>g</small><input id="tracker-input-fat" type="number" step="any" placeholder="Leave blank" inputmode="decimal"></label>
+            </div>
+            <div class="tracker-actions"><button class="tracker-apply" type="submit">Apply change</button><button id="tracker-reset" class="quiet-button" type="button">Reset to zero</button></div>
+          </form>
+        </details>
+        <details class="tracker-controls" id="goal-controls">
+          <summary>Edit daily goals</summary>
+          <form id="goal-form">
+            <p class="goal-help">Each goal is independent. Leave a field blank to remove that goal.</p>
+            <div class="tracker-inputs">
+              <label>Calories <small>kcal</small><input id="goal-input-calories" type="number" min="0" step="any" placeholder="No goal" inputmode="decimal"></label>
+              <label>Protein <small>g</small><input id="goal-input-protein" type="number" min="0" step="any" placeholder="No goal" inputmode="decimal"></label>
+              <label>Carbs <small>g</small><input id="goal-input-carbs" type="number" min="0" step="any" placeholder="No goal" inputmode="decimal"></label>
+              <label>Fat <small>g</small><input id="goal-input-fat" type="number" min="0" step="any" placeholder="No goal" inputmode="decimal"></label>
+            </div>
+            <div class="tracker-actions"><button class="tracker-apply" type="submit">Save goals</button></div>
+          </form>
+        </details>
+        <details class="tracker-controls" id="meal-controls">
+          <summary>Logged meals</summary>
+          <div id="meal-list" class="personal-list"><p class="list-empty">No meals logged today.</p></div>
+        </details>
+        <details class="tracker-controls" id="memory-controls">
+          <summary>Personal memory</summary>
+          <div id="memory-list" class="personal-list"><p class="list-empty">No saved preferences or favorites.</p></div>
+          <form id="memory-form" class="memory-form">
+            <label>Type<select id="memory-category"><option value="preference">Preference</option><option value="favorite_food">Favorite food</option><option value="favorite_meal">Favorite meal</option><option value="favorite_restaurant">Favorite restaurant</option><option value="common_meal">Common meal</option><option value="frequent_food">Frequently chosen food</option></select></label>
+            <label>Name<input id="memory-key" maxlength="100" placeholder="e.g. Usual breakfast" required></label>
+            <label>What to remember<textarea id="memory-value" rows="2" maxlength="500" placeholder="A personal preference, not a meal log" required></textarea></label>
+            <div class="tracker-actions"><button class="tracker-apply" type="submit">Save memory</button><button id="memory-cancel" class="quiet-button" type="button" hidden>Cancel edit</button></div>
+          </form>
+        </details>
+        <p id="tracker-status" class="tracker-status" role="status" aria-live="polite"></p>
+        <p class="tracker-disclaimer">User-adjustable estimates for testing. Tracked totals are not necessarily official UMD values.</p>
+    </div>
+  </dialog>
   <div id="toast-stack" class="toast-stack" role="status" aria-live="polite" aria-atomic="false"></div>
 </body>
 </html>

@@ -27,7 +27,7 @@ From the repository directory, use Python 3.10+:
 python3 -m macromellow web
 ```
 
-The server opens [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser. If a browser tab does not open automatically, visit that address yourself. Press `Ctrl+C` in the terminal to stop the server. Use **Chat** to talk with Mellow, **Daily macros** to focus the tracker, and **Food data** to search the currently supported UMD menus and open original labels. On a typical laptop, chat and daily macros share the screen and scroll independently; on smaller screens, the tracker starts as a compact summary above chat. Enter sends a chat message; Shift+Enter adds a line. **New chat** clears the current conversation context. The visual design uses local system fonts and Mellow's local transparent pixel-art sprites.
+The server opens [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser. If a browser tab does not open automatically, visit that address yourself. Press `Ctrl+C` in the terminal to stop the server. Use **Chat** to talk with Mellow, **Daily macros** to open tracker details, and **Food data** to search the currently supported UMD menus and open original labels. On desktop, the conversation fills the viewport beside a slim 240px macro summary. Messages scroll internally and the composer stays at the bottom. The **Macros** button hides or restores the summary. On smaller screens, a compact summary sits above chat; tap it or **View details** to open the tracker drawer. Enter sends a chat message; Shift+Enter adds a line. **New chat** clears the current conversation context. The visual design uses local system fonts and Mellow's local transparent pixel-art sprites.
 
 The app reads actual JSON files in this repository's `data/` directory. Data is not committed to Git, so a fresh clone starts empty: open **Food data**, choose today's date, and click **Refresh UMD data** to retrieve all three halls. A complete refresh can take several minutes; the page shows a loading state and any retrieval error. Existing saved data is kept if a refresh is incomplete. Dates outside UMD's current seven-day menu window cannot be refreshed, although older saved JSON can still be viewed. After a refresh, return to **Chat** and ask about that date.
 
@@ -74,7 +74,7 @@ Refresh the browser after an update (`Ctrl+F5` if needed).
 
 ## Daily macro tracker
 
-**Today’s macros** stays beside the assistant conversation on desktop. On smaller screens, a compact four-number summary sits above chat; tap **Show details** or **Daily macros** to open goals and adjustments. Open **Adjust totals manually** to add, subtract, or set any combination of calories, protein, carbs, and fat. Leave a field blank to keep it unchanged; zero is a valid direct value. The four totals are independent, and manual entries can be negative for testing corrections. **Reset to zero** clears the current day's totals.
+**Today’s macros** stays in a compact sidebar beside the assistant conversation on desktop. On smaller screens, a compact four-number summary sits above chat; tap **View details** or **Daily macros** to open the drawer containing goals, adjustments, logged meals, and personal memory. Close it with **Close** or Escape; drafts and expanded sections are retained. Open **Adjust totals manually** to add, subtract, or set any combination of calories, protein, carbs, and fat. Leave a field blank to keep it unchanged; zero is a valid direct value. The four totals are independent, and manual entries can be negative for testing corrections. **Reset to zero** clears the current day's totals.
 
 Open **Edit daily goals** to enter your own calorie, protein, carb, and fat goals. Save any combination; a blank field removes that goal, and zero is allowed. Each card shows the consumed amount, its goal, a progress bar, and the amount remaining or exceeded. Goals and consumed totals are independent: changing protein does not recalculate calories or another macro.
 
@@ -230,3 +230,9 @@ The JSON file contains `schema_version`, `source`, `menu_date`, `retrieved_at`, 
 - On October 19, 2026, six distinct official labels explicitly said nutrition information was unavailable. They account for 14 menu appearances with `null` nutrition fields in the saved test dataset.
 - A menu item may not exist at the requested hall or date. For example, the saved October 19 and 20 menus do not list a chicken breast at The Y. The assistant will request a more specific item or another date instead of using a different chicken dish silently.
 - This prototype uses name-based matching against local saved data, not ingredient recognition. Official menus can contain similar dishes; inspect the linked label when a selection matters.
+
+### Layout verification
+
+The conversation layout uses a native modal drawer (keyboard focus is contained while open and returns to its opener when closed). Mobile chat follows the visual viewport when the keyboard changes its height; 16px composer/form text avoids automatic input zoom. Short mobile viewports condense the macro summary further. Reduced-motion preferences disable panel and message animations.
+
+Frontend tests cover drawer navigation, preserving drafts and totals while collapsing panels, summary taps, composer resizing, and simulated keyboard viewport changes. Visual checks cover 1280×720 desktop, 834×900 tablet, 390×844 and 320×780 mobile, and a 390×420 keyboard-sized viewport. Physical iOS/Android keyboard behavior still requires testing on those devices.

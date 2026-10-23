@@ -4,8 +4,11 @@ const els = {
   browseTab: document.getElementById('browse-tab'),
   chatView: document.getElementById('chat-view'),
   chatTop: document.querySelector('.chat-top'),
-  trackerPanel: document.querySelector('.daily-tracker'),
+  trackerPanel: document.getElementById('daily-tracker'),
   trackerExpand: document.getElementById('tracker-expand'),
+  trackerToggle: document.getElementById('tracker-toggle'),
+  trackerDetails: document.getElementById('tracker-details'),
+  trackerDetailsClose: document.getElementById('tracker-details-close'),
   browseView: document.getElementById('browse-view'),
   toastStack: document.getElementById('toast-stack'),
   messages: document.getElementById('chat-messages'),
@@ -313,31 +316,61 @@ function scheduleTrackerRollover() {
     Math.max(1, MacroTracker.nextDayBoundary(new Date()) - Date.now() + 25));
 }
 
+function syncTrackerDetails() {
+  const open = els.trackerDetails.open;
+  els.trackerExpand.setAttribute('aria-expanded', String(open));
+  els.trackerTab.classList.toggle('active', open);
+  els.trackerTab.toggleAttribute('aria-current', open);
+  const chatting = !open && els.browseView.hidden;
+  els.chatTab.classList.toggle('active', chatting);
+  els.chatTab.toggleAttribute('aria-current', chatting);
+}
+
 function setTrackerExpanded(expanded) {
-  els.trackerPanel.classList.toggle('is-collapsed', !expanded);
-  els.trackerExpand.setAttribute('aria-expanded', String(expanded));
-  els.trackerExpand.firstChild.textContent = expanded ? 'Hide details ' : 'Show details ';
+  if (expanded && !els.trackerDetails.open) els.trackerDetails.showModal();
+  else if (!expanded && els.trackerDetails.open) els.trackerDetails.close();
+  syncTrackerDetails();
+}
+
+function setMacrosVisible(visible) {
+  els.trackerPanel.hidden = !visible;
+  els.chatView.classList.toggle('macros-hidden', !visible);
+  els.trackerToggle.classList.toggle('is-active', visible);
+  els.trackerToggle.setAttribute('aria-expanded', String(visible));
+  els.trackerToggle.setAttribute('aria-label', `${visible ? 'Hide' : 'Show'} today’s macro summary`);
+  els.trackerToggle.title = visible ? 'Hide macros' : 'Show macros';
 }
 
 function switchView(view) {
   const browsing = view === 'browse';
   els.chatView.hidden = browsing;
   els.browseView.hidden = !browsing;
-  els.chatTab.classList.toggle('active', view === 'chat');
-  els.trackerTab.classList.toggle('active', view === 'tracker');
   els.browseTab.classList.toggle('active', browsing);
-  els.chatTab.toggleAttribute('aria-current', view === 'chat');
-  els.trackerTab.toggleAttribute('aria-current', view === 'tracker');
   els.browseTab.toggleAttribute('aria-current', browsing);
-  if (window.matchMedia('(max-width: 900px)').matches) {
-    if (view === 'tracker') setTrackerExpanded(true);
-    if (view === 'chat') setTrackerExpanded(false);
-  }
-  const target = browsing ? els.browseView : view === 'tracker' ? els.trackerPanel : els.chatTop;
-  const scrollBehavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
-  requestAnimationFrame(() => target.scrollIntoView({block: 'start', behavior: scrollBehavior}));
+  if (view === 'tracker') setMacrosVisible(true);
+  setTrackerExpanded(view === 'tracker');
   if (browsing) els.search.focus({preventScroll: true});
   else if (view === 'chat') els.input.focus({preventScroll: true});
+}
+
+function resizeComposer() {
+  els.input.style.height = 'auto';
+  els.input.style.height = `${Math.min(128, Math.max(40, els.input.scrollHeight))}px`;
+}
+
+function syncChatViewport() {
+  const viewport = window.visualViewport;
+  if (!viewport) return;
+  const compact = window.matchMedia('(max-width: 900px)').matches;
+  // iOS can shrink/pan the visual viewport without resizing CSS viewport units.
+  document.documentElement.style.setProperty('--app-height', compact ? `${viewport.height}px` : '100dvh');
+  document.documentElement.style.setProperty('--app-top', compact ? `${Math.max(0, viewport.offsetTop)}px` : '0px');
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', syncChatViewport);
+  window.visualViewport.addEventListener('scroll', syncChatViewport);
+  window.addEventListener('resize', syncChatViewport);
+  syncChatViewport();
 }
 
 function formatAmount(value, unit = '') {
@@ -913,6 +946,7 @@ async function sendMessage(message) {
   appendBubble('user', message.trim(), reference);
   setReplyTarget(null);
   els.input.value = '';
+  resizeComposer();
   if (!conversationId) conversationId = crypto.randomUUID().replaceAll('-', '');
   try { window.localStorage.setItem('macromellow.conversation.v1', conversationId); } catch { /* Optional. */ }
   const requestId = crypto.randomUUID().replaceAll('-', '');
@@ -1180,7 +1214,15 @@ if (!trackerPersists) trackerMessage('Browser storage is unavailable; SQLite sti
 els.chatTab.addEventListener('click', () => switchView('chat'));
 els.trackerTab.addEventListener('click', () => switchView('tracker'));
 els.browseTab.addEventListener('click', () => switchView('browse'));
-els.trackerExpand.addEventListener('click', () => setTrackerExpanded(els.trackerPanel.classList.contains('is-collapsed')));
+els.trackerExpand.addEventListener('click', () => setTrackerExpanded(true));
+els.trackerDetailsClose.addEventListener('click', () => setTrackerExpanded(false));
+els.trackerDetails.addEventListener('close', syncTrackerDetails);
+els.trackerToggle.addEventListener('click', () => setMacrosVisible(els.trackerPanel.hidden));
+els.trackerPanel.addEventListener('click', event => {
+  if (window.matchMedia('(max-width: 900px)').matches && !event.target.closest('button, a, input, select, textarea')) setTrackerExpanded(true);
+});
+els.input.addEventListener('input', resizeComposer);
+els.input.addEventListener('focus', resizeComposer);
 els.newChat.addEventListener('click', () => {
   if (chatBusy || reactionBusy) return;
   mascot.reset();
@@ -1190,6 +1232,7 @@ els.newChat.addEventListener('click', () => {
   els.messages.replaceChildren();
   els.welcome.hidden = false;
   els.input.value = '';
+  resizeComposer();
   els.input.focus();
 });
 els.replyCancel.addEventListener('click', () => { setReplyTarget(null); els.input.focus(); });

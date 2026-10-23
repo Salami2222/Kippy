@@ -8,7 +8,8 @@ class Element {
     this.tagName = tag;
     this.children = [];
     this.dataset = {};
-    this.style = {};
+    this.style = {setProperty(name, value) { this[name] = value; }};
+    this.open = false;
     this.attributes = {};
     this.listeners = new Map();
     this.className = '';
@@ -54,6 +55,8 @@ class Element {
   get firstElementChild() { return this.children[0]; }
   get isConnected() { return Boolean(this.parent); }
   focus() { this.focused = true; }
+  showModal() { this.open = true; }
+  close() { this.open = false; this.emit('close'); }
   scrollIntoView() {}
   reset() {}
 }
@@ -76,7 +79,7 @@ function deferred() {
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-async function loadApp() {
+async function loadApp({compact = false, viewport = null} = {}) {
   let instant = new Date('2026-10-21T16:00:00Z').getTime();
   const fields = {calories: 0, protein_g: 0, carbohydrates_g: 0, fat_g: 0};
   let serverTracker = {date: '2026-10-21', totals: {...fields}, goals: {
@@ -91,6 +94,7 @@ async function loadApp() {
   };
   for (const id of ['progress-calories', 'progress-protein', 'progress-carbs', 'progress-fat']) get(id).append(new Element('i'));
   const label = new Element('span'); label.className = 'button-label'; get('refresh').append(label);
+  get('browse-view').hidden = true;
   get('tracker-expand').append(new Element('span'));
   const slots = [new Element(), new Element()];
   for (const slot of slots) { slot.dataset.mellowMascot = ''; slot.append(new Element('img')); nodes.push(slot); }
@@ -98,6 +102,7 @@ async function loadApp() {
   const selectorNodes = new Map();
   const documentListeners = new Map();
   const document = {
+    documentElement: new Element(),
     getElementById: get,
     createElement: tag => new Element(tag),
     createElementNS: (namespace, tag) => new Element(tag),
@@ -132,7 +137,7 @@ async function loadApp() {
     localStorage: {getItem: key => storage.get(key) ?? null,
       setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key)},
     crypto: {randomUUID: () => `test-${++uuid}`},
-    matchMedia: () => ({matches: false}), addEventListener() {},
+    matchMedia: () => ({matches: compact}), visualViewport: viewport, addEventListener() {},
     requestAnimationFrame: callback => callback(),
     setTimeout(callback, delay) { const id = ++timerId; timers.set(id, {callback, delay}); return id; },
     clearTimeout: id => timers.delete(id),
@@ -169,7 +174,7 @@ async function loadApp() {
   }
   await settle();
   return {
-    get, slots, profile, requests, clipboard, dialogs,
+    get, slots, profile, requests, clipboard, dialogs, document,
     setConfirmed: value => { confirmed = value; },
     setClipboardError: error => { clipboardError = error; },
     setStateHandler: handler => { stateHandler = handler; },
