@@ -166,6 +166,7 @@ async function loadApp({compact = false, viewport = null} = {}) {
           data = {active: payload.active};
         }
       }
+      else if (url.startsWith('/api/tracker/') && stateHandler) data = await stateHandler(url, JSON.parse(options.body));
       else throw new Error(`Unexpected request: ${url}`);
       return {ok: true, status: 200, json: async () => data};
     }

@@ -288,8 +288,8 @@ test('dashboard distinguishes calorie allowance and positive protein completion 
     app.applyTracker({totals: {calories, protein_g, carbohydrates_g: 0, fat_g: 0}, goals});
     assert.equal(app.get('balance-calories').textContent, calorieText);
     assert.equal(app.get('balance-protein').textContent, proteinText);
-    assert.equal(app.get('goal-calories').textContent, `Limit: ${calories.toLocaleString('en-US')} / 2,500 kcal`);
-    assert.equal(app.get('goal-protein').textContent, `Goal: ${protein_g} / 180 g`);
+    assert.equal(app.get('goal-calories').textContent, 'Limit: 2,500 kcal');
+    assert.equal(app.get('goal-protein').textContent, 'Goal: 180 g');
     assert.equal(app.get('progress-protein').classList.contains('completed'), complete);
     assert.equal(app.get('balance-protein').classList.contains('completed'), complete);
     assert.equal(app.get('balance-protein').classList.contains('exceeded'), false);

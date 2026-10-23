@@ -1,12 +1,21 @@
 const els = {
   chatTab: document.getElementById('chat-tab'),
-  trackerTab: document.getElementById('tracker-tab'),
   browseTab: document.getElementById('browse-tab'),
   chatView: document.getElementById('chat-view'),
   chatTop: document.querySelector('.chat-top'),
-  trackerPanel: document.getElementById('daily-tracker'),
   trackerExpand: document.getElementById('tracker-expand'),
-  trackerToggle: document.getElementById('tracker-toggle'),
+  adjustMacros: document.getElementById('adjust-macros'),
+  editTargets: document.getElementById('edit-daily-targets'),
+  adjustDialog: document.getElementById('macro-adjust'),
+  targetsDialog: document.getElementById('daily-targets'),
+  adjustClose: document.getElementById('macro-adjust-close'),
+  targetsClose: document.getElementById('daily-targets-close'),
+  adjustCancel: document.getElementById('adjust-cancel'),
+  targetsCancel: document.getElementById('targets-cancel'),
+  adjustApply: document.getElementById('macro-apply'),
+  targetsSave: document.getElementById('targets-save'),
+  adjustError: document.getElementById('adjust-error'),
+  targetsError: document.getElementById('targets-error'),
   trackerDetails: document.getElementById('tracker-details'),
   trackerDetailsClose: document.getElementById('tracker-details-close'),
   browseView: document.getElementById('browse-view'),
@@ -34,7 +43,6 @@ const els = {
     carbohydrates_g: document.getElementById('progress-carbs'), fat_g: document.getElementById('progress-fat')},
   goalBalances: {calories: document.getElementById('balance-calories'), protein_g: document.getElementById('balance-protein'),
     carbohydrates_g: document.getElementById('balance-carbs'), fat_g: document.getElementById('balance-fat')},
-  goalControls: document.getElementById('goal-controls'),
   goalForm: document.getElementById('goal-form'),
   goalInputs: {calories: document.getElementById('goal-input-calories'), protein_g: document.getElementById('goal-input-protein'),
     carbohydrates_g: document.getElementById('goal-input-carbs'), fat_g: document.getElementById('goal-input-fat')},
@@ -295,7 +303,7 @@ function renderTracker() {
     const isProtein = field === 'protein_g';
     const targetLabel = isCalories ? 'Limit' : 'Goal';
     els.goalValues[field].textContent = goal === null ? (isCalories ? 'No limit set' : 'No goal set') :
-      isCalories || isProtein ? `${targetLabel}: ${trackerNumber(consumed)} / ${trackerNumber(goal)} ${unit}` :
+      isCalories || isProtein ? `${targetLabel}: ${trackerNumber(goal)} ${unit}` :
         `Goal ${trackerNumber(goal)} ${unit}`;
     const bar = els.goalBars[field];
     const balance = els.goalBalances[field];
@@ -349,40 +357,44 @@ function scheduleTrackerRollover() {
 }
 
 function syncTrackerDetails() {
-  const open = els.trackerDetails.open;
-  els.trackerExpand.setAttribute('aria-expanded', String(open));
-  els.trackerTab.classList.toggle('active', open);
-  els.trackerTab.toggleAttribute('aria-current', open);
-  const chatting = !open && els.browseView.hidden;
-  els.chatTab.classList.toggle('active', chatting);
-  els.chatTab.toggleAttribute('aria-current', chatting);
+  els.trackerExpand.setAttribute('aria-expanded', String(els.trackerDetails.open));
+}
+
+function openMacroDialog(dialog) {
+  for (const other of [els.adjustDialog, els.targetsDialog, els.trackerDetails]) {
+    if (other !== dialog && other.open) other.close();
+  }
+  if (!dialog.open) dialog.showModal();
 }
 
 function setTrackerExpanded(expanded) {
-  if (expanded && !els.trackerDetails.open) els.trackerDetails.showModal();
-  else if (!expanded && els.trackerDetails.open) els.trackerDetails.close();
+  if (expanded) openMacroDialog(els.trackerDetails);
+  else if (els.trackerDetails.open) els.trackerDetails.close();
   syncTrackerDetails();
 }
 
-function setMacrosVisible(visible) {
-  els.trackerPanel.hidden = !visible;
-  els.chatView.classList.toggle('macros-hidden', !visible);
-  els.trackerToggle.classList.toggle('is-active', visible);
-  els.trackerToggle.setAttribute('aria-expanded', String(visible));
-  els.trackerToggle.setAttribute('aria-label', `${visible ? 'Hide' : 'Show'} today’s macro summary`);
-  els.trackerToggle.title = visible ? 'Hide macros' : 'Show macros';
+function setMacroFormBusy(form, buttons, busy) {
+  form.dataset.busy = String(busy);
+  form.setAttribute('aria-busy', String(busy));
+  buttons.forEach(button => { button.disabled = busy; });
+}
+
+function macroFormError(element, message) {
+  element.textContent = message;
+  element.hidden = !message;
 }
 
 function switchView(view) {
   const browsing = view === 'browse';
+  [els.adjustDialog, els.targetsDialog, els.trackerDetails].forEach(dialog => { if (dialog.open) dialog.close(); });
   els.chatView.hidden = browsing;
   els.browseView.hidden = !browsing;
   els.browseTab.classList.toggle('active', browsing);
   els.browseTab.toggleAttribute('aria-current', browsing);
-  if (view === 'tracker') setMacrosVisible(true);
-  setTrackerExpanded(view === 'tracker');
+  els.chatTab.classList.toggle('active', !browsing);
+  els.chatTab.toggleAttribute('aria-current', !browsing);
   if (browsing) els.search.focus({preventScroll: true});
-  else if (view === 'chat') els.input.focus({preventScroll: true});
+  else els.input.focus({preventScroll: true});
 }
 
 function resizeComposer() {
@@ -397,6 +409,7 @@ function syncChatViewport() {
   // iOS can shrink/pan the visual viewport without resizing CSS viewport units.
   document.documentElement.style.setProperty('--app-height', compact ? `${viewport.height}px` : '100dvh');
   document.documentElement.style.setProperty('--app-top', compact ? `${Math.max(0, viewport.offsetTop)}px` : '0px');
+  requestAnimationFrame(resizeComposer);
 }
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', syncChatViewport);
@@ -1175,39 +1188,56 @@ async function syncStatus() {
 els.search.addEventListener('input', () => { visibleLimit = 100; render(); });
 els.trackerForm.addEventListener('submit', async event => {
   event.preventDefault();
+  if (els.trackerForm.dataset.busy === 'true') return;
+  macroFormError(els.adjustError, '');
   const values = {};
   for (const field of MacroTracker.FIELDS) {
     const raw = els.trackerInputs[field].value.trim();
     if (raw !== '') values[field] = Number(raw);
   }
+  const buttons = [els.adjustApply, els.adjustCancel, els.adjustClose, els.trackerReset];
+  setMacroFormBusy(els.trackerForm, buttons, true);
   try {
     const updated = await stateRequest('/api/tracker/adjust', {mode: els.trackerMode.value, values});
     els.trackerForm.reset();
     applyBackendTracker(updated);
+    els.adjustDialog.close();
     trackerMessage('Today’s totals updated.');
-  } catch (error) { trackerMessage(error.message, true); }
+  } catch (error) { macroFormError(els.adjustError, error.message); trackerMessage(error.message, true); }
+  finally { setMacroFormBusy(els.trackerForm, buttons, false); }
 });
-els.goalControls.addEventListener('toggle', () => { if (els.goalControls.open) populateGoalInputs(); });
 els.goalForm.addEventListener('submit', async event => {
   event.preventDefault();
+  if (els.goalForm.dataset.busy === 'true') return;
+  macroFormError(els.targetsError, '');
   const changes = {};
   for (const field of MacroTracker.FIELDS) {
     const raw = els.goalInputs[field].value.trim();
     changes[field] = raw === '' ? null : Number(raw);
   }
+  const buttons = [els.targetsSave, els.targetsCancel, els.targetsClose];
+  setMacroFormBusy(els.goalForm, buttons, true);
   try {
     const updated = await stateRequest('/api/tracker/goals', {goals: changes});
     applyBackendTracker(updated);
-    trackerMessage('Calorie limit and macro goals saved. They will stay when today’s totals reset.');
-  } catch (error) { trackerMessage(error.message, true); }
+    els.targetsDialog.close();
+    trackerMessage('Daily targets saved. Today’s totals are unchanged.');
+  } catch (error) { macroFormError(els.targetsError, error.message); trackerMessage(error.message, true); }
+  finally { setMacroFormBusy(els.goalForm, buttons, false); }
 });
 els.trackerReset.addEventListener('click', async () => {
+  if (els.trackerForm.dataset.busy === 'true' || !confirm('Reset today’s calories, protein, carbs, and fat to zero? Your daily targets and meal history will stay saved.')) return;
+  macroFormError(els.adjustError, '');
+  const buttons = [els.adjustApply, els.adjustCancel, els.adjustClose, els.trackerReset];
+  setMacroFormBusy(els.trackerForm, buttons, true);
   try {
     const updated = await stateRequest('/api/tracker/reset', {});
     els.trackerForm.reset();
     applyBackendTracker(updated);
+    els.adjustDialog.close();
     trackerMessage('Today’s totals reset to zero.');
-  } catch (error) { trackerMessage(error.message, true); }
+  } catch (error) { macroFormError(els.adjustError, error.message); trackerMessage(error.message, true); }
+  finally { setMacroFormBusy(els.trackerForm, buttons, false); }
 });
 els.memoryCancel.addEventListener('click', () => { memoryEditingId = null; els.memoryForm.reset(); els.memoryCancel.hidden = true; });
 els.memoryForm.addEventListener('submit', async event => {
@@ -1234,15 +1264,21 @@ setInterval(() => { if (!document.hidden) checkAI(); }, 30000);
 scheduleTrackerRollover();
 if (!trackerPersists) trackerMessage('Browser storage is unavailable; SQLite still saves totals, calorie limit, and macro goals locally.', true);
 els.chatTab.addEventListener('click', () => switchView('chat'));
-els.trackerTab.addEventListener('click', () => switchView('tracker'));
 els.browseTab.addEventListener('click', () => switchView('browse'));
 els.trackerExpand.addEventListener('click', () => setTrackerExpanded(true));
 els.trackerDetailsClose.addEventListener('click', () => setTrackerExpanded(false));
 els.trackerDetails.addEventListener('close', syncTrackerDetails);
-els.trackerToggle.addEventListener('click', () => setMacrosVisible(els.trackerPanel.hidden));
-els.trackerPanel.addEventListener('click', event => {
-  if (window.matchMedia('(max-width: 900px)').matches && !event.target.closest('button, a, input, select, textarea')) setTrackerExpanded(true);
-});
+els.adjustMacros.addEventListener('click', () => { macroFormError(els.adjustError, ''); openMacroDialog(els.adjustDialog); els.adjustMacros.setAttribute('aria-expanded', 'true'); });
+els.editTargets.addEventListener('click', () => { populateGoalInputs(); macroFormError(els.targetsError, ''); openMacroDialog(els.targetsDialog); els.editTargets.setAttribute('aria-expanded', 'true'); });
+for (const [dialog, form, opener, close, cancel] of [
+  [els.adjustDialog, els.trackerForm, els.adjustMacros, els.adjustClose, els.adjustCancel],
+  [els.targetsDialog, els.goalForm, els.editTargets, els.targetsClose, els.targetsCancel]
+]) {
+  close.addEventListener('click', () => { if (form.dataset.busy !== 'true') dialog.close(); });
+  cancel.addEventListener('click', () => { if (form.dataset.busy !== 'true') dialog.close(); });
+  dialog.addEventListener('cancel', event => { if (form.dataset.busy === 'true') event.preventDefault(); });
+  dialog.addEventListener('close', () => opener.setAttribute('aria-expanded', 'false'));
+}
 els.input.addEventListener('input', resizeComposer);
 els.input.addEventListener('focus', resizeComposer);
 els.newChat.addEventListener('click', () => {

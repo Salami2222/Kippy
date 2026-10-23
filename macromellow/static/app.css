@@ -95,12 +95,11 @@ button, input, select, textarea, summary, a { -webkit-tap-highlight-color: trans
 /* Assistant and persistent dashboard */
 .chat-view {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 240px;
+  grid-template-columns: minmax(0, 1fr) 280px;
   grid-template-rows: auto minmax(0, 1fr) auto auto auto;
   min-height: 0;
   height: auto;
   margin-bottom: 0;
-  transition: grid-template-columns 180ms var(--ease);
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 22px;
@@ -108,11 +107,8 @@ button, input, select, textarea, summary, a { -webkit-tap-highlight-color: trans
   box-shadow: 0 4px 18px rgb(var(--shadow-color) / .045);
   animation: view-in .22s var(--ease) both;
 }
-.chat-view.macros-hidden { grid-template-columns: minmax(0, 1fr) 0px; }
 .chat-view, .browse-view { scroll-margin-top: 56px; }
 .chat-header-actions { display: flex; align-items: center; gap: 6px; }
-.tracker-toggle svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
-.tracker-toggle.is-active { background: var(--surface-soft); color: var(--accent-dark); }
 .chat-top { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 3px 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .chat-identity { display: flex; align-items: center; gap: 9px; min-width: 0; }
 /* One fixed header slot. Per-atlas geometry reclaims transparent padding while
@@ -274,25 +270,33 @@ button, input, select, textarea, summary, a { -webkit-tap-highlight-color: trans
 .debug-candidate a { color: var(--accent-dark); font-weight: 700; text-decoration: none; white-space: nowrap; }
 
 /* Daily macros */
-.daily-tracker { grid-column: 2; grid-row: 1 / 6; min-width: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px; border-left: 1px solid var(--line); background: var(--canvas); }
-.tracker-heading { display: flex; justify-content: space-between; align-items: start; gap: 8px; margin-bottom: 9px; }
-.tracker-heading h3 { margin: 0; font: 800 15px/1.25 var(--rounded); letter-spacing: -.025em; }
-.tracker-heading h3 span { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; font-weight: 500; letter-spacing: 0; }
-.tracker-summary-note { margin: 8px 0 0; color: var(--quiet); font-size: 9px; text-align: center; }
-.tracker-expand { display: flex; justify-content: center; width: 100%; margin-top: 10px; align-items: center; gap: 5px; min-height: 32px; padding: 4px 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--accent-dark); font-size: 10px; font-weight: 750; transition: background .2s var(--ease), transform .28s var(--spring); }
-.tracker-expand span { font-size: 16px; line-height: 1; transition: transform .18s var(--ease); }
-.tracker-totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.tracker-stat { min-width: 0; min-height: 66px; padding: 8px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: inset 0 1px var(--surface), 0 4px 11px rgb(var(--shadow-color) / 0.043); }
+/* Flexible rows give calories and protein the visual priority without fixed card heights. */
+.daily-tracker { grid-column: 2; grid-row: 1 / 6; display: grid; grid-template-rows: auto minmax(min-content, 1fr) auto; gap: 12px; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px; border-left: 1px solid var(--line); background: var(--canvas); }
+.tracker-heading { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+.tracker-heading h3 { margin: 0; font: 800 16px/1.25 var(--rounded); letter-spacing: -.025em; }
+.tracker-heading h3 span { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 500; letter-spacing: 0; }
+.tracker-summary-note { margin: 0; color: var(--quiet); font-size: 10px; text-align: center; }
+.tracker-footer { display: grid; gap: 7px; }
+.tracker-footer > button { width: 100%; min-height: 40px; font-size: 12px; }
+.target-button { border: 1px solid var(--line-strong); background: var(--surface); }
+.tracker-expand { display: flex; justify-content: center; align-items: center; gap: 5px; padding: 4px 8px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 700; }
+.tracker-footer .tracker-expand { min-height: 28px; font-size: 11px; }
+.tracker-expand:hover { background: var(--accent-soft); color: var(--accent-dark); }
+.tracker-expand span { font-size: 14px; line-height: 1; }
+.tracker-totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(min-content, 1.7fr) minmax(min-content, 1fr); gap: 9px; }
+.tracker-stat { display: flex; flex-direction: column; min-width: 0; padding: 12px 10px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: inset 0 1px var(--surface), 0 4px 11px rgb(var(--shadow-color) / 0.043); }
+.tracker-stat:nth-child(-n+2) { border-color: var(--line-strong); background: linear-gradient(160deg, var(--surface), var(--canvas)); }
 .tracker-stat:first-child { border-top: 2px solid var(--accent); }
-.tracker-stat strong { display: block; overflow-wrap: anywhere; font: 800 21px/1.1 var(--rounded); letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.tracker-stat strong { display: block; overflow-wrap: anywhere; font: 800 26px/1.1 var(--rounded); letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.tracker-stat:nth-child(-n+2) strong { font-size: 34px; }
 .tracker-stat strong.value-change { animation: value-tick .42s var(--spring); }
-.tracker-stat span { display: block; margin-top: 3px; color: var(--ink); font-size: 10px; font-weight: 700; }
+.tracker-stat span { display: block; margin-top: 5px; margin-bottom: 12px; color: var(--ink); font-size: 12px; font-weight: 700; }
 .tracker-stat small { color: var(--quiet); font-size: 9px; font-weight: 500; }
-.tracker-goal-line { margin-top: 5px; color: var(--muted); font-size: 10px; font-weight: 650; }
+.tracker-goal-line { margin-top: auto; color: var(--muted); font-size: 10px; font-weight: 650; }
 .tracker-progress { height: 5px; margin-top: 5px; overflow: hidden; border-radius: 99px; background: var(--surface-soft); box-shadow: inset 0 1px 2px rgb(var(--shadow-color) / 0.075); }
 .tracker-progress[hidden] { display: none; }
 .tracker-progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--accent); box-shadow: inset 0 1px var(--highlight); transition: width .55s var(--ease); }
-.tracker-balance { margin-top: 5px; color: var(--ink); font-size: 10px; font-weight: 700; }
+.tracker-balance { margin-top: 6px; color: var(--ink); font-size: 11px; line-height: 1.4; font-weight: 700; }
 .tracker-balance:empty { display: none; }
 .tracker-balance.exceeded { color: var(--accent-dark); }
 #balance-calories.exceeded { color: var(--amber); }
@@ -416,28 +420,51 @@ body:has(#chat-view:not([hidden])) { overflow: hidden; }
 .tracker-drawer-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .tracker-drawer-heading h2 { margin: 0; font: 800 19px/1.2 var(--rounded); color: var(--accent-dark); }
 .tracker-drawer-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px 14px 18px; }
+/* Focused native dialogs retain keyboard focus and keep forms separate from records. */
+.macro-dialog { position: fixed; inset: var(--app-top, 0px) 0 max(0px, calc(100dvh - var(--app-height, 100dvh) - var(--app-top, 0px))); margin: auto; width: min(460px, calc(100vw - 24px)); height: fit-content; max-width: none; max-height: calc(var(--app-height, 100dvh) - 24px); padding: 0; border: 1px solid var(--line-strong); border-radius: 22px; background: var(--surface); color: var(--ink); overflow: hidden; box-shadow: 0 16px 60px rgb(var(--shadow-color) / .18); }
+.macro-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); animation: panel-in .18s var(--ease); }
+.macro-dialog::backdrop { background: rgb(var(--shadow-color) / .22); }
+.macro-dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px; }
+.macro-dialog label { display: block; color: var(--ink); font-size: 12px; font-weight: 700; }
+.macro-dialog label small { color: var(--muted); font-weight: 500; }
+.macro-dialog .form-help, .macro-dialog .goal-help { margin: 0 0 16px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.macro-dialog .tracker-mode { display: block !important; margin-bottom: 15px; }
+.macro-dialog .tracker-mode select { width: 100%; margin-top: 6px; }
+.macro-dialog input, .macro-dialog select { min-height: 44px; font-size: 16px; }
+.macro-dialog .tracker-inputs { gap: 14px; }
+.macro-dialog .tracker-actions { margin-top: 18px; }
+.macro-dialog .tracker-actions button { min-height: 42px; font-size: 12px; }
+.reset-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); }
+.reset-row span { color: var(--muted); font-size: 11px; }
+.reset-button { min-height: 36px; padding: 5px 0; border: 0; border-radius: 8px; background: transparent; color: var(--error); font-size: 12px; font-weight: 700; box-shadow: none; }
+.reset-button:hover { text-decoration: underline; }
+.dialog-error { padding: 10px; border: 1px solid var(--error-line); border-radius: 12px; background: var(--error-bg); color: var(--error); font-size: 12px; line-height: 1.5; }
 @keyframes drawer-in { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
 @media (max-width: 1040px) {
   .controls { grid-template-columns: minmax(220px, 2fr) minmax(160px, 1fr) minmax(160px, 1fr); }
   .refresh-button { grid-column: 1 / -1; }
 }
 @media (max-width: 900px) {
-  .chat-view, .chat-view.macros-hidden { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto auto; }
+  .chat-view { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto auto; }
   .chat-top { grid-column: 1; grid-row: 1; }
-  .daily-tracker { grid-column: 1; grid-row: 2; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 8px; padding: 6px 10px 8px; border-left: 0; border-bottom: 1px solid var(--line); overflow: hidden; }
-  .tracker-heading { align-self: center; margin: 0; }
-  .tracker-heading h3 { font-size: 12px; }
-  .tracker-heading h3 span, .tracker-summary-note { display: none; }
-  .tracker-expand { grid-column: 2; grid-row: 1; width: auto; min-height: 30px; margin: 0; padding: 2px 8px; }
-  .tracker-totals { grid-column: 1 / -1; grid-row: 2; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
-  .tracker-stat { min-height: 0; padding: 5px 7px; border-radius: 11px; box-shadow: none; }
-  .tracker-stat strong { font-size: 18px; }
-  .tracker-stat span { margin-top: 1px; font-size: 9px; }
+  .daily-tracker { grid-column: 1; grid-row: 2; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto auto; gap: 7px; padding: 8px 10px; border-left: 0; border-bottom: 1px solid var(--line); max-height: min(280px, calc(var(--app-height, 100dvh) * .38)); }
+  .tracker-heading { grid-column: 1; grid-row: 1; align-self: center; }
+  .tracker-heading h3 { display: flex; align-items: baseline; gap: 9px; font-size: 12px; }
+  .tracker-heading h3 span { margin: 0; font-size: 10px; }
+  .tracker-summary-note { display: none; }
+  .tracker-totals { grid-column: 1 / -1; grid-row: 2; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: auto; gap: 5px; }
+  .tracker-stat { padding: 7px; border-radius: 12px; box-shadow: none; }
+  .tracker-stat strong { font-size: 20px; }
+  .tracker-stat:nth-child(-n+2) strong { font-size: clamp(18px, 6vw, 24px); }
+  .tracker-stat span { margin: 3px 0 7px; font-size: 10px; }
   .tracker-stat small { font-size: 8px; }
-  .tracker-goal-line, .tracker-balance { display: none; }
-  .tracker-stat:nth-child(-n+2) :is(.tracker-goal-line, .tracker-balance) { display: block; font-size: 9px; line-height: 1.3; }
-  .tracker-stat:nth-child(-n+2) .tracker-balance:empty { display: none; }
-  .tracker-progress { height: 3px; margin-top: 3px; }
+  .tracker-goal-line, .tracker-balance { font-size: 10px; line-height: 1.35; }
+  .tracker-progress { height: 4px; margin-top: 4px; }
+  .tracker-footer { display: contents; }
+  #adjust-macros { grid-column: 1; grid-row: 3; }
+  #edit-daily-targets { grid-column: 2; grid-row: 3; }
+  .tracker-footer > button { min-height: 38px; padding: 5px 8px; font-size: 11px; }
+  .tracker-footer .tracker-expand { grid-column: 2; grid-row: 1; justify-self: end; width: auto; min-height: 30px; font-size: 10px; }
   .chat-messages, .chat-welcome { grid-row: 3; }
   .chat-loading { grid-row: 4; }
   .composer { grid-row: 5; }
@@ -472,6 +499,8 @@ body:has(#chat-view:not([hidden])) { overflow: hidden; }
   .tab { flex: 1; min-height: 36px; gap: 5px; min-width: 0; padding: 0 7px; font-size: 11px; }
   .tab svg { width: 14px; height: 14px; }
   .chat-view { border-radius: 17px; }
+  .tracker-heading h3 { display: block; }
+  .tracker-heading h3 span { display: block; margin-top: 3px; }
   .chat-top { padding: 2px 9px; gap: 5px; }
   .chat-top h2 { font-size: 16px; }
   .chat-identity { gap: 5px; }
@@ -481,7 +510,6 @@ body:has(#chat-view:not([hidden])) { overflow: hidden; }
   .chat-top .mellow-mascot[data-burned="true"]:is([data-state="thinking"], [data-state="talking"]) { --burn-width: 66.84px; --burn-height: 59.9px; --burn-top: 1.13px; --burn-left: 1.54px; }
   .chat-header-actions { gap: 4px; }
   .chat-header-actions .quiet-button { min-height: 32px; padding: 4px 6px; font-size: 10px; }
-  .tracker-toggle svg { width: 13px; height: 13px; }
   .chat-messages { padding: 10px 10px 8px; }
   .message { padding: 12px 13px; }
   .chat-welcome { padding: 10px 12px; }
@@ -503,13 +531,7 @@ body:has(#chat-view:not([hidden])) { overflow: hidden; }
 }
 /* Keep room for the feed when a mobile keyboard or landscape view reduces height. */
 @media (max-width: 900px) and (max-height: 560px) {
-  .daily-tracker { grid-template-columns: minmax(0, 1fr) 68px; gap: 4px; padding: 5px 8px; }
-  .tracker-heading { display: none; }
-  .tracker-totals { grid-column: 1; grid-row: 1; gap: 4px; }
-  .tracker-expand { grid-column: 2; grid-row: 1; padding: 4px; font-size: 9px; }
-  .tracker-expand span { display: none; }
-  .tracker-stat { padding: 3px 5px; }
-  .tracker-stat strong { font-size: 16px; }
+  .daily-tracker { max-height: calc(var(--app-height, 100dvh) * .3); }
   .chat-footnote { display: none; }
 }
 /* Reserve a stable action gutter: revealing icons never changes a bubble's size. */
