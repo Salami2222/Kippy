@@ -277,7 +277,7 @@ class HappyBounceAssetTests(unittest.TestCase):
     def test_twelve_frames_atlas_timing_css_and_reduced_motion(self):
         root = Path(__file__).resolve().parents[1] / 'macromellow/static'
         assets = root / 'assets/mellow'
-        metadata = json.loads((assets / 'happy-bounce-animation.json').read_text())
+        metadata = json.loads((assets / 'happy-bounce-animation.json').read_text(encoding="utf-8"))
         self.assertEqual(metadata['frame_count'], 12)
         self.assertEqual(sum(metadata['durations_ms']), 1685)
         self.assertFalse(metadata['loop'])
@@ -285,17 +285,17 @@ class HappyBounceAssetTests(unittest.TestCase):
             data = (assets / f'{name}.png').read_bytes()
             self.assertEqual(struct.unpack('>II', data[16:24]), (1448, 1086) if name.endswith('atlas') else (362, 362))
             self.assertEqual(data[25], 6)  # RGBA, including original transparent pixels.
-        css = (root / 'app.css').read_text()
+        css = (root / 'app.css').read_text(encoding="utf-8")
         animation = css.split('@keyframes mellow-happy {', 1)[1].split('\n}', 1)[0]
         elapsed = 0
         for index, duration in enumerate(metadata['durations_ms']):
             self.assertIn(f'{elapsed / 1685 * 100:.8f}% {{ background-position: calc(var(--happy-size) * {-(index % 4)}) calc(var(--happy-size) * {-(index // 4)}); }}', animation)
             elapsed += duration
         self.assertIn('mellow-happy 1685ms step-end 1 both', css)
-        self.assertIn('CELEBRATION_DURATION = 1685', (root / 'mascot.js').read_text())
+        self.assertIn('CELEBRATION_DURATION = 1685', (root / 'mascot.js').read_text(encoding="utf-8"))
         reduced = css.split('@media (prefers-reduced-motion: reduce)', 1)[1]
         self.assertIn('animation: none !important; background-position: 0 0 !important', reduced)
-        self.assertNotIn('happy-bounce-preview.gif', (root / 'app.js').read_text())
+        self.assertNotIn('happy-bounce-preview.gif', (root / 'app.js').read_text(encoding="utf-8"))
 
     def test_every_production_asset_has_explicit_route(self):
         from macromellow.web import STATIC_ROUTES
