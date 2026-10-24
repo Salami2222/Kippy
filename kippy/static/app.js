@@ -91,7 +91,9 @@
         } catch(error) {notice(error.message);}
         finally {state.uploads--;$('send').disabled=state.busy;$('new-chat').disabled=state.busy;renderLists();renderSelected();}
       });
-      label.append(check,element('span','',file.name)); top.append(label);
+      row.dataset.status=file.status;row.dataset.selected=String(check.checked);
+      const type=element('span','file-type',(file.type||file.name.split('.').pop()).toUpperCase());type.setAttribute('aria-hidden','true');
+      label.append(check,type,element('span','',file.name)); top.append(label);
       if(file.id) {const remove=button('×','delete-button',async()=>{
         if(!confirm(`Remove “${file.name}” from the library and all conversations? Existing answers remain saved.`)) return;
         try {await api(`/api/materials/${file.id}`,{method:'DELETE'}); await loadMaterials(); if(state.conversation) state.conversation=await api(`/api/conversations/${state.conversation.id}`); renderLists();renderSelected();}catch(error){notice(error.message);}
@@ -184,6 +186,10 @@
     try {const status=await api('/api/ollama/status');$('connection').textContent=status.connected&&status.model_available?'Qwen connected':'Qwen offline';$('connection').title=status.message;$('connection').classList.toggle('ready',status.connected&&status.model_available);}
     catch{$('connection').textContent='Connection unavailable';$('connection').classList.remove('ready');}
   }
+  document.querySelectorAll('[data-prompt]').forEach(chip=>chip.addEventListener('click',()=>{
+    if(state.busy||state.uploads)return;
+    $('message').value=chip.dataset.prompt;resize();$('message').focus();
+  }));
   $('composer').addEventListener('submit',submit);$('message').addEventListener('input',resize);
   $('message').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('composer').requestSubmit();}});
   $('new-chat').addEventListener('click',newChat);$('notice-close').addEventListener('click',()=>notice(''));

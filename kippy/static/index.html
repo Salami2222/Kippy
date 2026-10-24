@@ -15,8 +15,8 @@
     <div class="brand-row"><a class="brand" href="/">kippy<span>YOUR STUDY COMPANION</span></a><button id="sidebar-close" class="icon-button" aria-label="Collapse sidebar" title="Collapse sidebar">‹</button></div>
     <button id="new-chat" class="new-chat">＋ New chat</button>
     <div class="sidebar-scroll">
-      <section><h2>Conversations</h2><div id="conversations" class="conversation-list"></div></section>
-      <section class="library"><div class="section-row"><h2>Materials</h2><button id="upload-library" class="text-button">＋ Upload</button></div>
+      <section><h2>Recent conversations</h2><div id="conversations" class="conversation-list"></div></section>
+      <section class="library"><div class="section-row"><h2>Library</h2><button id="upload-library" class="text-button">＋ Upload</button></div>
         <p class="library-help">Select files to use in this chat.</p><div id="materials" class="material-list"></div>
       </section>
     </div>
@@ -26,13 +26,13 @@
     <header class="chat-header"><div class="header-left"><button id="sidebar-open" class="icon-button" aria-label="Expand sidebar" title="Expand sidebar" hidden>☰</button><h1 id="conversation-title">New chat</h1></div><div id="connection" class="connection" role="status">Checking Qwen…</div></header>
     <div id="notice" class="notice" role="alert" hidden><span id="notice-text"></span><button id="notice-close" aria-label="Dismiss message">×</button></div>
     <div id="feed" class="feed" role="log" aria-label="Conversation" aria-live="polite">
-      <section id="empty" class="empty"><p class="eyebrow">A LITTLE CLARITY GOES A LONG WAY</p><h2>What would you like<br>to study today?</h2><p>Work through a problem, unpack a concept, or upload your lecture materials. We’ll take it one step at a time.</p><button id="upload-empty" class="soft-button">＋ Add lecture materials</button><small>Text-based sources, thoughtful explanations.<br>Images and scanned pages need OCR first.</small></section>
+      <section id="empty" class="empty"><h2>Let's focus.</h2><p>Make every study session count.</p><div class="suggestions" aria-label="Study suggestions"><button class="suggestion" data-prompt="Create a study guide from my selected materials.">Create a study guide</button><button class="suggestion" data-prompt="Review my selected notes and summarize the key ideas.">Review my notes</button><button class="suggestion" data-prompt="Explain a concept: ">Explain a concept</button></div><button id="upload-empty" class="soft-button">＋ Add lecture materials</button></section>
       <div id="messages" class="messages"></div>
       <div id="thinking" class="thinking" role="status" hidden><i></i><span>Kippy is working through your question…</span></div>
     </div>
     <div class="composer-area">
       <div id="selected-materials" class="selected-materials" aria-label="Selected materials"></div>
-      <form id="composer" class="composer"><label for="message" class="sr-only">Message Kippy</label><textarea id="message" rows="1" maxlength="8000" placeholder="Ask Kippy anything you’re studying…" required></textarea><div class="composer-bottom"><button id="attach" class="icon-button" type="button" aria-label="Upload lecture materials" title="Upload lecture materials">＋</button><span class="composer-hint">Enter to send · Shift + Enter for a new line</span><button id="send" type="submit">Send ↑</button></div></form>
+      <form id="composer" class="composer"><label for="message" class="sr-only">Message Kippy</label><textarea id="message" rows="1" maxlength="8000" placeholder="Ask Kippy anything..." required></textarea><div class="composer-bottom"><button id="attach" class="icon-button" type="button" aria-label="Upload lecture materials" title="Upload lecture materials">＋</button><span class="composer-hint">Enter to send · Shift + Enter for a new line</span><button id="send" type="submit">Send ↑</button></div></form>
       <p class="footnote">Kippy can make mistakes. Check important details against your materials.</p>
     </div>
     <div id="drop-hint" class="drop-hint" hidden>Drop lecture materials to upload</div>

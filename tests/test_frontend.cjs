@@ -6,9 +6,9 @@ const {JSDOM} = require('jsdom');
 const {api,validateFile,requestPayload,sendTurn} = require('../kippy/static/app.js');
 const root = path.resolve(__dirname,'../kippy/static');
 const settle = async()=>{for(let i=0;i<6;i++)await new Promise(resolve=>setImmediate(resolve));};
-async function load({offline=false}={}) {
+async function load({offline=false,initialMaterials=[]}={}) {
   const dom=new JSDOM(fs.readFileSync(path.join(root,'index.html'),'utf8'),{url:'http://localhost:8000',runScripts:'outside-only'});
-  const w=dom.window;let serial=0;const conversations=[];const materials=[];const requests=[];let chatResolve=null;
+  const w=dom.window;let serial=0;const conversations=[];const materials=[...initialMaterials];const requests=[];let chatResolve=null;
   w.matchMedia=()=>({matches:false});w.requestAnimationFrame=cb=>cb();w.confirm=()=>true;
   const intervals=[];w.setInterval=cb=>intervals.push(cb);w.navigator.clipboard={writeText:async text=>{w.copied=text;}};
   w.fetch=async(url,options={})=>{
@@ -108,4 +108,31 @@ test('drag-and-drop runs the real upload flow rather than only showing a filenam
   const a=await load();a.w.XMLHttpRequest=class {constructor(){this.upload={addEventListener:(_,cb)=>this.processing=cb};}open(){}setRequestHeader(){}send(file){this.processing();const doc={id:'e'.repeat(32),name:file.name,type:'txt',status:'ready'};a.materials.push(doc);this.status=201;this.responseText=JSON.stringify(doc);this.onload();}};
   const drag=new a.w.Event('dragenter',{cancelable:true});Object.defineProperty(drag,'dataTransfer',{value:{types:['Files']}});a.get('workspace').dispatchEvent(drag);assert.equal(a.get('drop-hint').hidden,false);
   const drop=new a.w.Event('drop',{cancelable:true});Object.defineProperty(drop,'dataTransfer',{value:{files:[new a.w.File(['Concepts'],'lecture.txt')]}});a.get('workspace').dispatchEvent(drop);await settle();assert.equal(a.get('drop-hint').hidden,true);assert.equal(a.materials.length,1);assert.match(a.get('selected-materials').textContent,/lecture.txt/);a.dom.window.close();
+});
+
+test('study suggestions fill and focus the composer without creating or submitting a conversation',async()=>{
+  const a=await load();
+  for(const chip of a.w.document.querySelectorAll('[data-prompt]')){
+    chip.click();assert.equal(a.get('message').value,chip.dataset.prompt);
+    assert.equal(a.w.document.activeElement,a.get('message'));
+  }
+  assert.equal(a.conversations.length,0);assert.equal(a.requests.filter(x=>x.url==='/api/chat').length,0);
+  // The selected prompt still submits through the existing chat contract.
+  a.get('composer').dispatchEvent(new a.w.Event('submit',{cancelable:true}));await settle();
+  assert.equal(a.requests.filter(x=>x.url==='/api/chat').length,1);await a.finish();a.dom.window.close();
+});
+
+test('library theme reflects actual processing, failure, and selected ready states',async()=>{
+  const a=await load({initialMaterials:[
+    {id:'b'.repeat(32),name:'notes.pdf',type:'pdf',status:'ready'},
+    {id:'c'.repeat(32),name:'scan.pdf',type:'pdf',status:'failed',error:'No extractable text'},
+    {id:'d'.repeat(32),name:'lecture.pptx',type:'pptx',status:'processing'}]});
+  a.get('new-chat').click();await settle();
+  const rows=a.w.document.querySelectorAll('.material-row');
+  assert.deepEqual([...rows].map(r=>r.dataset.status),['ready','failed','processing']);
+  assert.match(rows[1].textContent,/No extractable text/);assert.equal(rows[1].querySelector('input').disabled,true);
+  assert.equal(rows[2].querySelector('input').disabled,true);
+  const check=rows[0].querySelector('input');check.checked=true;check.dispatchEvent(new a.w.Event('change'));await settle();
+  assert.equal(a.w.document.querySelector('.material-row').dataset.selected,'true');
+  assert.equal(a.w.document.querySelector('.file-type').textContent,'PDF');a.dom.window.close();
 });
