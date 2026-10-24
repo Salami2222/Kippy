@@ -224,6 +224,13 @@ function Assert-ReleaseEndpoints {
     }
 }
 
+function Get-InstalledPackages {
+    param([string]$Python)
+    # Windows PowerShell 5.1 removes embedded double quotes in native arguments.
+    # Single quotes inside the Python program survive the native command line.
+    return (Get-NativeText $Python @('-c',"import importlib.metadata,json; print(json.dumps({d.metadata['Name'].lower().replace('_','-'):d.version for d in importlib.metadata.distributions()}))")) | ConvertFrom-Json
+}
+
 function Prepare-CandidateDependencies {
     param([string]$Candidate, [string]$Python, [string]$PreviousRoot)
     $requirements = Join-Path $Candidate 'requirements.txt'
@@ -236,7 +243,7 @@ function Prepare-CandidateDependencies {
     $report = Join-Path $Candidate 'dependency-plan.json'
     Invoke-Native $Python @('-m','pip','install','--dry-run','--report',$report,'--disable-pip-version-check','--no-input','-r',$requirements)
     $plan = Get-Content -Raw $report | ConvertFrom-Json
-    $installed = (Get-NativeText $Python @('-c','import importlib.metadata,json; print(json.dumps({d.metadata["Name"].lower().replace("_","-"):d.version for d in importlib.metadata.distributions()}))')) | ConvertFrom-Json
+    $installed = Get-InstalledPackages $Python
     foreach ($package in $plan.install) {
         $name = $package.metadata.name.ToLower().Replace('_','-')
         if ($installed.PSObject.Properties.Name -contains $name) { throw "Dependency replacement ($name) requires a reviewed environment migration; existing packages are never upgraded automatically." }

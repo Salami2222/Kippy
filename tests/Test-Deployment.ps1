@@ -269,6 +269,12 @@ try {
             }
         }
     }
+    Case 'installed package inventory survives real Windows Python command-line quoting' {
+        $python = (Get-Command python.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+        $installed = Get-InstalledPackages $python
+        Assert-True (@($installed.PSObject.Properties).Count -gt 0)
+        Assert-True ($installed.PSObject.Properties.Name -contains 'pip')
+    }
     Case 'dependency staging pins only new packages and refuses installed-package replacement' {
         $dir=Join-Path $script:Scratch 'dependency-plan'
         $null=New-Item -ItemType Directory $dir
