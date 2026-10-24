@@ -98,11 +98,13 @@ python -m pip check
 
 Python tests create real PDF, PPTX, DOCX, and TXT fixtures in temporary directories. They cover persistence, extraction, references, uploads, safe names, retrieval, whole-document coverage, prompts, offline Ollama, HTTP routes/security, and deletion. Frontend tests exercise the actual client in jsdom, including sanitization and math rendering. No real model is needed for ordinary tests. There is no frontend compilation/build step. Existing isolated PowerShell deployment/monitor tests remain in `tests/Test-Deployment.ps1`, `tests/Test-OllamaMonitor.ps1`, and `tests/Test-KippyMigration.ps1`; run them on Windows under the existing elevated task-owner identity. Their task operations are mocked.
 
-## Windows deployment — migration required before pushing
+## Windows deployment
 
-**Do not send this first conversion to automatic deployment without preparation.** The currently installed launcher invokes the removed Python package, and the old updater requires removed mascot assets. An ordinary first auto-update would fail its health checks and attempt rollback.
+Kippy is deployed on the existing Windows PC at **https://tp-industry.tail4cab83.ts.net/**. Tailscale Serve forwards privately to `http://127.0.0.1:8000`; no Funnel or second hostname is configured. Persistent conversations and uploads live in `C:\Users\tommy\KippyData`.
 
-Follow [the verified installation inventory and migration procedure](docs/windows-migration.md). The prepared transition runs one application on the existing port, retains Ollama and its environment, and creates no application backup or archive repository. After migration, the normal workflow remains **Codex → GitHub main → Windows automatic deployment**.
+The initial migration is complete. The existing web task now launches `python -m kippy web`, and automatic deployment from GitHub `main` and independent Ollama monitoring are enabled. The discontinued nutrition backup task, launchers, package cache, database and backup archives were removed after verification. The normal workflow is **Codex → GitHub main → Windows automatic deployment**.
+
+[The migration guide](docs/windows-migration.md) records the initial transition and retained installation bindings. Do not rerun first-migration activation on an already finalized installation. Use `scripts/kippy-update --check` for a manual health/test check; normal pushes are picked up by the existing scheduled deployment workflow.
 
 Operational script names, task identifiers, SSH key, and existing installation/service directory names are retained where required by the inspected host. They do not run a second application or retain discontinued features. The old application package, dashboards, tools, scrapers, database schema, sprites, and associated tests have been removed from the tracked codebase.
 

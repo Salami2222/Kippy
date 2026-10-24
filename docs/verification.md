@@ -2,10 +2,10 @@
 
 ## Implemented
 
-- Responsive, neutral chat UI with a collapsible conversation/library sidebar, persistent history, New Chat, conversation switching/deletion, multiline composer, copy, loading/error states, sanitized Markdown, code blocks and locally rendered LaTeX.
+- Responsive Deepwater chat UI with a collapsible conversation/library sidebar, persistent history, New Chat, conversation switching/deletion, multiline composer, copy, loading/error states, sanitized Markdown, code blocks and locally rendered LaTeX.
 - Real PDF/PPTX/DOCX/TXT upload/extraction, persistent random-ID files, SQLite metadata/chunks, per-conversation selections, processing/errors, removal and drag/drop.
 - Qwen3.5:9b through the Python Ollama client, bounded recent history, lexical retrieval, explicit page/slide/section/line requests, and section-by-section whole-document review with explicit coverage limits.
-- Existing loopback/Tailscale access model and deployment/Ollama supervision retained. New release checks and a guarded first-migration procedure are prepared, not deployed.
+- Existing loopback/Tailscale access model and deployment/Ollama supervision retained. New release checks and the guarded first-migration procedure are deployed; see the live verification below.
 
 ## Removed
 
@@ -34,10 +34,10 @@ Modified: README, ignore rules, release/dependency gates in the existing Windows
 | Check | Result |
 | --- | --- |
 | Python application suite, Mac Python 3.14 | **39 passed, 0 failed** |
-| Frontend suite, Mac Node 26 | **14 passed, 0 failed** |
+| Frontend suite, Mac Node 26 | **16 passed, 0 failed** |
 | Same Python suite in disposable Windows Python 3.13 environment | **39 passed, 0 failed** |
-| Same frontend suite in disposable Windows Node 24 environment | **14 passed, 0 failed** |
-| Existing isolated Windows deployment tests | **24 passed, 0 failed** |
+| Frontend suite, Windows Node 24 (staged deployment) | **16 passed, 0 failed** |
+| Existing isolated Windows deployment tests | **25 passed, 0 failed** |
 | Isolated Windows Ollama monitor tests | **8 passed, 0 failed** |
 | New isolated Windows migration tests | **5 passed, 0 failed** |
 | Python compile check, JS syntax check, pip dependency check | Passed |
@@ -62,7 +62,7 @@ The actual website showed rendered math, real stored conversations, successful f
 
 No OCR, diagram/image understanding, Word equation-object extraction, exact PDF layout reconstruction, or streaming is implemented. Reviews are bounded to 24 source batches; longer requests explicitly require smaller selections. Retrieval is lexical and recent history is bounded. Model claims/citations can still be wrong: the context list records actual supplied excerpts, not proof of every generated statement. This remains a private single-user application without accounts.
 
-**The production Windows application has not been converted or restarted. The completed local main commit is intentionally not pushed until Windows migration preparation is performed.** The installed launcher still names the removed package, and its old release checker expects removed mascot assets. Follow `docs/windows-migration.md` before pushing. The prepared migration keeps one web application, one Ollama instance and one deployment/monitoring workflow; existing operational task/path names remain to avoid credential and supervisor breakage. Cleanup instructions identify the inspected obsolete backup task/data destinations, and require reviewing those exact targets after Kippy is healthy.
+**Windows migration completed on October 24, 2026.** The existing URL now serves Kippy. The prior push hold described during development is resolved. Four existing operational Web/Deploy/Ollama/Monitor task names remain as installation bindings; the obsolete nutrition backup task and legacy application data/components were removed. No second application, model service, hostname or repository was created.
 
 
 ## Deepwater theme verification — October 24, 2026
@@ -74,4 +74,16 @@ Changed only `kippy/static/app.css`, `index.html`, `app.js`, frontend tests and 
 - Browser: reviewed 1280×720 desktop, 834×1112 tablet, 390×844 and 320×568 mobile, and a 390×420 reduced-height viewport. No page horizontal overflow; conversation scrolls internally and composer remains visible. Mobile sidebar opens/closes; desktop collapse and conversation refresh work. A physical phone keyboard was not tested.
 - Uploaded a real TXT lecture through the mobile attachment control, verified selection, submitted a real request to existing Windows Qwen over a temporary loopback SSH tunnel, and observed the completed response with rendered math. No model or server settings were changed. Existing PDF/PPTX history and library remain visible.
 - Text contrast checks: primary text/main background 15.04:1; muted text/secondary surface 6.02:1; cyan/selected surface 5.19:1; Send text/orange 7.69:1; error text/error surface 7.33:1; success text/secondary surface 7.57:1. Reduced-motion rules disable all app animation/transition effects.
-- Read-only Windows check still shows the production launcher using `python -m macromellow` and live commit `9340dbf`. **Push remains held**: first complete the migration preparation in `docs/windows-migration.md`. No Windows files, tasks, credentials, model settings or stored data were modified.
+- Historical pre-deployment check showed the production launcher using `python -m macromellow` and live commit `9340dbf`. That hold was subsequently resolved by the authorized migration below; the visual redesign itself did not change Windows configuration.
+
+
+## Live Windows migration — October 24, 2026
+
+- Prepared under the existing elevated SSH owner. Paused the two-minute deployment task, provisioned pinned Python dependencies in its existing venv, preserved Ollama environment/GPU/model settings, and changed the checkout origin to the already renamed `Salami2222/Kippy` repository. Initial application/theme commits and the updater fix were pushed normally to main.
+- The first activation safely refused during staging due to Windows PowerShell stripping embedded Python double quotes. Fixed the metadata query to use single quotes inside Python; added and ran a real native-subprocess regression. No serving code was promoted on that failed attempt. The corrected activation passed **39 Python, 16 frontend, 25 deployment, 8 Ollama-monitor, and 5 migration tests** before fast-forwarding/restarting the existing checkout/task.
+- Existing **https://tp-industry.tail4cab83.ts.net/** returns HTTP 200 and Kippy HTML; `/api/version` identifies Kippy at the deployed commit. The actual browser shows the Deepwater academic interface, not the old nutrition dashboard. Tailscale Serve still forwards to `127.0.0.1:8000`; its node, hostname, TLS and absence of Funnel were unchanged.
+- Through the real HTTPS endpoint, uploaded synthetic PDF/PPTX/DOCX/TXT lectures; all four returned ready. A real Qwen response used the integrating-factor example and supplied actual page/slide/section/line references. Browser math rendering, selected materials and source details were visually verified.
+- Finalized `start-kippy.cmd` and restarted the existing web task. Compared the full conversation before/after: messages, source references, all four uploaded files and selections persisted unchanged under a new PID. The running command uses `-m kippy web --port 8000 --data-dir C:\Users\tommy\KippyData`.
+- Web and Ollama tasks are running under existing S4U principals with boot triggers; auto-deploy and monitor tasks retain boot and recurring triggers. The scheduled model monitor and a real small inference check passed. Both listeners remain loopback-only, with one web backend and one Ollama server. No machine reboot or forced Ollama outage was performed.
+- Removed only inspected discontinued targets: nutrition backup task, `backup-macromellow.py`, `start-macromellow.cmd`, transition launcher, cache-only `macromellow` directory, `MacroMellowData`, local `MacroMellowBackups` and six verified nutrition backup archives in the matching OneDrive directory. Kippy data, current supervision/logs, tasks needed by Kippy, credentials and Ollama/Tailscale were retained.
+- Final documentation is published through the reenabled automatic GitHub deployment workflow; verify `/api/version` against main and `deploy-*.jsonl` success events after each release. There are no required first-migration manual steps left.

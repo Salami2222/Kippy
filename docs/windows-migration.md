@@ -1,8 +1,14 @@
 # First Kippy deployment: controlled transition
 
-## Status and inspected installation
+## Completed deployment — October 24, 2026
 
-This is a replacement application, not a second maintained deployment. **Do not push the conversion until Prepare has succeeded on Windows.** No production task/process/configuration/data changes were made during development. The inventory below was read from the actual host over its existing SSH connection:
+The transition below has now been executed and verified on the real Windows host. The existing HTTPS URL serves Kippy; `start-kippy.cmd` uses `C:\Users\tommy\KippyData`, port 8000, and the unchanged Ollama environment. The web task restarted successfully with persistent conversations, source selections and all four uploaded formats. Auto-deploy and model monitoring are enabled. Old launchers, nutrition data/backups (including the inspected OneDrive copies), cache-only package directory and nutrition backup task were removed. The four operational task identifiers and installation paths remain because they operate Kippy/Ollama and are referenced by the supervisors.
+
+The remainder documents the **historical first transition**, not a required manual step for the deployed installation. Use the regular updater for future releases. The first attempt safely stopped at a PowerShell native-argument quoting bug before promotion; commit `bdad4ce` fixed it and added a real Python subprocess regression test. See [verification](verification.md) for live checks.
+
+## Original inspected installation
+
+This is a replacement application, not a second maintained deployment. **For a first transition, do not push until Prepare succeeds.** Development initially left production unchanged; the authorized migration has since completed as recorded above. The inventory below was read from the actual host over its existing SSH connection:
 
 | Item | Inspected value |
 | --- | --- |
