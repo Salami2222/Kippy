@@ -3,7 +3,7 @@
 $ErrorActionPreference='Stop'
 $passed=0; $failed=0
 $source=Join-Path $PSScriptRoot '..\scripts\windows\Monitor-Ollama.ps1'
-$scratch=Join-Path ([IO.Path]::GetTempPath()) ('mellow-monitor-tests-'+[guid]::NewGuid().ToString('N'))
+$scratch=Join-Path ([IO.Path]::GetTempPath()) ('kippy-monitor-tests-'+[guid]::NewGuid().ToString('N'))
 $null=New-Item -ItemType Directory $scratch
 function Assert($Value) { if (-not $Value) { throw 'Assertion failed' } }
 try {

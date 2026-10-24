@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $script:Updater = Join-Path $PSScriptRoot '..\scripts\Update-MacroMellow.ps1'
 $script:Passed = 0
 $script:Failed = 0
-$script:Scratch = Join-Path ([IO.Path]::GetTempPath()) ('mellow-deploy-tests-' + [guid]::NewGuid().ToString('N'))
+$script:Scratch = Join-Path ([IO.Path]::GetTempPath()) ('kippy-deploy-tests-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $script:Scratch
 
 function Assert-True($Value, [string]$Message = 'Assertion failed') {
@@ -46,7 +46,7 @@ function New-TestRepository {
     $null = Get-NativeText $git @('-C', $root, 'init', '-b', 'main')
     $null = Get-NativeText $git @('-C', $root, 'config', 'user.name', 'Deployment Tests')
     $null = Get-NativeText $git @('-C', $root, 'config', 'user.email', 'deployment@example.invalid')
-    $null = Get-NativeText $git @('-C', $root, 'remote', 'add', 'origin', 'https://github.com/Salami2222/MacroMellow.git')
+    $null = Get-NativeText $git @('-C', $root, 'remote', 'add', 'origin', 'https://github.com/Salami2222/Kippy.git')
     [IO.File]::WriteAllText((Join-Path $root 'app.txt'), 'initial')
     $null = Get-NativeText $git @('-C', $root, 'add', 'app.txt')
     $null = Get-NativeText $git @('-C', $root, 'commit', '-m', 'initial')
@@ -92,7 +92,7 @@ try {
         $before = Get-RepositoryState $repo.Root $repo.Git
         [IO.File]::WriteAllText((Join-Path $repo.Root '.git\info\exclude'), 'data/')
         $null = New-Item -ItemType Directory -Path (Join-Path $repo.Root 'data')
-        $database = Join-Path $repo.Root 'data\macromellow.sqlite3'
+        $database = Join-Path $repo.Root 'data\kippy.sqlite3'
         [IO.File]::WriteAllText($database, 'local database bytes')
         $null = Get-NativeText $repo.Git @('-C', $repo.Root, 'checkout', '-b', 'incoming')
         [IO.File]::WriteAllText((Join-Path $repo.Root 'app.txt'), 'updated code')
@@ -144,6 +144,8 @@ try {
         $snapshot = [pscustomobject]@{ProcessId = 123; ExecutablePath = $base; CommandLine = '"C:\app\.venv\Scripts\python.exe" -m macromellow web --port 8000'; CreationDate = [DateTime]::Now}
         function Invoke-CimMethod { [pscustomobject]@{ReturnValue = 0; Sid = 'expected'} }
         Assert-MellowProcess $snapshot $python $base 'expected'
+        $snapshot.CommandLine = '"C:\app\.venv\Scripts\python.exe" -m kippy web --port 8000'
+        Assert-MellowProcess $snapshot $python $base 'expected'
         $snapshot.CommandLine = '"C:\app\.venv\Scripts\python.exe" -m unrelated web --port 8000'
         Assert-Throws { Assert-MellowProcess $snapshot $python $base 'expected' }
         $snapshot.CommandLine = '"C:\app\.venv\Scripts\python.exe" -m macromellow web --port 8000'
@@ -174,7 +176,7 @@ try {
         $script:HttpCalls = 0
         function Get-VerifiedListeners { [pscustomobject]@{CreationDate = [DateTime]::Now} }
         function Get-ScheduledTask { [pscustomobject]@{State = 'Running'} }
-        function Invoke-WebRequest { $script:HttpCalls++; [pscustomobject]@{StatusCode = 200; Content = '<title>MacroMellow</title>'} }
+        function Invoke-WebRequest { $script:HttpCalls++; [pscustomobject]@{StatusCode = 200; Content = '<title>Kippy</title>'} }
         function Start-Sleep {}
         Wait-MellowHealthy 'unused' 'unused' 'unused'
         Assert-True ($script:HttpCalls -eq 2)
@@ -296,7 +298,7 @@ try {
         function Invoke-WebRequest {
             param($Uri)
             if ($Uri -match 'ollama') { throw 'AI must not be checked here' }
-            $mime = if ($Uri -match 'idle.png') {'image/png'} elseif ($Uri -match 'mascot.js') {'text/javascript'} else {'application/json'}
+            $mime = if ($Uri -match 'app.css') {'text/css'} elseif ($Uri -match 'app.js') {'text/javascript'} else {'application/json'}
             if ($script:WrongMime) {$mime='text/html'}
             @{StatusCode=200;Headers=@{'Content-Type'=$mime}}
         }

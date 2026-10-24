@@ -44,8 +44,8 @@ function Get-RepositoryState {
         throw 'Deployment requires the main branch. No branch will be switched automatically.'
     }
     $origin = Get-NativeText $Git @('-C', $Root, 'remote', 'get-url', 'origin')
-    if ($origin -notmatch '^(https://github\.com/Salami2222/MacroMellow(?:\.git)?/?|git@github\.com:Salami2222/MacroMellow(?:\.git)?|ssh://git@github\.com/Salami2222/MacroMellow(?:\.git)?)$') {
-        throw 'origin must point to Salami2222/MacroMellow on GitHub.'
+    if ($origin -notmatch '^(https://github\.com/Salami2222/(?:Kippy|MacroMellow)(?:\.git)?/?|git@github\.com:Salami2222/(?:Kippy|MacroMellow)(?:\.git)?|ssh://git@github\.com/Salami2222/(?:Kippy|MacroMellow)(?:\.git)?)$') {
+        throw 'origin must point to Salami2222/Kippy on GitHub (the previous URL is accepted during migration).'
     }
     return Get-NativeText $Git @('-C', $Root, 'rev-parse', 'HEAD')
 }
@@ -81,9 +81,9 @@ function Assert-MellowProcess {
         throw "Port 8000 belongs to another executable (PID $($Snapshot.ProcessId)); refusing to terminate it."
     }
     # The Windows venv launcher spawns a base-python child but preserves this argv[0].
-    $pattern = '^\s*"?' + [regex]::Escape($Python) + '"?\s+-m\s+macromellow\s+web(?:\s|$)'
+    $pattern = '^\s*"?' + [regex]::Escape($Python) + '"?\s+-m\s+(?:kippy|macromellow)\s+web(?:\s|$)'
     if (-not [regex]::IsMatch($Snapshot.CommandLine, $pattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
-        throw "Port 8000 is not the expected venv's MacroMellow web process (PID $($Snapshot.ProcessId))."
+        throw "Port 8000 is not the expected venv's application web process (PID $($Snapshot.ProcessId))."
     }
     $owner = Invoke-CimMethod -InputObject $Snapshot -MethodName GetOwnerSid -ErrorAction Stop
     if ($owner.ReturnValue -ne 0 -or $owner.Sid -ne $OwnerSid) {
@@ -116,7 +116,7 @@ function Stop-VerifiedProcess {
             throw 'Listener identity changed while opening its handle; refusing termination.'
         }
         if (-not $processHandle.HasExited) {
-            [Console]::WriteLine("Stopping verified orphaned MacroMellow listener PID $($current.ProcessId).")
+            [Console]::WriteLine("Stopping verified orphaned application listener PID $($current.ProcessId).")
             $processHandle.Kill()
             if (-not $processHandle.WaitForExit(5000)) { throw 'Verified orphan did not exit.' }
         }
@@ -168,7 +168,7 @@ function Wait-MellowHealthy {
         if ($listeners.Count -gt 0 -and $running -and @($listeners | Where-Object { $_.CreationDate.ToUniversalTime() -lt $StartedAfter }).Count -eq 0) {
             try {
                 $response = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/' -UseBasicParsing -MaximumRedirection 0 -TimeoutSec 3 -ErrorAction Stop
-                if ($response.StatusCode -eq 200 -and $response.Content -match '<title>MacroMellow') {
+                if ($response.StatusCode -eq 200 -and $response.Content -match '<title>(Kippy|MacroMellow)') {
                     if ($ExpectedCommit) { Assert-ReleaseEndpoints $ExpectedCommit $listeners }
                     $consecutive++
                     if ($consecutive -ge 2) { return }
@@ -177,18 +177,22 @@ function Wait-MellowHealthy {
         } else { $consecutive = 0 }
         Start-Sleep -Seconds 1
     } while ([DateTime]::UtcNow -lt $deadline)
-    throw 'MacroMellow did not become healthy (new verified listener, running task, and HTTP 200) within 45 seconds.'
+    throw 'Kippy did not become healthy (new verified listener, running task, and HTTP 200) within 45 seconds.'
 }
 
 function Invoke-DeploymentTests {
     param([string]$Root, [string]$Python, [string]$Node)
     Invoke-Native $Python @('-m', 'pip', 'check')
-    Invoke-Native $Python @('-c', "from zoneinfo import ZoneInfo; ZoneInfo('America/New_York'); import macromellow.web")
+    Invoke-Native $Python @('-c', "import kippy.web")
     Invoke-Native $Python @('-m', 'unittest', 'discover', '-s', 'tests', '-q')
+    if (Test-Path (Join-Path $Root 'package-lock.json')) {
+        $npm = (Get-Command npm.cmd -CommandType Application -ErrorAction Stop).Source
+        Invoke-Native $npm @('ci','--prefix',$Root,'--ignore-scripts','--no-audit','--no-fund')
+    }
     $javascriptTests = @(Get-ChildItem -LiteralPath (Join-Path $Root 'tests') -Filter 'test_*.cjs' -File | Sort-Object Name | ForEach-Object FullName)
     if ($javascriptTests.Count -eq 0) { throw 'JavaScript regression tests are missing.' }
     Invoke-Native $Node (@('--test') + $javascriptTests)
-    foreach ($testName in @('Test-Deployment.ps1','Test-OllamaMonitor.ps1')) {
+    foreach ($testName in @('Test-Deployment.ps1','Test-OllamaMonitor.ps1','Test-KippyMigration.ps1')) {
         $deploymentTests = Join-Path $Root ('tests\' + $testName)
         if (Test-Path -LiteralPath $deploymentTests) {
             Invoke-Native (Join-Path $PSHOME 'powershell.exe') @('-NoLogo','-NoProfile','-NonInteractive','-File',$deploymentTests)
@@ -212,7 +216,7 @@ function Assert-ReleaseEndpoints {
     if ($version.commit -cne $ExpectedCommit -or $version.pid -notin @($Listeners | ForEach-Object ProcessId)) {
         throw 'Stale or unexpected server: startup commit/PID does not match this deployment.'
     }
-    foreach ($asset in @(@('/api/status','application/json'), @('/mascot.js','(application|text)/javascript'), @('/assets/mellow/idle.png','image/png'))) {
+    foreach ($asset in @(@('/api/status','application/json'), @('/app.js','(application|text)/javascript'), @('/app.css','text/css'))) {
         $response = Invoke-WebRequest ('http://127.0.0.1:8000' + $asset[0]) -UseBasicParsing -MaximumRedirection 0 -TimeoutSec 5
         if ($response.StatusCode -ne 200 -or $response.Headers['Content-Type'] -notmatch ('^' + $asset[1] + '(;|$)')) {
             throw "Release endpoint/MIME check failed: $($asset[0])"
@@ -331,7 +335,7 @@ function Invoke-MacroMellowUpdate {
         $startedAfter = [DateTime]::UtcNow
         Start-ScheduledTask -TaskName 'MacroMellow Web' -TaskPath '\'
         Wait-MellowHealthy $python $basePython $ownerSid $startedAfter -ExpectedCommit $targetCommit
-        Write-AutomationEvent $LockDirectory 'deploy' 'restart_health_passed' @{commit=$targetCommit;endpoints=@('/','/api/status','/api/version','/mascot.js','/assets/mellow/idle.png')}
+        Write-AutomationEvent $LockDirectory 'deploy' 'restart_health_passed' @{commit=$targetCommit;endpoints=@('/','/api/status','/api/version','/app.js','/app.css')}
         try {
             $ai = Invoke-RestMethod 'http://127.0.0.1:8000/api/ollama/status' -TimeoutSec 10
             Write-AutomationEvent $LockDirectory 'deploy' 'ai_status' $ai

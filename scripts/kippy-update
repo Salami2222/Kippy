@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1-}" in
+  '') check_argument='' ;;
+  --check) check_argument=' -CheckOnly' ;;
+  -h|--help)
+    printf '%s\n' 'Usage: kippy-update [--check]' \
+      'Update the existing Windows Kippy checkout, test, restart, and verify HTTP 200.' \
+      '--check: validate and run tests without pulling, installing, or restarting.'
+    exit 0 ;;
+  *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
+esac
+if (( $# > 1 )); then printf '%s\n' 'Usage: kippy-update [--check]' >&2; exit 2; fi
+
+# Resolve a ~/.local/bin symlink without GNU readlink -f (not built into macOS).
+helper_path=${BASH_SOURCE[0]}
+while [[ -L "$helper_path" ]]; do
+  helper_directory=$(cd -P -- "$(dirname -- "$helper_path")" && pwd)
+  helper_path=$(readlink "$helper_path")
+  [[ "$helper_path" = /* ]] || helper_path="$helper_directory/$helper_path"
+done
+helper_directory=$(cd -P -- "$(dirname -- "$helper_path")" && pwd)
+windows_script="$helper_directory/Update-MacroMellow.ps1"
+identity="$HOME/.ssh/macromellow_windows"
+[[ -r "$identity" ]] || { printf 'SSH key is missing or unreadable: %s\n' "$identity" >&2; exit 1; }
+[[ -r "$windows_script" ]] || { printf 'Windows updater is missing: %s\n' "$windows_script" >&2; exit 1; }
+
+# Invoke the reviewed updater already installed in the Windows checkout.
+bootstrap='$ErrorActionPreference="Stop"; $ProgressPreference="SilentlyContinue"; try { & "C:\Users\tommy\MacroMellow\scripts\Update-MacroMellow.ps1"'
+bootstrap+="$check_argument"
+bootstrap+='; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }'
+encoded=$(printf '%s' "$bootstrap" | iconv -f UTF-8 -t UTF-16LE | base64 | tr -d '\r\n')
+
+if ssh -T -i "$identity" \
+    -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+    -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+    tommy@100.81.130.10 \
+    "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand $encoded" < /dev/null; then
+  exit 0
+else
+  result=$?
+  printf '\nRemote deployment did not report success (exit %s). Run kippy-update --check before retrying.\n' "$result" >&2
+  exit "$result"
+fi

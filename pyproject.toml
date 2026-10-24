@@ -1,0 +1,15 @@
+[project]
+name = "kippy"
+version = "0.1.0"
+description = "A local AI-powered academic study assistant for lecture materials and exam preparation"
+requires-python = ">=3.11"
+dependencies = ["pypdf>=6.21.2,<7", "python-pptx>=1,<2", "python-docx>=1.2,<2"]
+[project.scripts]
+kippy = "kippy.__main__:main"
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+[tool.setuptools.packages.find]
+include = ["kippy*"]
+[tool.setuptools.package-data]
+kippy = ["static/**/*", "static/*"]

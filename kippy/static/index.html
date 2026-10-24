@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kippy · Your study companion</title>
+  <meta name="description" content="Kippy is a local AI-powered academic study assistant for understanding lectures and preparing for exams.">
+  <link rel="stylesheet" href="/vendor/katex/katex.min.css"><link rel="stylesheet" href="/app.css">
+  <script defer src="/vendor/marked.js"></script><script defer src="/vendor/purify.js"></script>
+  <script defer src="/vendor/katex/katex.min.js"></script><script defer src="/vendor/katex/auto-render.min.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <button id="sidebar-shade" class="sidebar-shade" aria-label="Close sidebar" hidden></button>
+  <aside id="sidebar" class="sidebar" aria-label="Conversations and materials">
+    <div class="brand-row"><a class="brand" href="/">kippy<span>YOUR STUDY COMPANION</span></a><button id="sidebar-close" class="icon-button" aria-label="Collapse sidebar" title="Collapse sidebar">‹</button></div>
+    <button id="new-chat" class="new-chat">＋ New chat</button>
+    <div class="sidebar-scroll">
+      <section><h2>Conversations</h2><div id="conversations" class="conversation-list"></div></section>
+      <section class="library"><div class="section-row"><h2>Materials</h2><button id="upload-library" class="text-button">＋ Upload</button></div>
+        <p class="library-help">Select files to use in this chat.</p><div id="materials" class="material-list"></div>
+      </section>
+    </div>
+    <p class="sidebar-note">Stored locally on your server.<br>PDF · PPTX · DOCX · TXT · <span id="upload-limit">25 MB</span> per file</p>
+  </aside>
+  <main id="workspace" class="workspace">
+    <header class="chat-header"><div class="header-left"><button id="sidebar-open" class="icon-button" aria-label="Expand sidebar" title="Expand sidebar" hidden>☰</button><h1 id="conversation-title">New chat</h1></div><div id="connection" class="connection" role="status">Checking Qwen…</div></header>
+    <div id="notice" class="notice" role="alert" hidden><span id="notice-text"></span><button id="notice-close" aria-label="Dismiss message">×</button></div>
+    <div id="feed" class="feed" role="log" aria-label="Conversation" aria-live="polite">
+      <section id="empty" class="empty"><p class="eyebrow">A LITTLE CLARITY GOES A LONG WAY</p><h2>What would you like<br>to study today?</h2><p>Work through a problem, unpack a concept, or upload your lecture materials. We’ll take it one step at a time.</p><button id="upload-empty" class="soft-button">＋ Add lecture materials</button><small>Text-based sources, thoughtful explanations.<br>Images and scanned pages need OCR first.</small></section>
+      <div id="messages" class="messages"></div>
+      <div id="thinking" class="thinking" role="status" hidden><i></i><span>Kippy is working through your question…</span></div>
+    </div>
+    <div class="composer-area">
+      <div id="selected-materials" class="selected-materials" aria-label="Selected materials"></div>
+      <form id="composer" class="composer"><label for="message" class="sr-only">Message Kippy</label><textarea id="message" rows="1" maxlength="8000" placeholder="Ask Kippy anything you’re studying…" required></textarea><div class="composer-bottom"><button id="attach" class="icon-button" type="button" aria-label="Upload lecture materials" title="Upload lecture materials">＋</button><span class="composer-hint">Enter to send · Shift + Enter for a new line</span><button id="send" type="submit">Send ↑</button></div></form>
+      <p class="footnote">Kippy can make mistakes. Check important details against your materials.</p>
+    </div>
+    <div id="drop-hint" class="drop-hint" hidden>Drop lecture materials to upload</div>
+  </main>
+  <input id="file-input" type="file" accept=".pdf,.pptx,.docx,.txt" multiple hidden>
+</body>
+</html>
