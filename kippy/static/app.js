@@ -87,7 +87,7 @@
       const article=element('article',`message ${m.role}${m.error?' error':''}${m.role==='user'?' pixel-panel':''}`);
       if(m.role==='user')article.textContent=m.content;
       else {
-        article.append(element('div','message-label','KIPPY'));const body=element('div','message-body');body.innerHTML=renderMarkdown(m.content,root.marked,root.DOMPurify);
+        article.append(element('div','message-label','Kippy'));const body=element('div','message-body');body.innerHTML=renderMarkdown(m.content,root.marked,root.DOMPurify);
         for(const a of body.querySelectorAll('a')){a.target='_blank';a.rel='noopener noreferrer';}
         root.renderMathInElement?.(body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}],throwOnError:false,trust:false,maxExpand:1000});article.append(body);
         if(m.sources?.length){const details=element('details','sources');const list=element('ul');for(const s of m.sources)list.append(element('li','',`${s.name} · ${s.location}`));details.append(element('summary','',`Context provided · ${m.sources.length} source location${m.sources.length===1?'':'s'}`),list);article.append(details);}

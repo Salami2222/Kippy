@@ -5,6 +5,7 @@
   <title>Kippy · Your study companion</title>
   <meta name="description" content="Your course-based study companion. Understand lectures, work through problems, and prepare for exams.">
   <link rel="preload" href="/vendor/silkscreen/Silkscreen-Regular.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="/assets/enchanted/study-room.png" as="image">
   <link rel="stylesheet" href="/vendor/katex/katex.min.css"><link rel="stylesheet" href="/app.css">
   <script defer src="/vendor/marked.js"></script><script defer src="/vendor/purify.js"></script>
   <script defer src="/vendor/katex/katex.min.js"></script><script defer src="/vendor/katex/auto-render.min.js"></script>
@@ -13,9 +14,10 @@
 <body>
   <button id="sidebar-shade" class="sidebar-shade" aria-label="Close sidebar" hidden></button>
   <aside id="sidebar" class="sidebar" aria-label="Courses">
-    <div class="brand-row"><a class="brand" href="/"><span class="lantern" aria-hidden="true"></span>kippy<span>YOUR STUDY COMPANION</span></a><button id="sidebar-close" class="icon-button" aria-label="Collapse sidebar" title="Collapse sidebar">‹</button></div>
+    <div class="brand-row"><a class="brand" href="/"><span class="wizard-hat" aria-hidden="true"></span>Kippy<span>AI STUDY ASSISTANT</span></a><button id="sidebar-close" class="icon-button" aria-label="Collapse sidebar" title="Collapse sidebar">‹</button></div>
     <button id="add-course" class="add-course-action pixel-action">＋ Add Course</button>
     <div class="sidebar-scroll"><h2>Your courses</h2><div id="courses" class="course-list"></div></div>
+    <div class="study-vignette" aria-hidden="true"><img class="study-turtle" src="/assets/enchanted/turtle.png" alt="" width="1624" height="968"><span class="vignette-caption">A quiet place to discover.</span></div>
     <button id="recover-studies" class="recovery-link" hidden>Bring existing studies into a course</button>
     <p class="sidebar-note">A little focus. A little wonder.<br>Your studies are saved on your server.</p>
   </aside>
@@ -26,7 +28,7 @@
     </header>
     <div id="notice" class="notice" role="alert" hidden><span id="notice-text"></span><button id="notice-close" aria-label="Dismiss message">×</button></div>
     <div id="feed" class="feed" role="log" aria-label="Course conversation" aria-live="polite">
-      <section id="empty-global" class="empty"><div class="welcome-panel pixel-panel"><span class="marsh-scene" aria-hidden="true"><i></i><i></i><i></i></span><p class="eyebrow">A NEW CHAPTER AWAITS</p><h2>Your adventure<br>starts here.</h2><p>Create your first course to begin studying with Kippy.</p><button id="add-first-course" class="primary-action pixel-action">＋ Add Course</button></div></section>
+      <section id="empty-global" class="empty"><div class="welcome-panel pixel-panel"><span class="study-compass" aria-hidden="true"></span><p class="eyebrow">A NEW CHAPTER AWAITS</p><h2>Your adventure<br>starts here.</h2><p>Create your first course to begin studying with Kippy.</p><button id="add-first-course" class="primary-action pixel-action">＋ Add Course</button></div></section>
       <section id="empty-course" class="empty" hidden><div class="welcome-panel pixel-panel"><p class="eyebrow" id="course-welcome-label">YOUR COURSE WORKSPACE</p><h2>What are we<br>studying today?</h2><p>Bring your notes. We’ll find a path through them together.</p><div class="suggestions" aria-label="Study suggestions"><button class="suggestion pixel-action" data-prompt="Create a study guide from this course's materials.">Study guide</button><button class="suggestion pixel-action" data-prompt="Summarize the key ideas in this course's lectures.">Review notes</button><button class="suggestion pixel-action" data-prompt="Explain a concept: ">Explain a concept</button></div><button id="upload-empty" class="soft-button">＋ Add course materials</button></div></section>
       <div id="messages" class="messages"></div><div id="thinking" class="thinking" role="status" hidden><i></i><span>Kippy is working through your question…</span></div>
     </div>
