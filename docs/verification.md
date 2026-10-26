@@ -2,7 +2,7 @@
 
 ## Implemented
 
-- Responsive Deepwater chat UI with a collapsible conversation/library sidebar, persistent history, New Chat, conversation switching/deletion, multiline composer, copy, loading/error states, sanitized Markdown, code blocks and locally rendered LaTeX.
+- Responsive retro handheld chat UI with a collapsible conversation/library sidebar, persistent history, New Chat, conversation switching/deletion, multiline composer, copy, loading/error states, sanitized Markdown, code blocks and locally rendered LaTeX.
 - Real PDF/PPTX/DOCX/TXT upload/extraction, persistent random-ID files, SQLite metadata/chunks, per-conversation selections, processing/errors, removal and drag/drop.
 - Qwen3.5:9b through the Python Ollama client, bounded recent history, lexical retrieval, explicit page/slide/section/line requests, and section-by-section whole-document review with explicit coverage limits.
 - Existing loopback/Tailscale access model and deployment/Ollama supervision retained. New release checks and the guarded first-migration procedure are deployed; see the live verification below.
@@ -87,3 +87,12 @@ Changed only `kippy/static/app.css`, `index.html`, `app.js`, frontend tests and 
 - Web and Ollama tasks are running under existing S4U principals with boot triggers; auto-deploy and monitor tasks retain boot and recurring triggers. The scheduled model monitor and a real small inference check passed. Both listeners remain loopback-only, with one web backend and one Ollama server. No machine reboot or forced Ollama outage was performed.
 - Removed only inspected discontinued targets: nutrition backup task, `backup-macromellow.py`, `start-macromellow.cmd`, transition launcher, cache-only `macromellow` directory, `MacroMellowData`, local `MacroMellowBackups` and six verified nutrition backup archives in the matching OneDrive directory. Kippy data, current supervision/logs, tasks needed by Kippy, credentials and Ollama/Tailscale were retained.
 - Final documentation is published through the reenabled automatic GitHub deployment workflow; verify `/api/version` against main and `deploy-*.jsonl` success events after each release. There are no required first-migration manual steps left.
+
+
+## Retro Handheld redesign — October 26, 2026
+
+- Replaced the modern Deepwater styling with shared slate/cyan/sand/orange tokens, reusable pixel panel/action classes, layered hard borders, square menu selections, dialogue windows and a lightly tiled welcome-frame accent. Updated welcome copy while preserving all real suggestion, upload and chat actions. No mascot or game artwork was introduced.
+- Bundled the unchanged 32 KB Silkscreen Regular font and SIL OFL license from Google Fonts. Only branding and brief interface labels use the pixel face; long answers, filenames, code and KaTeX remain readable. Font is preloaded and served locally, with system monospace fallback. No new runtime library or backend dependency.
+- **39 Python tests, 16 frontend tests and JS syntax check passed.** Python wheel packaging passed, including the new font and license. There is no separate frontend build step for the static HTML/CSS/JS client.
+- Browser checks covered desktop 1280×720, tablet 834×1112, mobile 390×844 and 320×568, plus a reduced-height 390×420 viewport. Verified internal conversation scrolling, sidebar open/collapse, long filenames, real mobile attachment upload, select/deselect persistence, and a real Qwen answer with headings, lists, display math and horizontally scrollable Python code. Copy response returned the original Markdown. A physical mobile keyboard was not tested.
+- Checked representative text contrast: body/dialogue 10.78:1; muted text/selected panel 4.94:1; cyan/secondary panel 5.29:1; send label/orange 6.07:1; sand/sidebar 8.36:1. Reduced-motion rules turn off animation/transitions. Backend, data formats, storage keys, model settings and Windows/Tailscale deployment configuration remain unchanged.

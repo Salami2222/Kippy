@@ -34,7 +34,7 @@ Then launch Kippy with `export OLLAMA_BASE_URL=http://127.0.0.1:11445`. This doe
 
 ## The interface
 
-The **Deepwater** theme uses deep navy surfaces, cyan selections and focus rings, and an orange Send button. Its palette is defined at the top of `kippy/static/app.css`. Welcome suggestions fill the composer for editing; they do not send automatically. Document type badges and status colors reflect actual library data. Reduced-motion preferences disable transitions and animations.
+The **Retro Handheld** theme uses slate-blue dialogue panels, cyan selections, sand-colored headings, and warm orange action buttons. Reusable `.pixel-panel` / `.pixel-action` styles and palette tokens live in `kippy/static/app.css`. Silkscreen lettering is bundled locally under the SIL Open Font License for short interface labels; academic responses, filenames, code, and math retain readable fonts. Welcome suggestions fill the composer without sending. The sidebar, document states and focus indicators use the same framed visual language, and reduced-motion preferences disable animation and transitions.
 
 - **New chat** creates a fresh stored conversation. The sidebar lists actual conversations; reopen or delete them there. The last selected conversation is remembered by this browser.
 - Type a question, press Enter to send, or Shift+Enter for a newline. Responses support sanitized Markdown, code blocks, and KaTeX math (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`). **Copy response** copies the original Markdown.

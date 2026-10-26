@@ -79,7 +79,7 @@
     $('materials').replaceChildren();
     if (!state.materials.length && !state.pending.size) $('materials').append(element('p','list-empty','No materials yet. Add a lecture to get started.'));
     for (const file of [...state.pending.values(), ...state.materials]) {
-      const row = element('div','material-row'); const top = element('div','material-top'); const label = element('label');
+      const row = element('div','material-row pixel-panel'); const top = element('div','material-top'); const label = element('label');
       const check = element('input'); check.type = 'checkbox'; check.checked = state.conversation?.material_ids.includes(file.id) || false; check.disabled = file.status !== 'ready' || state.busy || state.uploads > 0;
       check.setAttribute('aria-label',`Use ${file.name} in this conversation`);
       check.addEventListener('change',async () => {
@@ -114,7 +114,7 @@
     $('empty').hidden=messages.length>0;
     $('messages').replaceChildren();
     for(const message of messages) {
-      const article=element('article',`message ${message.role}${message.error?' error':''}`);
+      const article=element('article',`message pixel-panel ${message.role}${message.error?' error':''}`);
       if(message.role==='user') article.textContent=message.content;
       else {
         article.append(element('div','message-label','KIPPY'));

@@ -4,6 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Kippy · Your study companion</title>
   <meta name="description" content="Kippy is a local AI-powered academic study assistant for understanding lectures and preparing for exams.">
+  <link rel="preload" href="/vendor/silkscreen/Silkscreen-Regular.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="stylesheet" href="/vendor/katex/katex.min.css"><link rel="stylesheet" href="/app.css">
   <script defer src="/vendor/marked.js"></script><script defer src="/vendor/purify.js"></script>
   <script defer src="/vendor/katex/katex.min.js"></script><script defer src="/vendor/katex/auto-render.min.js"></script>
@@ -13,7 +14,7 @@
   <button id="sidebar-shade" class="sidebar-shade" aria-label="Close sidebar" hidden></button>
   <aside id="sidebar" class="sidebar" aria-label="Conversations and materials">
     <div class="brand-row"><a class="brand" href="/">kippy<span>YOUR STUDY COMPANION</span></a><button id="sidebar-close" class="icon-button" aria-label="Collapse sidebar" title="Collapse sidebar">‹</button></div>
-    <button id="new-chat" class="new-chat">＋ New chat</button>
+    <button id="new-chat" class="new-chat pixel-action">＋ New chat</button>
     <div class="sidebar-scroll">
       <section><h2>Recent conversations</h2><div id="conversations" class="conversation-list"></div></section>
       <section class="library"><div class="section-row"><h2>Library</h2><button id="upload-library" class="text-button">＋ Upload</button></div>
@@ -26,13 +27,13 @@
     <header class="chat-header"><div class="header-left"><button id="sidebar-open" class="icon-button" aria-label="Expand sidebar" title="Expand sidebar" hidden>☰</button><h1 id="conversation-title">New chat</h1></div><div id="connection" class="connection" role="status">Checking Qwen…</div></header>
     <div id="notice" class="notice" role="alert" hidden><span id="notice-text"></span><button id="notice-close" aria-label="Dismiss message">×</button></div>
     <div id="feed" class="feed" role="log" aria-label="Conversation" aria-live="polite">
-      <section id="empty" class="empty"><h2>Let's focus.</h2><p>Make every study session count.</p><div class="suggestions" aria-label="Study suggestions"><button class="suggestion" data-prompt="Create a study guide from my selected materials.">Create a study guide</button><button class="suggestion" data-prompt="Review my selected notes and summarize the key ideas.">Review my notes</button><button class="suggestion" data-prompt="Explain a concept: ">Explain a concept</button></div><button id="upload-empty" class="soft-button">＋ Add lecture materials</button></section>
+      <section id="empty" class="empty"><div class="welcome-panel pixel-panel"><p class="eyebrow">YOUR STUDY SPACE</p><h2>What are we studying today?</h2><p>Open your notes, upload materials, and let’s level up your understanding.</p><div class="suggestions" aria-label="Study suggestions"><button class="suggestion pixel-action" data-prompt="Create a study guide from my selected materials.">Create a study guide</button><button class="suggestion pixel-action" data-prompt="Review my selected notes and summarize the key ideas.">Review my notes</button><button class="suggestion pixel-action" data-prompt="Explain a concept: ">Explain a concept</button></div><button id="upload-empty" class="soft-button">＋ Add lecture materials</button></div></section>
       <div id="messages" class="messages"></div>
       <div id="thinking" class="thinking" role="status" hidden><i></i><span>Kippy is working through your question…</span></div>
     </div>
     <div class="composer-area">
       <div id="selected-materials" class="selected-materials" aria-label="Selected materials"></div>
-      <form id="composer" class="composer"><label for="message" class="sr-only">Message Kippy</label><textarea id="message" rows="1" maxlength="8000" placeholder="Ask Kippy anything..." required></textarea><div class="composer-bottom"><button id="attach" class="icon-button" type="button" aria-label="Upload lecture materials" title="Upload lecture materials">＋</button><span class="composer-hint">Enter to send · Shift + Enter for a new line</span><button id="send" type="submit">Send ↑</button></div></form>
+      <form id="composer" class="composer pixel-panel"><label for="message" class="sr-only">Message Kippy</label><textarea id="message" rows="1" maxlength="8000" placeholder="Ask Kippy anything..." required></textarea><div class="composer-bottom"><button id="attach" class="icon-button" type="button" aria-label="Upload lecture materials" title="Upload lecture materials">＋</button><span class="composer-hint">Enter to send · Shift + Enter for a new line</span><button id="send" class="pixel-action" type="submit">Send ↑</button></div></form>
       <p class="footnote">Kippy can make mistakes. Check important details against your materials.</p>
     </div>
     <div id="drop-hint" class="drop-hint" hidden>Drop lecture materials to upload</div>
