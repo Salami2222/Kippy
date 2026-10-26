@@ -71,7 +71,13 @@ class CourseTests(unittest.TestCase):
         self.assertFalse((self.store.uploads/da['id']).exists())
         self.assertEqual((self.store.uploads/db['id']).read_bytes(),b'Beta')
         self.assertEqual(self.store.course_chunks(a['id']),[])
-        with self.store.connect() as con: self.assertEqual(con.execute('SELECT count(*) FROM turns').fetchone()[0],0)
+        with self.store.connect() as con:
+            self.assertEqual(con.execute('SELECT count(*) FROM turns').fetchone()[0],0)
+            for table,column,value in [('materials','id',da['id']),('chunks','material_id',da['id']),('messages','conversation_id',a['conversation']['id']),('course_materials','course_id',a['id']),('course_conversations','course_id',a['id'])]:
+                self.assertEqual(con.execute(f'SELECT count(*) FROM {table} WHERE {column}=?',(value,)).fetchone()[0],0)
+            self.assertEqual(con.execute('SELECT count(*) FROM materials WHERE id=?',(db['id'],)).fetchone()[0],1)
+        self.assertEqual(self.store.course(b['id'])['conversation']['id'],b['conversation']['id'])
+        self.assertEqual([c['id'] for c in Store(self.temp.name).courses()],[b['id']])
     def test_delete_file_failure_keeps_course_and_restores_moved_files(self):
         c=self.add();a=upload(self.store,'a.txt',b'Alpha',100,c['id']);b=upload(self.store,'b.txt',b'Beta',100,c['id'])
         original=Path.replace

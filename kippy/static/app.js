@@ -32,7 +32,7 @@
   if (!root.document) return;
 
   const $ = id => document.getElementById(id);
-  const state = {courses: [], course: null, legacy: {conversations: [], materials: []}, busy: false, pending: new Map(), maxBytes: 25*1048576, collapsed: false, editing: false};
+  const state = {courses: [], course: null, legacy: {conversations: [], materials: []}, busy: false, pending: new Map(), maxBytes: 25*1048576, collapsed: false, editing: false, menuId: null, deleteTarget: null};
   let dragDepth = 0;
   function element(tag, cls, text) { const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n; }
   function button(text, cls, action, label) {const n=element('button',cls,text);n.type='button';if(label)n.setAttribute('aria-label',label);n.addEventListener('click',action);return n;}
@@ -48,18 +48,25 @@
   function resize() {$('message').style.height='auto';$('message').style.height=`${Math.min(matchMedia('(max-height: 500px)').matches?85:150,$('message').scrollHeight)}px`;}
   function viewport() {document.documentElement.style.setProperty('--viewport-height',`${root.visualViewport?.height||root.innerHeight}px`);if(root.visualViewport){Object.assign(document.body.style,{height:`${root.visualViewport.height}px`,top:`${root.visualViewport.offsetTop}px`,position:'fixed',width:'100%'});}resize();}
   function controls() {
-    for(const id of ['add-course','add-first-course','edit-course','save-course','delete-course','upload-materials','upload-empty','attach','send','message'])$(id).disabled=state.busy;
+    for(const id of ['add-course','add-first-course','edit-course','save-course','delete-course','upload-materials','upload-empty','attach','send','message','confirm-delete-course','cancel-delete-course'])$(id).disabled=state.busy;
     renderCourses();
   }
   function busy(active, thinking=false) {state.busy=active;$('thinking').hidden=!(active&&thinking);controls();renderMaterials();}
   function renderCourses() {
-    $('courses').replaceChildren();
+    state.menuId=null;$('courses').replaceChildren();
     if(!state.courses.length)$('courses').append(element('p','list-empty','Your courses will grow here.'));
     for(const course of state.courses) {
       const open=button('','course-entry',()=>openCourse(course.id),`Open course: ${course.name}`);open.disabled=state.busy;open.title=course.name;
       const icon=element('span','book-icon');icon.setAttribute('aria-hidden','true');
       const title=element('span','course-entry-text');title.append(element('span','course-entry-name',course.name));if(course.code)title.append(element('span','course-entry-code',course.code));
-      open.append(icon,title);if(course.id===state.course?.id){open.classList.add('active');open.setAttribute('aria-current','true');}$('courses').append(open);
+      open.append(icon,title);if(course.id===state.course?.id){open.classList.add('active');open.setAttribute('aria-current','true');}
+      const row=element('div','course-row');
+      const toggle=button('⋯','course-menu-toggle',()=>toggleCourseMenu(course.id),`Course actions: ${course.name}`);toggle.disabled=state.busy;toggle.id=`course-actions-${course.id}`;toggle.setAttribute('aria-haspopup','menu');toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-controls',`course-menu-${course.id}`);
+      const menu=element('div','course-menu');menu.id=`course-menu-${course.id}`;menu.hidden=true;menu.setAttribute('role','menu');menu.setAttribute('aria-label',`Actions for ${course.name}`);
+      const remove=button('Delete Course','',()=>requestCourseDeletion(course));remove.setAttribute('role','menuitem');remove.disabled=state.busy;menu.append(remove);
+      toggle.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){e.preventDefault();toggleCourseMenu(course.id,true);}});
+      row.addEventListener('focusout',()=>queueMicrotask(()=>{if(state.menuId===course.id&&!row.contains(document.activeElement))closeCourseMenu();}));
+      row.append(open,toggle,menu);$('courses').append(row);
     }
     const pending=state.legacy.conversations.length||state.legacy.materials.some(m=>!m.imported);
     $('recover-studies').hidden=!pending;$('recover-studies').disabled=state.busy;
@@ -131,11 +138,34 @@
     try{state.course=await api(state.editing?`/api/courses/${state.course.id}`:'/api/courses',{method:'POST',body:data});remember(state.course.id);const index=state.courses.findIndex(c=>c.id===state.course.id);if(index<0)state.courses.push(state.course);else state.courses[index]=state.course;$('message').value='';$('course-dialog').close();render();sidebar(!matchMedia('(max-width: 760px)').matches);await Promise.all([loadCourses(),loadLegacy()]);}
     catch(error){if($('course-dialog').open){$('course-error').textContent=error.message;$('course-error').hidden=false;}else notice(error.message);}finally{busy(false);if(!$('course-dialog').open)$('message').focus();}
   });
-  $('delete-course').addEventListener('click',async()=>{
-    if(state.busy)return;const c=state.course;
-    if(!confirm(`Delete “${c.name}”? Its entire conversation and all uploaded course materials will be permanently deleted. This cannot be undone. Preserved pre-course import originals, if any, are not deleted.`))return;
-    busy(true);try{await api(`/api/courses/${c.id}`,{method:'DELETE',body:{confirm_course_id:c.id}});state.course=null;state.courses=state.courses.filter(x=>x.id!==c.id);remember(null);$('course-dialog').close();render();await Promise.all([loadCourses(),loadLegacy()]);if(state.courses.length){state.course=await api(`/api/courses/${state.courses[0].id}`);remember(state.course.id);}render();}
-    catch(e){if($('course-dialog').open){$('course-error').textContent=e.message;$('course-error').hidden=false;}else notice(e.message);}finally{busy(false);}
+  function closeCourseMenu(focus=false) {
+    const id=state.menuId;state.menuId=null;
+    if(id){const menu=$(`course-menu-${id}`),toggle=$(`course-actions-${id}`);if(menu)menu.hidden=true;if(toggle){toggle.setAttribute('aria-expanded','false');if(focus)toggle.focus();}}
+  }
+  function toggleCourseMenu(id,focus=false) {
+    if(state.busy)return;const wasOpen=state.menuId===id;closeCourseMenu();
+    if(!wasOpen||focus){state.menuId=id;$(`course-menu-${id}`).hidden=false;$(`course-actions-${id}`).setAttribute('aria-expanded','true');$(`course-menu-${id}`).querySelector('button').focus();}
+  }
+  function requestCourseDeletion(course) {
+    if(state.busy||!course)return;closeCourseMenu();state.deleteTarget={id:course.id,name:course.name};
+    $('delete-course-title').textContent=`Delete ${course.name}?`;$('delete-course-error').hidden=true;$('delete-course-dialog').showModal();$('cancel-delete-course').focus();
+  }
+  function cancelCourseDeletion() {if(state.busy)return;const id=state.deleteTarget?.id;$('delete-course-dialog').close();state.deleteTarget=null;if($('course-dialog').open)$('delete-course').focus();else $(`course-actions-${id}`)?.focus();}
+  $('delete-course').addEventListener('click',()=>requestCourseDeletion(state.course));
+  $('cancel-delete-course').addEventListener('click',cancelCourseDeletion);
+  $('delete-course-dialog').addEventListener('cancel',e=>{e.preventDefault();cancelCourseDeletion();});
+  $('confirm-delete-course').addEventListener('click',async()=>{
+    if(state.busy||!state.deleteTarget)return;const c=state.deleteTarget;const wasActive=state.course?.id===c.id;
+    busy(true);$('delete-course-error').hidden=true;
+    try{
+      await api(`/api/courses/${c.id}`,{method:'DELETE',body:{confirm_course_id:c.id}});
+      state.courses=state.courses.filter(x=>x.id!==c.id);state.deleteTarget=null;$('delete-course-dialog').close();
+      if(wasActive){state.course=null;remember(null);$('message').value='';if($('course-dialog').open)$('course-dialog').close();}
+      render();
+      if(wasActive&&state.courses.length){state.course=await api(`/api/courses/${state.courses[0].id}`);remember(state.course.id);render();}
+      await Promise.all([loadCourses(),loadLegacy()]);
+    }catch(e){if($('delete-course-dialog').open){$('delete-course-error').textContent=e.message;$('delete-course-error').hidden=false;}else notice(e.message);}
+    finally{busy(false);if(!$('delete-course-dialog').open){if(state.course&&document.body.classList.contains('sidebar-visible'))$('courses').querySelector('[aria-current="true"]')?.focus();else if(state.course)$('message').focus();else $('add-course').focus();}}
   });
   async function submit(e) {
     e.preventDefault();const message=$('message').value.trim();if(!message||!state.course||state.busy)return;
@@ -167,7 +197,8 @@
   $('file-input').addEventListener('change',()=>uploadFiles([...$('file-input').files]));
   for(const chip of document.querySelectorAll('[data-prompt]'))chip.addEventListener('click',()=>{if(state.course&&!state.busy){$('message').value=chip.dataset.prompt;resize();$('message').focus();}});
   $('notice-close').addEventListener('click',()=>notice(''));$('sidebar-close').addEventListener('click',()=>sidebar(false));$('sidebar-open').addEventListener('click',()=>sidebar(true));$('sidebar-shade').addEventListener('click',()=>sidebar(false));
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('course-dialog').open&&!$('materials-dialog').open&&matchMedia('(max-width: 760px)').matches){sidebar(false);$('sidebar-open').focus();}});
+  document.addEventListener('click',e=>{if(!e.target.closest('.course-row'))closeCourseMenu();});
+  document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(state.menuId){e.preventDefault();closeCourseMenu(true);return;}if(!$('course-dialog').open&&!$('materials-dialog').open&&!$('delete-course-dialog').open&&matchMedia('(max-width: 760px)').matches){sidebar(false);$('sidebar-open').focus();}});
   root.addEventListener('resize',()=>{sidebar(matchMedia('(max-width: 760px)').matches?document.body.classList.contains('sidebar-visible'):!state.collapsed);viewport();});root.visualViewport?.addEventListener('resize',viewport);root.visualViewport?.addEventListener('scroll',viewport);
   const drop=$('workspace');drop.addEventListener('dragenter',e=>{if(e.dataTransfer.types.includes('Files')){e.preventDefault();dragDepth++;$('drop-hint').hidden=false;}});drop.addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();});drop.addEventListener('dragleave',()=>{if(--dragDepth<=0){dragDepth=0;$('drop-hint').hidden=true;}});drop.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop-hint').hidden=true;uploadFiles([...e.dataTransfer.files]);});
   async function boot(){

@@ -17,9 +17,8 @@
     <div class="brand-row"><a class="brand" href="/"><span class="wizard-hat" aria-hidden="true"></span>Kippy<span>AI STUDY ASSISTANT</span></a><button id="sidebar-close" class="icon-button" aria-label="Collapse sidebar" title="Collapse sidebar">‹</button></div>
     <button id="add-course" class="add-course-action pixel-action">＋ Add Course</button>
     <div class="sidebar-scroll"><h2>Your courses</h2><div id="courses" class="course-list"></div></div>
-    <div class="study-vignette" aria-hidden="true"><img class="study-turtle" src="/assets/enchanted/turtle.png" alt="" width="1624" height="968"><span class="vignette-caption">A quiet place to discover.</span></div>
+    <div class="study-vignette" aria-hidden="true"><img class="study-turtle" src="/assets/enchanted/turtle.png" alt="" width="1624" height="968"></div>
     <button id="recover-studies" class="recovery-link" hidden>Bring existing studies into a course</button>
-    <p class="sidebar-note">A little focus. A little wonder.<br>Your studies are saved on your server.</p>
   </aside>
   <main id="workspace" class="workspace">
     <header class="chat-header">
@@ -48,6 +47,12 @@
       <p id="course-error" class="form-error" role="alert" hidden></p>
       <div class="dialog-footer"><button id="delete-course" class="danger-button" type="button" hidden>Delete course</button><button id="save-course" class="primary-action pixel-action" type="submit">Create course</button></div>
     </form>
+  </dialog>
+  <dialog id="delete-course-dialog" class="pixel-panel" aria-labelledby="delete-course-title" aria-describedby="delete-course-description">
+    <h2 id="delete-course-title">Delete course?</h2>
+    <p id="delete-course-description" class="dialog-intro">This will permanently delete the course, its conversation history, and all uploaded materials. This action cannot be undone.</p>
+    <p id="delete-course-error" class="form-error" role="alert" hidden></p>
+    <div class="dialog-footer"><button id="cancel-delete-course" class="cancel-action" type="button" autofocus>Cancel</button><button id="confirm-delete-course" class="delete-action pixel-action" type="button">Delete Course</button></div>
   </dialog>
   <dialog id="materials-dialog" class="materials-drawer pixel-panel" aria-labelledby="materials-title">
     <div class="dialog-header"><div><p id="materials-course-name" class="eyebrow"></p><h2 id="materials-title">Course materials</h2></div><button id="close-materials" class="icon-button" aria-label="Close materials">×</button></div>
