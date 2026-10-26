@@ -254,7 +254,7 @@ dialog::backdrop { background: #0C1715C9; }
 @media(max-height:500px) { .chat-header { height: 48px; } }
 
 /* The room is scenery only: no text, controls or message content baked into art. */
-body { image-rendering: pixelated; background: #101825 url('/assets/enchanted/study-room.png') center center / cover no-repeat; padding: 28px 0 12px; }
+body { image-rendering: pixelated; background: #101825 url('/assets/enchanted/study-room.png') center center / cover no-repeat; padding: 0; }
 .sidebar { width: var(--sidebar-width); padding: 14px 16px 10px; background: transparent; border: 0; box-shadow: none; color: #F5E3BD; }
 .brand-row { position: relative; flex: none; min-height: 121px; padding: 9px 10px 17px; align-items: flex-start; background: #101A2DEB; border: 4px solid transparent; border-image: url('/assets/enchanted/gold-frame.svg') 5; }
 .brand { position: relative; display: block; margin: auto; padding-top: 18px; text-align: center; font: bold 46px/1 var(--heading-font); letter-spacing: 1px; color: #F9DFA4; text-shadow: 2px 2px #302519; }
@@ -337,7 +337,7 @@ dialog::backdrop { background: #080D1CC9; }
 .sidebar-collapsed .sidebar { margin-left: calc(-1 * var(--sidebar-width)); }
 @media(min-width:761px) and (max-width:1100px) { .connection { font-size: 0; padding: 5px; } .connection::before { margin: 0; } .course-heading h1 { font-size: 22px; } }
 @media(max-width:760px) {
-  body { padding: 8px 0 0; }
+  body { padding: 0; }
   .workspace { margin: 0 6px; border-width: 4px; box-shadow: 0 0 0 2px #A8793E; }
   .sidebar { width: 280px; padding: 20px 14px 10px; background: #101929 url('/assets/enchanted/study-room.png') left center / auto 100% no-repeat; }
   .sidebar-scroll { max-height: 45%; }
@@ -363,7 +363,7 @@ dialog::backdrop { background: #080D1CC9; }
   .welcome-panel { padding: 25px 13px; }
 }
 @media(max-width:360px) { .course-heading h1 { font-size: 16px; } #edit-course { width: 25px; } .materials-control { font-size: 11px; } }
-@media(max-height:550px) { body { padding-top: 5px; padding-bottom: 0; } .chat-header { height: 58px; } .study-vignette { display: none; } .brand-row { min-height: 90px; } .brand { font-size: 34px; } .sidebar-scroll { max-height: none; flex: 1; } .brand span:not(.wizard-hat) { font-size: 8px; } }
+@media(max-height:550px) { body { padding: 0; } .chat-header { height: 58px; } .study-vignette { display: none; } .brand-row { min-height: 90px; } .brand { font-size: 34px; } .sidebar-scroll { max-height: none; flex: 1; } .brand span:not(.wizard-hat) { font-size: 8px; } }
 /* Keep shelves behind the sidebar when a portrait viewport crops the wide room. */
 @media(max-width:1100px) { body { background-position: left center; } }
 .sidebar button:focus-visible, .sidebar a:focus-visible, .chat-header button:focus-visible { outline-color: #F1D48D; }
