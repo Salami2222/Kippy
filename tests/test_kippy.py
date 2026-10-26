@@ -38,30 +38,35 @@ class FakeClient:
     def status(self): return {'connected':not self.fail, 'model_available':not self.fail, 'model':'qwen3.5:9b'}
 
 
+def course_conversation(app, name='Physics'):
+    course = app.store.create_course({'name': name})
+    return {**course['conversation'], 'course_id': course['id']}
+
+
 class StorageTests(unittest.TestCase):
     def setUp(self): self.temp=tempfile.TemporaryDirectory(); self.store=Store(self.temp.name)
     def tearDown(self): self.temp.cleanup()
     def test_conversation_persists_and_isolated(self):
-        client=FakeClient(); app=App(self.temp.name,client); first=app.store.create_conversation(); second=app.store.create_conversation()
-        app.chat({'conversation_id':first['id'],'request_id':'1'*32,'message':'Explain linear equations'})
+        client=FakeClient(); app=App(self.temp.name,client); first=course_conversation(app); second=course_conversation(app, 'Chemistry')
+        app.chat({'course_id':first['course_id'],'request_id':'1'*32,'message':'Explain linear equations'})
         restored=Store(self.temp.name)
         self.assertEqual(len(restored.conversation(first['id'])['messages']),2)
         self.assertEqual(restored.conversation(second['id'])['messages'],[])
-        self.assertEqual(restored.conversation(first['id'])['title'],'Explain linear equations')
+        self.assertEqual(restored.conversation(first['id'])['title'],'Physics')
     def test_followup_uses_prior_messages(self):
-        client=FakeClient(); app=App(self.temp.name,client); key=app.store.create_conversation()['id']
+        client=FakeClient(); app=App(self.temp.name,client); key=app.store.create_course({'name':'Physics'})['id']
         for i,message in enumerate(['Explain integrating factors','Show me another example']):
-            app.chat({'conversation_id':key,'request_id':str(i)*32,'message':message})
+            app.chat({'course_id':key,'request_id':str(i)*32,'message':message})
         self.assertIn('Explain integrating factors',str(client.calls[-1]))
         self.assertTrue(any(m['role']=='assistant' for m in client.calls[-1]))
     def test_duplicate_request_never_repeats_inference(self):
-        client=FakeClient(); app=App(self.temp.name,client); key=app.store.create_conversation()['id']; payload={'conversation_id':key,'request_id':'a'*32,'message':'Explain'}
+        client=FakeClient(); app=App(self.temp.name,client); key=app.store.create_course({'name':'Physics'})['id']; payload={'course_id':key,'request_id':'a'*32,'message':'Explain'}
         self.assertEqual(app.chat(payload),app.chat(payload)); self.assertEqual(len(client.calls),1)
-        self.assertEqual(len(app.store.conversation(key)['messages']),2)
+        self.assertEqual(len(app.store.course(key)['conversation']['messages']),2)
     def test_offline_answer_and_message_are_persisted(self):
-        app=App(self.temp.name,FakeClient(True)); key=app.store.create_conversation()['id']
-        result=app.chat({'conversation_id':key,'request_id':'b'*32,'message':'Help'})
-        self.assertIn('offline',result['error']); self.assertTrue(app.store.conversation(key)['messages'][-1]['error'])
+        app=App(self.temp.name,FakeClient(True)); key=app.store.create_course({'name':'Physics'})['id']
+        result=app.chat({'course_id':key,'request_id':'b'*32,'message':'Help'})
+        self.assertIn('offline',result['error']); self.assertTrue(app.store.course(key)['conversation']['messages'][-1]['error'])
     def test_selection_persists_and_deletion_cascades(self):
         doc=upload(self.store,'notes.txt',b'Integrating factors.',10000); key=self.store.create_conversation()['id']
         self.store.select(key,[doc['id']]); self.assertEqual(Store(self.temp.name).conversation(key)['material_ids'],[doc['id']])
@@ -80,7 +85,7 @@ class StorageTests(unittest.TestCase):
         self.assertIn('interrupted',restored.begin_turn(key,'c'*32,'Explain')['error'])
     def test_schema_is_independent(self):
         with self.store.connect() as db: tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        self.assertEqual(tables,{'conversations','messages','materials','chunks','selections','turns'})
+        self.assertEqual(tables,{'conversations','messages','materials','chunks','selections','turns','courses','course_conversations','course_materials','legacy_imports'})
 
 
 class ExtractionTests(unittest.TestCase):
@@ -160,7 +165,7 @@ class RetrievalTests(unittest.TestCase):
         self.assertEqual(client.calls,[])
     def test_missing_lecture_selection_requests_upload_instead_of_inventing_content(self):
         client=FakeClient();text,refs=answer(client,'Summarize this lecture',[],[],[])
-        self.assertIn('upload and select',text);self.assertEqual(client.calls,[])
+        self.assertIn('upload the lecture materials',text);self.assertEqual(client.calls,[])
     def test_history_budget_and_no_documents(self):
         client=FakeClient();history=[{'role':'user','content':'x'*20000}];answer(client,'Explain integration',history,[],[])
         self.assertNotIn('x'*20000,str(client.calls));self.assertIn('general academic',str(client.calls))
@@ -199,27 +204,28 @@ class HTTPTests(unittest.TestCase):
         except HTTPError as error:
             with error:return error.code,json.load(error)
     def test_end_to_end_upload_select_chat_reload_delete(self):
-        _,conversation=self.request('/api/conversations',{},'POST');key=conversation['id']
-        code,doc=self.request('/api/materials?filename=lecture.pdf',pdf_bytes(['Integrating factors']),headers={'Content-Type':'application/octet-stream'})
+        _,course=self.request('/api/courses',{'name':'Calculus'},'POST');key=course['id']
+        code,doc=self.request(f'/api/courses/{key}/materials?filename=lecture.pdf',pdf_bytes(['Integrating factors']),headers={'Content-Type':'application/octet-stream'})
         self.assertEqual(code,201);self.assertEqual(doc['status'],'ready')
-        self.assertEqual(self.request(f'/api/conversations/{key}/materials',{'material_ids':[doc['id']]})[0],200)
-        code,result=self.request('/api/chat',{'conversation_id':key,'message':'Summarize this lecture','request_id':'a'*32});self.assertEqual(code,200);self.assertEqual(result['sources'][0]['location'],'page 1')
-        self.assertEqual(len(self.request(f'/api/conversations/{key}')[1]['messages']),2)
-        self.assertEqual(self.request('/api/materials/'+doc['id'],method='DELETE')[0],200)
-        self.assertEqual(self.request('/api/materials')[1]['materials'],[])
+        code,result=self.request('/api/chat',{'course_id':key,'message':'Summarize this lecture','request_id':'a'*32});self.assertEqual(code,200);self.assertEqual(result['sources'][0]['location'],'page 1')
+        self.assertEqual(len(self.request(f'/api/courses/{key}')[1]['conversation']['messages']),2)
+        self.assertEqual(self.request(f'/api/courses/{key}/materials/'+doc['id'],method='DELETE')[0],200)
+        self.assertEqual(self.request(f'/api/courses/{key}')[1]['materials'],[])
     def test_origin_header_and_removed_routes(self):
-        self.assertEqual(self.request('/api/conversations',{},headers={'Origin':'https://evil.example'})[0],403)
-        for path in ['/api/tracker','/api/datasets','/mascot.js','/assets/mellow/idle.png']:
+        self.assertEqual(self.request('/api/courses',{'name':'Test'},headers={'Origin':'https://evil.example'})[0],403)
+        for path in ['/api/tracker','/api/datasets','/mascot.js','/assets/mellow/idle.png','/api/conversations','/api/materials']:
             self.assertEqual(self.request(path)[0],404)
     def test_size_type_missing_and_bad_json(self):
+        _,course=self.request('/api/courses',{'name':'Test'})
+        path=f"/api/courses/{course['id']}/materials?filename=x.txt"
         self.server.app.max_upload_bytes=10
-        self.assertEqual(self.request('/api/materials?filename=x.txt',b'1'*11,headers={'Content-Type':'application/octet-stream'})[0],413)
-        self.assertEqual(self.request('/api/materials?filename=x.txt',b'hi',headers={'Content-Type':'text/plain'})[0],400)
-        self.assertEqual(self.request('/api/conversations/'+'a'*32)[0],404)
-        self.assertEqual(self.request('/api/conversations',b'{',headers={'Content-Type':'application/json'})[0],400)
+        self.assertEqual(self.request(path,b'1'*11,headers={'Content-Type':'application/octet-stream'})[0],413)
+        self.assertEqual(self.request(path,b'hi',headers={'Content-Type':'text/plain'})[0],400)
+        self.assertEqual(self.request('/api/courses/'+'a'*32)[0],404)
+        self.assertEqual(self.request('/api/courses',b'{',headers={'Content-Type':'application/json'})[0],400)
     def test_concurrent_mutation_returns_conflict(self):
         self.server.app.lock.acquire()
-        try:self.assertEqual(self.request('/api/conversations',{})[0],409)
+        try:self.assertEqual(self.request('/api/courses',{'name':'Test'})[0],409)
         finally:self.server.app.lock.release()
     def test_private_file_bytes_are_not_static_assets(self):
         doc=upload(self.server.app.store,'private.txt',b'SECRET',100)

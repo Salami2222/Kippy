@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Kippy · Your study companion</title>
-  <meta name="description" content="Kippy is a local AI-powered academic study assistant for understanding lectures and preparing for exams.">
+  <meta name="description" content="Your course-based study companion. Understand lectures, work through problems, and prepare for exams.">
   <link rel="preload" href="/vendor/silkscreen/Silkscreen-Regular.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="stylesheet" href="/vendor/katex/katex.min.css"><link rel="stylesheet" href="/app.css">
   <script defer src="/vendor/marked.js"></script><script defer src="/vendor/purify.js"></script>
@@ -12,32 +12,48 @@
 </head>
 <body>
   <button id="sidebar-shade" class="sidebar-shade" aria-label="Close sidebar" hidden></button>
-  <aside id="sidebar" class="sidebar" aria-label="Conversations and materials">
-    <div class="brand-row"><a class="brand" href="/">kippy<span>YOUR STUDY COMPANION</span></a><button id="sidebar-close" class="icon-button" aria-label="Collapse sidebar" title="Collapse sidebar">‹</button></div>
-    <button id="new-chat" class="new-chat pixel-action">＋ New chat</button>
-    <div class="sidebar-scroll">
-      <section><h2>Recent conversations</h2><div id="conversations" class="conversation-list"></div></section>
-      <section class="library"><div class="section-row"><h2>Library</h2><button id="upload-library" class="text-button">＋ Upload</button></div>
-        <p class="library-help">Select files to use in this chat.</p><div id="materials" class="material-list"></div>
-      </section>
-    </div>
-    <p class="sidebar-note">Stored locally on your server.<br>PDF · PPTX · DOCX · TXT · <span id="upload-limit">25 MB</span> per file</p>
+  <aside id="sidebar" class="sidebar" aria-label="Courses">
+    <div class="brand-row"><a class="brand" href="/"><span class="lantern" aria-hidden="true"></span>kippy<span>YOUR STUDY COMPANION</span></a><button id="sidebar-close" class="icon-button" aria-label="Collapse sidebar" title="Collapse sidebar">‹</button></div>
+    <button id="add-course" class="add-course-action pixel-action">＋ Add Course</button>
+    <div class="sidebar-scroll"><h2>Your courses</h2><div id="courses" class="course-list"></div></div>
+    <button id="recover-studies" class="recovery-link" hidden>Bring existing studies into a course</button>
+    <p class="sidebar-note">A little focus. A little wonder.<br>Your studies are saved on your server.</p>
   </aside>
   <main id="workspace" class="workspace">
-    <header class="chat-header"><div class="header-left"><button id="sidebar-open" class="icon-button" aria-label="Expand sidebar" title="Expand sidebar" hidden>☰</button><h1 id="conversation-title">New chat</h1></div><div id="connection" class="connection" role="status">Checking Qwen…</div></header>
+    <header class="chat-header">
+      <div class="header-left"><button id="sidebar-open" aria-controls="sidebar" class="icon-button" aria-label="Expand sidebar" title="Expand sidebar" hidden>☰</button><div class="course-heading"><h1 id="course-title">Your study journal</h1><span id="course-code" hidden></span></div></div>
+      <div class="header-actions"><div id="course-controls" hidden><button id="edit-course" class="icon-button" aria-label="Edit course" title="Edit course">⋯</button><button id="show-materials" class="materials-control pixel-action" aria-haspopup="dialog" aria-controls="materials-dialog">Materials <span id="material-count">0</span></button></div><div id="connection" class="connection" role="status">Checking Qwen…</div></div>
+    </header>
     <div id="notice" class="notice" role="alert" hidden><span id="notice-text"></span><button id="notice-close" aria-label="Dismiss message">×</button></div>
-    <div id="feed" class="feed" role="log" aria-label="Conversation" aria-live="polite">
-      <section id="empty" class="empty"><div class="welcome-panel pixel-panel"><p class="eyebrow">YOUR STUDY SPACE</p><h2>What are we studying today?</h2><p>Open your notes, upload materials, and let’s level up your understanding.</p><div class="suggestions" aria-label="Study suggestions"><button class="suggestion pixel-action" data-prompt="Create a study guide from my selected materials.">Create a study guide</button><button class="suggestion pixel-action" data-prompt="Review my selected notes and summarize the key ideas.">Review my notes</button><button class="suggestion pixel-action" data-prompt="Explain a concept: ">Explain a concept</button></div><button id="upload-empty" class="soft-button">＋ Add lecture materials</button></div></section>
-      <div id="messages" class="messages"></div>
-      <div id="thinking" class="thinking" role="status" hidden><i></i><span>Kippy is working through your question…</span></div>
+    <div id="feed" class="feed" role="log" aria-label="Course conversation" aria-live="polite">
+      <section id="empty-global" class="empty"><div class="welcome-panel pixel-panel"><span class="marsh-scene" aria-hidden="true"><i></i><i></i><i></i></span><p class="eyebrow">A NEW CHAPTER AWAITS</p><h2>Your adventure<br>starts here.</h2><p>Create your first course to begin studying with Kippy.</p><button id="add-first-course" class="primary-action pixel-action">＋ Add Course</button></div></section>
+      <section id="empty-course" class="empty" hidden><div class="welcome-panel pixel-panel"><p class="eyebrow" id="course-welcome-label">YOUR COURSE WORKSPACE</p><h2>What are we<br>studying today?</h2><p>Bring your notes. We’ll find a path through them together.</p><div class="suggestions" aria-label="Study suggestions"><button class="suggestion pixel-action" data-prompt="Create a study guide from this course's materials.">Study guide</button><button class="suggestion pixel-action" data-prompt="Summarize the key ideas in this course's lectures.">Review notes</button><button class="suggestion pixel-action" data-prompt="Explain a concept: ">Explain a concept</button></div><button id="upload-empty" class="soft-button">＋ Add course materials</button></div></section>
+      <div id="messages" class="messages"></div><div id="thinking" class="thinking" role="status" hidden><i></i><span>Kippy is working through your question…</span></div>
     </div>
-    <div class="composer-area">
-      <div id="selected-materials" class="selected-materials" aria-label="Selected materials"></div>
-      <form id="composer" class="composer pixel-panel"><label for="message" class="sr-only">Message Kippy</label><textarea id="message" rows="1" maxlength="8000" placeholder="Ask Kippy anything..." required></textarea><div class="composer-bottom"><button id="attach" class="icon-button" type="button" aria-label="Upload lecture materials" title="Upload lecture materials">＋</button><span class="composer-hint">Enter to send · Shift + Enter for a new line</span><button id="send" class="pixel-action" type="submit">Send ↑</button></div></form>
+    <div id="composer-area" class="composer-area" hidden>
+      <form id="composer" class="composer pixel-panel"><label for="message" class="sr-only">Message Kippy</label><textarea id="message" rows="1" maxlength="8000" placeholder="Ask Kippy about this course..." required></textarea><div class="composer-bottom"><button id="attach" class="icon-button" type="button" aria-label="Upload course materials" title="Upload course materials">＋</button><span class="composer-hint">Enter to send · Shift + Enter for a new line</span><button id="send" class="pixel-action" type="submit">Send ↑</button></div></form>
       <p class="footnote">Kippy can make mistakes. Check important details against your materials.</p>
     </div>
-    <div id="drop-hint" class="drop-hint" hidden>Drop lecture materials to upload</div>
+    <div id="drop-hint" class="drop-hint" hidden>Drop materials into this course</div>
   </main>
+  <dialog id="course-dialog" class="pixel-panel" aria-labelledby="course-dialog-title">
+    <form id="course-form"><div class="dialog-header"><h2 id="course-dialog-title">Add a course</h2><button id="close-course-dialog" type="button" class="icon-button" aria-label="Close course editor">×</button></div>
+      <p class="dialog-intro">One course. One conversation. All your notes together.</p>
+      <label class="field">Course name <input id="course-name" name="name" maxlength="120" required autocomplete="off" placeholder="e.g. Differential Equations"></label>
+      <div class="field"><label for="course-code-input">Course code <span>(optional)</span></label><input id="course-code-input" name="code" maxlength="40" placeholder="e.g. MATH246"></div>
+      <div class="field"><label for="course-description">Description <span>(optional)</span></label><textarea id="course-description" name="description" maxlength="600" rows="2" placeholder="A short note about this course"></textarea></div>
+      <details id="legacy-options" hidden><summary>Import existing studies</summary><p>Copy a saved chat and its referenced files into this course. Original chats and files stay safely stored, unchanged.</p><label class="field">Existing conversation <select id="legacy-conversation"><option value="">Start a fresh conversation</option></select></label><p>Optional additional files:</p><div id="legacy-materials" class="legacy-files"></div></details>
+      <p id="course-error" class="form-error" role="alert" hidden></p>
+      <div class="dialog-footer"><button id="delete-course" class="danger-button" type="button" hidden>Delete course</button><button id="save-course" class="primary-action pixel-action" type="submit">Create course</button></div>
+    </form>
+  </dialog>
+  <dialog id="materials-dialog" class="materials-drawer pixel-panel" aria-labelledby="materials-title">
+    <div class="dialog-header"><div><p id="materials-course-name" class="eyebrow"></p><h2 id="materials-title">Course materials</h2></div><button id="close-materials" class="icon-button" aria-label="Close materials">×</button></div>
+    <p class="dialog-intro">Kippy uses all ready files in this course. Other courses’ documents are never included.</p>
+    <button id="upload-materials" class="primary-action pixel-action">＋ Upload files</button>
+    <p class="library-help">PDF · PPTX · DOCX · TXT · <span id="upload-limit">25 MB</span> per file</p>
+    <p id="materials-error" class="form-error" role="alert" hidden></p><div id="materials" class="material-list"></div>
+  </dialog>
   <input id="file-input" type="file" accept=".pdf,.pptx,.docx,.txt" multiple hidden>
 </body>
 </html>

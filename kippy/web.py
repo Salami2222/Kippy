@@ -79,7 +79,8 @@ class App:
         self.version = {'commit': commit, 'pid': os.getpid(), 'started_at': time.time(), 'application': 'Kippy'}
 
     def chat(self, data):
-        key, request_id = valid_id(data.get('conversation_id')), valid_id(data.get('request_id'))
+        course = self.store.course(valid_id(data.get('course_id')))
+        key, request_id = course['conversation']['id'], valid_id(data.get('request_id'))
         message = data.get('message')
         if not isinstance(message, str) or not message.strip() or len(message) > 8000:
             raise ValueError('Enter a message of 1–8,000 characters.')
@@ -87,10 +88,10 @@ class App:
         if previous is not None:
             return previous
         conv = self.store.conversation(key)
-        chunks = self.store.chunks(conv['material_ids'])
-        names = [self.store.material(mid)['name'] for mid in conv['material_ids']]
+        chunks = self.store.course_chunks(course['id'])
+        names = [m['name'] for m in course['materials'] if m['status'] == 'ready']
         try:
-            content, sources = study.answer(self.client, message.strip(), conv['messages'][:-1], chunks, names)
+            content, sources = study.answer(self.client, message.strip(), conv['messages'][:-1], chunks, names, course)
             return self.store.finish_turn(key, request_id, content, sources)
         except OllamaError as exc:
             return self.store.finish_turn(key, request_id, str(exc), [], error=True)
@@ -136,19 +137,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, {'state': 'ready', 'application': 'Kippy', 'max_upload_bytes': self.app.max_upload_bytes})
             if route == '/api/ollama/status':
                 return self.reply(200, self.app.client.status())
-            if route == '/api/conversations':
-                return self.reply(200, {'conversations': self.app.store.conversations()})
-            if route.startswith('/api/conversations/'):
-                return self.reply(200, self.app.store.conversation(valid_id(route.rsplit('/', 1)[-1])))
-            if route == '/api/materials':
-                return self.reply(200, {'materials': self.app.store.materials()})
+            if route == '/api/courses':
+                return self.reply(200, {'courses': self.app.store.courses()})
+            if route == '/api/legacy':
+                return self.reply(200, self.app.store.legacy())
+            parts = route.strip('/').split('/')
+            if len(parts) == 3 and parts[:2] == ['api', 'courses']:
+                return self.reply(200, self.app.store.course(valid_id(parts[2])))
             if route.startswith('/api/'):
                 return self.reply(404, {'error': 'Endpoint not found.'})
             relative = 'index.html' if route == '/' else unquote(route).lstrip('/')
             path = (STATIC / relative).resolve()
             if not path.is_relative_to(STATIC.resolve()) or not path.is_file():
                 return self.reply(404, {'error': 'File not found.'})
-            mime = {'.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.woff2': 'font/woff2'}.get(path.suffix.lower()) or mimetypes.guess_type(path.name)[0] or 'application/octet-stream'
+            mime = {'.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.woff2': 'font/woff2', '.ttf': 'font/ttf'}.get(path.suffix.lower()) or mimetypes.guess_type(path.name)[0] or 'application/octet-stream'
             return self.reply(200, path.read_bytes(), mime + ('; charset=utf-8' if mime.startswith('text/') or path.suffix == '.js' else ''))
         except LookupError as exc:
             self.reply(404, {'error': str(exc)})
@@ -171,40 +173,47 @@ class Handler(BaseHTTPRequestHandler):
         try:
             parsed = urlsplit(self.path)
             route = parsed.path
-            if method == 'DELETE':
-                if route.startswith('/api/materials/'):
-                    self.app.store.delete_material(valid_id(route.rsplit('/', 1)[-1]))
-                elif route.startswith('/api/conversations/'):
-                    self.app.store.delete_conversation(valid_id(route.rsplit('/', 1)[-1]))
-                else:
-                    return self.reply(404, {'error': 'Endpoint not found.'})
+            parts = route.strip('/').split('/')
+            course_path = len(parts) >= 3 and parts[:2] == ['api', 'courses']
+            course_id = valid_id(parts[2]) if course_path else None
+            upload_path = course_path and len(parts) == 4 and parts[3] == 'materials'
+            if course_id:
+                self.app.store.course(course_id)
+            if method == 'DELETE' and course_path and len(parts) == 5 and parts[3] == 'materials':
+                self.app.store.delete_course_material(course_id, valid_id(parts[4]))
                 return self.reply(200, {'deleted': True})
+            if method == 'DELETE' and not (course_path and len(parts) == 3):
+                return self.reply(404, {'error': 'Endpoint not found.'})
             try:
                 length = int(self.headers.get('Content-Length', '0'))
             except ValueError:
                 raise ValueError('Invalid request length.')
-            limit = self.app.max_upload_bytes if route == '/api/materials' else 65536
+            limit = self.app.max_upload_bytes if upload_path else 65536
             if length < 1 or length > limit:
                 return self.reply(413, {'error': 'Request is empty or exceeds the configured size limit.'})
             self.connection.settimeout(30)
             body = self.rfile.read(length)
             if len(body) != length:
                 raise ValueError('The upload was interrupted; please try again.')
-            if route == '/api/materials':
+            if upload_path:
                 if self.headers.get_content_type() != 'application/octet-stream':
                     raise ValueError('Upload files as application/octet-stream.')
                 filename = parse_qs(parsed.query).get('filename', [''])[0]
-                return self.reply(201, documents.upload(self.app.store, filename, body, self.app.max_upload_bytes))
+                return self.reply(201, documents.upload(self.app.store, filename, body, self.app.max_upload_bytes, course_id))
             if self.headers.get_content_type() != 'application/json':
                 raise ValueError('Expected application/json.')
             data = json.loads(body)
             if not isinstance(data, dict):
                 raise ValueError('Expected a JSON object.')
-            if route == '/api/conversations':
-                return self.reply(201, self.app.store.create_conversation())
-            if route.endswith('/materials') and route.startswith('/api/conversations/'):
-                key = valid_id(route.split('/')[3])
-                return self.reply(200, self.app.store.select(key, data.get('material_ids')))
+            if method == 'DELETE':
+                if data.get('confirm_course_id') != course_id:
+                    raise ValueError('Confirm deletion of this course, its conversation, and all its materials.')
+                self.app.store.delete_course(course_id)
+                return self.reply(200, {'deleted': True})
+            if route == '/api/courses':
+                return self.reply(201, self.app.store.create_course(data))
+            if course_path and len(parts) == 3:
+                return self.reply(200, self.app.store.update_course(course_id, data))
             if route == '/api/chat':
                 return self.reply(200, self.app.chat(data))
             return self.reply(404, {'error': 'Endpoint not found.'})

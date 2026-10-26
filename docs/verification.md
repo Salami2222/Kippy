@@ -2,7 +2,7 @@
 
 ## Implemented
 
-- Responsive retro handheld chat UI with a collapsible conversation/library sidebar, persistent history, New Chat, conversation switching/deletion, multiline composer, copy, loading/error states, sanitized Markdown, code blocks and locally rendered LaTeX.
+- Responsive course-based swamp-fantasy chat UI with a collapsible conversation/library sidebar, persistent history, New Chat, conversation switching/deletion, multiline composer, copy, loading/error states, sanitized Markdown, code blocks and locally rendered LaTeX.
 - Real PDF/PPTX/DOCX/TXT upload/extraction, persistent random-ID files, SQLite metadata/chunks, per-conversation selections, processing/errors, removal and drag/drop.
 - Qwen3.5:9b through the Python Ollama client, bounded recent history, lexical retrieval, explicit page/slide/section/line requests, and section-by-section whole-document review with explicit coverage limits.
 - Existing loopback/Tailscale access model and deployment/Ollama supervision retained. New release checks and the guarded first-migration procedure are deployed; see the live verification below.
@@ -96,3 +96,22 @@ Changed only `kippy/static/app.css`, `index.html`, `app.js`, frontend tests and 
 - **39 Python tests, 16 frontend tests and JS syntax check passed.** Python wheel packaging passed, including the new font and license. There is no separate frontend build step for the static HTML/CSS/JS client.
 - Browser checks covered desktop 1280×720, tablet 834×1112, mobile 390×844 and 320×568, plus a reduced-height 390×420 viewport. Verified internal conversation scrolling, sidebar open/collapse, long filenames, real mobile attachment upload, select/deselect persistence, and a real Qwen answer with headings, lists, display math and horizontally scrollable Python code. Copy response returned the original Markdown. A physical mobile keyboard was not tested.
 - Checked representative text contrast: body/dialogue 10.78:1; muted text/selected panel 4.94:1; cyan/secondary panel 5.29:1; send label/orange 6.07:1; sand/sidebar 8.36:1. Reduced-motion rules turn off animation/transitions. Backend, data formats, storage keys, model settings and Windows/Tailscale deployment configuration remain unchanged.
+
+
+## Course workspaces + Swamp Fantasy — October 26, 2026
+
+### Product and persistence
+
+Courses replace the global New Chat/history/Library UI. Each course owns one continuous conversation and its document collection. The header exposes Materials and Edit course; the drawer provides real PDF/PPTX/DOCX/TXT uploads and errors. Python derives both conversation and document scope from the supplied course ID, and SQL joins enforce course-only retrieval. Course metadata accompanies the existing bounded academic prompt. Assistant responses use an open reading area; user/composer panels retain original stepped frames, moss/teal/gold colors and restrained lantern/book/reed details. No mascot, model, framework or cloud service was added.
+
+Four new link/metadata tables implement an additive schema upgrade; original six-table records and uploaded bytes stay unchanged. The explicit import UI copies a chosen old chat and its selected/cited files into a named course, remapping source IDs and retaining originals. Shared legacy documents get independent course copies. Confirmed course deletion removes only that course’s files/history. Interrupted staged file deletion is reconciled on restart. See `docs/course-migration.md` for deployment/rollback details; no manual SQL, dependencies, model changes or Windows task changes are needed.
+
+### Checks completed before publication
+
+- **55 Python tests and 19 frontend tests pass**, including creation, zero-course initialization, rename/delete, history switching/reload, scoping, hostile cross-course request IDs, original-schema migration, shared imports, copy failures, deletion recovery, modal/drawer behaviors, offline status, sanitization/math/code, copy, validation and post-mutation refresh failures. JavaScript syntax and Python dependency checks pass.
+- Python wheel packaging succeeds and includes the new original SVG frame, static client and existing licensed pixel font. This application has no separate frontend compilation step.
+- The actual local website started with zero courses. Created Differential Equations and Chemistry through the UI; uploaded PDF/PPTX/DOCX/TXT into Math and a separate TXT into Chemistry. Both real Qwen responses identified the correct active course and cited only that course’s material locations. Switching and renaming preserved histories and file counts.
+- A real local backend restart preserved both full course workspaces byte-for-byte in API snapshots. A real browser legacy import copied a historical chat and remapped its source IDs; deleting its course via the confirmed API removed only the new copy while original messages and bytes remained intact.
+- Visual checks cover 1280×720 desktop, 834×1112 tablet, 390×844 and 320×568 mobile, and a 390×420 reduced-height viewport. Verified course navigation, editor, drawer, internal scrolling, composer visibility and no page-width overflow. Physical phone keyboard behavior is not claimed as tested. Pixel fonts remain limited to short labels; body/math stay readable.
+- Representative contrast ratios: body/main 15.14:1, muted/selected surface 4.57:1, teal/secondary surface 5.43:1, send label/gold 10.46:1, parchment/sidebar 11.48:1. Reduced-motion rules remain active.
+- Windows preflight confirmed the existing main-branch deployment task and storage path. Its data fingerprint inventory contained zero conversations/materials/uploads; no production example courses were created during development. Existing-data preservation was exercised using populated migration fixtures and real local import checks. The normal guarded main-branch workflow will perform Windows staging tests before restarting into this additive upgrade.

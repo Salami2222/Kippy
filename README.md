@@ -32,30 +32,31 @@ ssh -N -i ~/.ssh/macromellow_windows -o ExitOnForwardFailure=yes \
 
 Then launch Kippy with `export OLLAMA_BASE_URL=http://127.0.0.1:11445`. This does not expose Ollama publicly, change its bind address, install a model, or alter Tailscale configuration. Stop the tunnel with Ctrl+C.
 
-## The interface
+## Course workspaces
 
-The **Retro Handheld** theme uses slate-blue dialogue panels, cyan selections, sand-colored headings, and warm orange action buttons. Reusable `.pixel-panel` / `.pixel-action` styles and palette tokens live in `kippy/static/app.css`. Silkscreen lettering is bundled locally under the SIL Open Font License for short interface labels; academic responses, filenames, code, and math retain readable fonts. Welcome suggestions fill the composer without sending. The sidebar, document states and focus indicators use the same framed visual language, and reduced-motion preferences disable animation and transitions.
+A fresh installation starts with **zero courses**. Click **Add Course**, enter any course name, and optionally add a code and description. Kippy creates exactly one continuous, persistent conversation for that course and opens it immediately. Switch courses in the sidebar; the last active course is remembered by the browser. There is no global New Chat or Library.
 
-- **New chat** creates a fresh stored conversation. The sidebar lists actual conversations; reopen or delete them there. The last selected conversation is remembered by this browser.
-- Type a question, press Enter to send, or Shift+Enter for a newline. Responses support sanitized Markdown, code blocks, and KaTeX math (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`). **Copy response** copies the original Markdown.
-- Upload using **＋**, **Upload**, or drag files into the conversation. Upload and extraction states are real, not simulated. Successful uploads are selected for the current conversation automatically, up to 20 files.
-- Select/deselect existing materials using the library checkboxes. Selections are stored per conversation and shown above the composer. **×** removes a material from disk, metadata, extracted chunks, and all conversation selections after confirmation. Previously generated answers remain as history.
-- Collapse the sidebar for more chat space. On mobile it opens as a dismissible overlay. Conversation scrolling stays inside the application; the composer follows the visual viewport.
+- **Materials** in the course header opens its file drawer. Upload PDF, PPTX, DOCX or TXT using the drawer, the composer’s **＋**, or drag/drop. Files automatically belong to the active course, including failed uploads whose errors remain visible. All ready course files are available for retrieval; no global document-selection step is needed.
+- Type a question, press Enter to send, or Shift+Enter for a newline. Responses support sanitized Markdown, code blocks and KaTeX math (`$…$`, `$$…$$`, `\\(…\\)`, `\\[…\\]`). **Copy response** copies the original Markdown. Source details show actual context locations.
+- The **⋯ Edit course** control lets you rename a course or change its code/description without replacing its conversation. **Delete course** requires an explicit confirmation and removes its conversation, messages, extracted sections and uploaded files. Removing an individual material also requires confirmation; saved answers remain.
+- A course uses only its own conversation history and documents. Python derives the conversation and retrieval scope from the course ID; client-provided conversation/material IDs cannot broaden it. General academic knowledge is still available and is distinguished from document evidence.
+- If older global chats/files exist, **Bring existing studies into a course** opens the course editor’s import options. Choose one saved chat and/or loose files. Kippy copies that history and the referenced/selected files into the new course, preserving the originals unchanged. See [course migration](docs/course-migration.md).
+- The sidebar collapses on desktop and becomes a dismissible mobile menu. Materials use a drawer; chat scrolls internally with the composer near the bottom.
 
-No account system, analytics dashboard, or mascot is included.
+The **Swamp Fantasy** theme uses mossy panels, teal focus accents, parchment headings, firefly-gold actions and original lightweight pixel frames/book/lantern/reed details. Silkscreen is served locally under its included SIL Open Font License for short labels; long academic responses, filenames, code and math retain readable fonts. Reduced-motion preferences disable animation and transitions. No game mechanics or mascot system is included.
 
 ## Persistent storage and upload limits
 
 Default storage is **`~/.kippy/`**, outside the repository and deployment staging directories:
 
 ```text
-kippy.sqlite3   conversations, messages, file metadata, extracted text/chunks, selections
+kippy.sqlite3   courses, linked conversations, messages, documents/chunks, import records
 uploads/       original files, stored under random internal IDs
 ```
 
 Set `KIPPY_DATA_DIR` or pass `--data-dir` to choose a persistent location. Windows migration uses **`C:\Users\tommy\KippyData`**. Do not put uploads in temporary storage, the source checkout, or a staging worktree. Private uploads and SQLite files are excluded from Git; never force-add them.
 
-Default maximum upload size: **25 MiB per file**, configurable with `KIPPY_MAX_UPLOAD_MB` (1–100). Up to 20 ready materials can be selected per conversation. There is no automatic deletion or total disk quota; remove unwanted files in the library and monitor local disk usage.
+Default maximum upload size: **25 MiB per file**, configurable with `KIPPY_MAX_UPLOAD_MB` (1–100). Ready documents are scoped to their course; there is no 20-file selection limit. Complete reviews remain bounded by the existing 24-batch context limit. There is no total disk quota; imports create independent copies and therefore use additional disk space.
 
 | Format | Extracted content | References |
 | --- | --- | --- |
@@ -68,9 +69,9 @@ Scanned pages, handwriting, embedded diagrams, images, speaker notes, PDF readin
 
 ## Grounded conversations
 
-Python extracts text and stores overlapping chunks with file IDs, names, and page/slide/section references. Lexical retrieval ranks relevant text; explicit page/slide requests prioritize that location. The prompt includes recent conversation context (at most 12 messages and 10,000 characters), allowing follow-ups without resending an entire history. Full history remains stored for viewing.
+Python extracts text and stores overlapping chunks with file IDs, names, and page/slide/section references. A database join limits retrieval to documents owned by the active course, and the prompt includes that course’s name, code and description. Lexical retrieval ranks relevant text; explicit page/slide requests prioritize that location. The prompt includes recent conversation context (at most 12 messages and 10,000 characters), allowing follow-ups without resending an entire history. Full history remains stored for viewing.
 
-Summaries, exam reviews, memorization lists, and study guides review **all extracted sections** of selected materials. Long materials are processed in bounded batches, then combined through hierarchical summaries. More than 24 input batches produces an explicit request to select fewer materials, rather than a falsely complete answer. Individual prompt excerpts are budgeted conservatively by characters, not an exact Qwen tokenizer. Summarization is lossy by nature: check important formulas and details against originals.
+Summaries, exam reviews, memorization lists, and study guides review **all extracted sections** of the active course’s materials. Long materials are processed in bounded batches, then combined through hierarchical summaries. More than 24 input batches produces an explicit request for a narrower topic or specific pages/slides, rather than a falsely complete answer. Individual prompt excerpts are budgeted conservatively by characters, not an exact Qwen tokenizer. Summarization is lossy by nature: check important formulas and details against originals.
 
 Uploaded text is supplied as **untrusted data** in user-context containers, never as a system instruction. Kippy is instructed to cite filenames/pages/slides, distinguish document evidence from general knowledge, and acknowledge missing support. The expandable **Context provided** list shows actual retrieved source locations; it does not independently verify every model-generated claim. Qwen can still make mistakes, including citation or mathematical errors. There is no vector database or external search.
 
@@ -109,3 +110,7 @@ The initial migration is complete. The existing web task now launches `python -m
 Operational script names, task identifiers, SSH key, and existing installation/service directory names are retained where required by the inspected host. They do not run a second application or retain discontinued features. The old application package, dashboards, tools, scrapers, database schema, sprites, and associated tests have been removed from the tracked codebase.
 
 See [conversion verification](docs/verification.md) for actual test counts, live Qwen/browser checks, major changes and remaining limitations.
+
+### Course database upgrade
+
+Course support uses an automatic **additive SQLite migration** on startup. No manual SQL, new dependencies, Windows task changes, model changes or storage relocation are required. Existing tables and global records remain intact; old data is associated with courses only through the explicit import UI. Read [the migration and rollback notes](docs/course-migration.md) before deploying this first course-based release.

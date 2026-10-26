@@ -95,17 +95,21 @@ def extract(path, extension):
     return chunks, WARNING + (' Some pages/slides contain no extractable text.' if any(not t.strip() for _, t in segments) else '')
 
 
-def upload(store, filename, content, max_bytes):
+def upload(store, filename, content, max_bytes, course_id=None):
     name = safe_name(filename)
     extension = Path(name).suffix.lower()
     if extension not in SUPPORTED:
         raise ValueError('Supported formats: PDF, PPTX, DOCX, and TXT.')
     if not content or len(content) > max_bytes:
         raise ValueError('The file is empty or exceeds the upload size limit.')
+    if course_id is not None:
+        store.course(course_id)
     key = identifier()
     with store.connect() as db:
         db.execute('INSERT INTO materials (id,name,type,size,status,created_at) VALUES (?,?,?,?,?,?)',
                    (key, name, extension[1:], len(content), 'processing', now()))
+        if course_id is not None:
+            db.execute('INSERT INTO course_materials VALUES (?,?)', (course_id, key))
     path = store.uploads / key
     try:
         path.write_bytes(content)

@@ -14,11 +14,11 @@
     if (!response.ok) throw new Error(data.error || `Request failed (${response.status}).`);
     return data;
   }
-  function requestPayload(conversationId, message, requestId) {
-    return {conversation_id: conversationId, message: message.trim(), request_id: requestId};
+  function requestPayload(courseId, message, requestId) {
+    return {course_id: courseId, message: message.trim(), request_id: requestId};
   }
-  async function sendTurn(conversationId, message, requestId, transport = api) {
-    return transport('/api/chat', {method: 'POST', body: requestPayload(conversationId, message, requestId)});
+  async function sendTurn(courseId, message, requestId, transport = api) {
+    return transport('/api/chat', {method: 'POST', body: requestPayload(courseId, message, requestId)});
   }
   function renderMarkdown(text, marked, purifier) {
     // Never permit model-generated images, raw forms, scripts, or privileged attributes.
@@ -32,181 +32,149 @@
   if (!root.document) return;
 
   const $ = id => document.getElementById(id);
-  const state = {conversation: null, conversations: [], materials: [], pending: new Map(), busy: false, uploads: 0, maxBytes: 25 * 1048576, collapsed: false};
-  let switchSequence = 0;
+  const state = {courses: [], course: null, legacy: {conversations: [], materials: []}, busy: false, pending: new Map(), maxBytes: 25*1048576, collapsed: false, editing: false};
   let dragDepth = 0;
-  function notice(message) { $('notice-text').textContent = message; $('notice').hidden = !message; }
-  function remember(id) { try { if (id) localStorage.setItem('kippy.conversation', id); else localStorage.removeItem('kippy.conversation'); } catch { /* Server history remains authoritative. */ } }
-  function lastConversation() { try { return localStorage.getItem('kippy.conversation'); } catch { return null; } }
-  function element(tag, className, text) { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; }
-  function button(text, className, action, label) { const node = element('button', className, text); node.type = 'button'; if (label) node.setAttribute('aria-label', label); node.addEventListener('click', action); return node; }
+  function element(tag, cls, text) { const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n; }
+  function button(text, cls, action, label) {const n=element('button',cls,text);n.type='button';if(label)n.setAttribute('aria-label',label);n.addEventListener('click',action);return n;}
+  function notice(text) {$('notice-text').textContent=text;$('notice').hidden=!text;$('materials-error').textContent=text;$('materials-error').hidden=!text;}
+  function remember(id) {try {if(id)localStorage.setItem('kippy.course',id);else localStorage.removeItem('kippy.course');}catch{/* Server storage remains authoritative. */}}
   function sidebar(visible) {
-    const mobile = matchMedia('(max-width: 760px)').matches;
-    if (mobile) document.body.classList.toggle('sidebar-visible', visible);
-    else { state.collapsed = !visible; document.body.classList.toggle('sidebar-collapsed', !visible); }
-    $('sidebar-shade').hidden = !(mobile && visible);
-    $('sidebar-open').hidden = !mobile && !state.collapsed;
-    $('sidebar-open').setAttribute('aria-expanded', String(visible));
-    // Prevent tabbing into an off-screen panel.
-    $('sidebar').inert = mobile ? !visible : state.collapsed;
+    const mobile=matchMedia('(max-width: 760px)').matches;
+    if(mobile)document.body.classList.toggle('sidebar-visible',visible);
+    else {state.collapsed=!visible;document.body.classList.toggle('sidebar-collapsed',!visible);}
+    $('sidebar-shade').hidden=!(mobile&&visible);$('sidebar-open').hidden=!mobile&&!state.collapsed;
+    $('sidebar-open').setAttribute('aria-expanded',String(visible));$('sidebar').inert=mobile?!visible:state.collapsed;
   }
-  function resize() { $('message').style.height = 'auto'; $('message').style.height = `${Math.min(matchMedia('(max-height: 500px)').matches ? 85 : 150, $('message').scrollHeight)}px`; }
-  function viewport() {
-    if (root.visualViewport) { document.body.style.height = `${root.visualViewport.height}px`; document.body.style.top = `${root.visualViewport.offsetTop}px`; document.body.style.position = 'fixed'; document.body.style.width = '100%'; }
-    resize();
+  function resize() {$('message').style.height='auto';$('message').style.height=`${Math.min(matchMedia('(max-height: 500px)').matches?85:150,$('message').scrollHeight)}px`;}
+  function viewport() {document.documentElement.style.setProperty('--viewport-height',`${root.visualViewport?.height||root.innerHeight}px`);if(root.visualViewport){Object.assign(document.body.style,{height:`${root.visualViewport.height}px`,top:`${root.visualViewport.offsetTop}px`,position:'fixed',width:'100%'});}resize();}
+  function controls() {
+    for(const id of ['add-course','add-first-course','edit-course','save-course','delete-course','upload-materials','upload-empty','attach','send','message'])$(id).disabled=state.busy;
+    renderCourses();
   }
-  function busy(active) {
-    state.busy = active;
-    $('thinking').hidden = !active;
-    $('send').disabled = active;
-    $('message').disabled = active;
-    $('new-chat').disabled = active;
-    renderLists();
-  }
-  function renderLists() {
-    $('conversations').replaceChildren();
-    if (!state.conversations.length) $('conversations').append(element('p','list-empty','Your conversations will appear here.'));
-    for (const conversation of state.conversations) {
-      const row = element('div','conversation-row' + (conversation.id === state.conversation?.id ? ' active' : ''));
-      const open = button(conversation.title,'open-conversation', () => openConversation(conversation.id)); open.disabled = state.busy || state.uploads > 0; open.title = conversation.title;
-      if (conversation.id === state.conversation?.id) open.setAttribute('aria-current','true');
-      const remove = button('×','delete-button',async () => {
-        if (!confirm('Delete this conversation and its messages? Uploaded materials will remain in the library.')) return;
-        try { await api(`/api/conversations/${conversation.id}`,{method:'DELETE'}); if (state.conversation?.id === conversation.id) {state.conversation = null; remember(null); renderConversation();} await loadConversations(); } catch(error) {notice(error.message);}
-      },`Delete conversation: ${conversation.title}`); remove.disabled = state.busy || state.uploads > 0;
-      row.append(open,remove); $('conversations').append(row);
+  function busy(active, thinking=false) {state.busy=active;$('thinking').hidden=!(active&&thinking);controls();renderMaterials();}
+  function renderCourses() {
+    $('courses').replaceChildren();
+    if(!state.courses.length)$('courses').append(element('p','list-empty','Your courses will grow here.'));
+    for(const course of state.courses) {
+      const open=button('','course-entry',()=>openCourse(course.id),`Open course: ${course.name}`);open.disabled=state.busy;open.title=course.name;
+      const icon=element('span','book-icon');icon.setAttribute('aria-hidden','true');
+      const title=element('span','course-entry-text');title.append(element('span','course-entry-name',course.name));if(course.code)title.append(element('span','course-entry-code',course.code));
+      open.append(icon,title);if(course.id===state.course?.id){open.classList.add('active');open.setAttribute('aria-current','true');}$('courses').append(open);
     }
+    const pending=state.legacy.conversations.length||state.legacy.materials.some(m=>!m.imported);
+    $('recover-studies').hidden=!pending;$('recover-studies').disabled=state.busy;
+  }
+  function renderMaterials() {
     $('materials').replaceChildren();
-    if (!state.materials.length && !state.pending.size) $('materials').append(element('p','list-empty','No materials yet. Add a lecture to get started.'));
-    for (const file of [...state.pending.values(), ...state.materials]) {
-      const row = element('div','material-row pixel-panel'); const top = element('div','material-top'); const label = element('label');
-      const check = element('input'); check.type = 'checkbox'; check.checked = state.conversation?.material_ids.includes(file.id) || false; check.disabled = file.status !== 'ready' || state.busy || state.uploads > 0;
-      check.setAttribute('aria-label',`Use ${file.name} in this conversation`);
-      check.addEventListener('change',async () => {
-        if(state.busy || state.uploads) return;
-        const selected=check.checked;
-        state.uploads++;$('send').disabled=true;$('new-chat').disabled=true;renderLists();
-        try { const conversation = await ensureConversation(); const ids = new Set(conversation.material_ids); if(selected) ids.add(file.id); else ids.delete(file.id);
-          state.conversation = await api(`/api/conversations/${conversation.id}/materials`,{method:'POST',body:{material_ids:[...ids]}});
-        } catch(error) {notice(error.message);}
-        finally {state.uploads--;$('send').disabled=state.busy;$('new-chat').disabled=state.busy;renderLists();renderSelected();}
-      });
-      row.dataset.status=file.status;row.dataset.selected=String(check.checked);
-      const type=element('span','file-type',(file.type||file.name.split('.').pop()).toUpperCase());type.setAttribute('aria-hidden','true');
-      label.append(check,type,element('span','',file.name)); top.append(label);
-      if(file.id) {const remove=button('×','delete-button',async()=>{
-        if(!confirm(`Remove “${file.name}” from the library and all conversations? Existing answers remain saved.`)) return;
-        try {await api(`/api/materials/${file.id}`,{method:'DELETE'}); await loadMaterials(); if(state.conversation) state.conversation=await api(`/api/conversations/${state.conversation.id}`); renderLists();renderSelected();}catch(error){notice(error.message);}
-      },`Remove material: ${file.name}`); remove.disabled=state.busy || state.uploads>0;top.append(remove);}
-      const detail=element('p','material-detail'+(file.status==='failed'?' material-error':''),`${(file.type||file.name.split('.').pop()).toUpperCase()} · ${file.status}${file.error ? ' — '+file.error : ''}`);
-      row.append(top,detail);
-      if(file.warning) {const disclosure=element('details','material-detail'); disclosure.append(element('summary','','Extraction limits'),element('p','',file.warning));row.append(disclosure);}
-      $('materials').append(row);
+    const materials=[...state.pending.values(),...(state.course?.materials||[])];
+    $('material-count').textContent=String(state.course?.materials.length||0);
+    if(!materials.length)$('materials').append(element('p','list-empty','No materials yet. Upload your first lecture or set of notes.'));
+    for(const file of materials) {
+      const row=element('div','material-row pixel-panel');row.dataset.status=file.status;
+      const top=element('div','material-top');const name=element('div','material-name');
+      const type=element('span','file-type',(file.type||file.name.split('.').pop()).toUpperCase());type.setAttribute('aria-hidden','true');name.append(type,element('span','',file.name));top.append(name);
+      if(file.id){const remove=button('×','delete-button',async()=>{
+        if(state.busy||!confirm(`Remove “${file.name}” from this course? Its extracted text and original file will be deleted. Saved responses remain.`))return;
+        busy(true);try{await api(`/api/courses/${state.course.id}/materials/${file.id}`,{method:'DELETE'});await refreshCourse();}catch(e){notice(e.message);}finally{busy(false);}
+      },`Remove material: ${file.name}`);remove.disabled=state.busy;top.append(remove);}
+      row.append(top,element('p','material-detail',`${file.status}${file.error?' — '+file.error:''}`));
+      if(file.warning){const d=element('details','material-detail');d.append(element('summary','','Extraction limits'),element('p','',file.warning));row.append(d);}$('materials').append(row);
     }
   }
-  function renderSelected() {
-    $('selected-materials').replaceChildren();
-    for(const id of state.conversation?.material_ids || []) {const file=state.materials.find(x=>x.id===id);if(file) {const chip=element('span','material-chip',file.name);chip.title=file.name;$('selected-materials').append(chip);}}
-  }
-  function renderConversation() {
-    $('conversation-title').textContent=state.conversation?.title || 'New chat';
-    const messages=state.conversation?.messages || [];
-    $('empty').hidden=messages.length>0;
-    $('messages').replaceChildren();
-    for(const message of messages) {
-      const article=element('article',`message pixel-panel ${message.role}${message.error?' error':''}`);
-      if(message.role==='user') article.textContent=message.content;
+  function renderMessages() {
+    const messages=state.course?.conversation.messages||[];$('messages').replaceChildren();
+    for(const m of messages){
+      const article=element('article',`message ${m.role}${m.error?' error':''}${m.role==='user'?' pixel-panel':''}`);
+      if(m.role==='user')article.textContent=m.content;
       else {
-        article.append(element('div','message-label','KIPPY'));
-        const body=element('div','message-body');
-        body.innerHTML=renderMarkdown(message.content,root.marked,root.DOMPurify);
-        for(const link of body.querySelectorAll('a')) {link.target='_blank';link.rel='noopener noreferrer';}
-        if(root.renderMathInElement) root.renderMathInElement(body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}],throwOnError:false,trust:false,maxExpand:1000});
-        article.append(body);
-        if(message.sources?.length) {const details=element('details','sources');const list=element('ul');for(const source of message.sources)list.append(element('li','',`${source.name} · ${source.location}`));details.append(element('summary','',`Context provided · ${message.sources.length} source location${message.sources.length===1?'':'s'}`),list);article.append(details);}
-        const copy=button('Copy response','copy-button',async()=>{try{await navigator.clipboard.writeText(message.content);copy.textContent='Copied';setTimeout(()=>copy.textContent='Copy response',1400);}catch{notice('Copy was unavailable. Select the response text and copy it manually.');}});article.append(copy);
+        article.append(element('div','message-label','KIPPY'));const body=element('div','message-body');body.innerHTML=renderMarkdown(m.content,root.marked,root.DOMPurify);
+        for(const a of body.querySelectorAll('a')){a.target='_blank';a.rel='noopener noreferrer';}
+        root.renderMathInElement?.(body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}],throwOnError:false,trust:false,maxExpand:1000});article.append(body);
+        if(m.sources?.length){const details=element('details','sources');const list=element('ul');for(const s of m.sources)list.append(element('li','',`${s.name} · ${s.location}`));details.append(element('summary','',`Context provided · ${m.sources.length} source location${m.sources.length===1?'':'s'}`),list);article.append(details);}
+        const copy=button('Copy response','copy-button',async()=>{try{await navigator.clipboard.writeText(m.content);copy.textContent='Copied';setTimeout(()=>copy.textContent='Copy response',1400);}catch{notice('Copy was unavailable. Select the text and copy it manually.');}});article.append(copy);
       }
       $('messages').append(article);
     }
-    renderSelected(); renderLists();
+    $('empty-global').hidden=!!state.course;$('empty-course').hidden=!state.course||messages.length>0;
     requestAnimationFrame(()=>{$('feed').scrollTop=$('feed').scrollHeight;});
   }
-  async function loadConversations() {state.conversations=(await api('/api/conversations')).conversations;renderLists();}
-  async function loadMaterials() {state.materials=(await api('/api/materials')).materials;renderLists();renderSelected();}
-  async function openConversation(id) {
-    if(state.busy || state.uploads) return;
-    const sequence=++switchSequence;
-    try {const conversation=await api(`/api/conversations/${id}`);if(sequence!==switchSequence)return;state.conversation=conversation;remember(id);$('message').value='';resize();renderConversation();sidebar(!matchMedia('(max-width: 760px)').matches);$('message').focus();}catch(error){notice(error.message);}
+  function render() {
+    $('course-title').textContent=state.course?.name||'Your study journal';$('course-code').textContent=state.course?.code||'';$('course-code').hidden=!state.course?.code;
+    $('course-controls').hidden=!state.course;$('composer-area').hidden=!state.course;
+    $('materials-course-name').textContent=state.course?.name||'';
+    $('course-welcome-label').textContent=state.course?.code||'YOUR COURSE WORKSPACE';
+    renderMessages();renderMaterials();controls();resize();
   }
-  async function ensureConversation() {
-    if(state.conversation) return state.conversation;
-    state.conversation=await api('/api/conversations',{method:'POST',body:{}});remember(state.conversation.id);await loadConversations();return state.conversation;
+  async function loadCourses() {state.courses=(await api('/api/courses')).courses;renderCourses();}
+  async function loadLegacy() {state.legacy=await api('/api/legacy');renderCourses();}
+  async function refreshCourse() {if(state.course){const id=state.course.id;const course=await api(`/api/courses/${id}`);if(state.course?.id===id)state.course=course;}render();}
+  async function openCourse(id) {
+    if(state.busy)return;busy(true);notice('');
+    try{const course=await api(`/api/courses/${id}`);state.course=course;remember(id);$('message').value='';render();sidebar(!matchMedia('(max-width: 760px)').matches);$('message').focus();}
+    catch(e){notice(e.message);}finally{busy(false);}
   }
-  async function newChat() {
-    if(state.busy || state.uploads) return;
-    try {state.conversation=await api('/api/conversations',{method:'POST',body:{}});remember(state.conversation.id);await loadConversations();$('message').value='';resize();renderConversation();sidebar(!matchMedia('(max-width: 760px)').matches);$('message').focus();}catch(error){notice(error.message);}
+  function editCourse(editing=false, recover=false) {
+    if(state.busy)return;state.editing=editing;$('course-form').reset();$('course-error').hidden=true;
+    $('course-dialog-title').textContent=editing?'Edit course':'Add a course';$('save-course').textContent=editing?'Save changes':'Create course';$('delete-course').hidden=!editing;
+    $('course-name').value=editing?state.course.name:'';$('course-code-input').value=editing?state.course.code:'';$('course-description').value=editing?state.course.description:'';
+    $('legacy-options').hidden=editing||!(state.legacy.conversations.length||state.legacy.materials.length);$('legacy-options').open=recover;
+    $('legacy-conversation').replaceChildren(new Option('Start a fresh conversation',''));
+    for(const c of state.legacy.conversations)$('legacy-conversation').append(new Option(c.title,c.id));
+    $('legacy-materials').replaceChildren();for(const m of state.legacy.materials){const label=element('label','legacy-file');const check=element('input');check.type='checkbox';check.value=m.id;label.append(check,element('span','',m.name+(m.imported?' (previously copied)':'')));$('legacy-materials').append(label);}
+    $('course-dialog').showModal();$('course-name').focus();
   }
-  async function submit(event) {
-    event.preventDefault();const message=$('message').value.trim();if(!message || state.busy || state.uploads) return;
-    busy(true);notice('');
-    try {
-      const conversation=await ensureConversation();
-      conversation.messages.push({role:'user',content:message});$('message').value='';resize();renderConversation();
-      const result=await sendTurn(conversation.id,message,crypto.randomUUID().replaceAll('-',''));
-      state.conversation=await api(`/api/conversations/${conversation.id}`);await loadConversations();renderConversation();if(result.error) notice(result.error);
-    }catch(error){notice(error.message);$('message').value=message;try{if(state.conversation)state.conversation=await api(`/api/conversations/${state.conversation.id}`);renderConversation();}catch{/* Preserve current view while disconnected. */}}
+  $('course-form').addEventListener('submit',async e=>{
+    e.preventDefault();if(state.busy||!$('course-form').reportValidity())return;
+    const data={name:$('course-name').value,code:$('course-code-input').value,description:$('course-description').value};
+    if(!state.editing){data.legacy_conversation_id=$('legacy-conversation').value||null;data.legacy_material_ids=[...$('legacy-materials').querySelectorAll('input:checked')].map(n=>n.value);}
+    busy(true);$('course-error').hidden=true;
+    try{state.course=await api(state.editing?`/api/courses/${state.course.id}`:'/api/courses',{method:'POST',body:data});remember(state.course.id);const index=state.courses.findIndex(c=>c.id===state.course.id);if(index<0)state.courses.push(state.course);else state.courses[index]=state.course;$('message').value='';$('course-dialog').close();render();sidebar(!matchMedia('(max-width: 760px)').matches);await Promise.all([loadCourses(),loadLegacy()]);}
+    catch(error){if($('course-dialog').open){$('course-error').textContent=error.message;$('course-error').hidden=false;}else notice(error.message);}finally{busy(false);if(!$('course-dialog').open)$('message').focus();}
+  });
+  $('delete-course').addEventListener('click',async()=>{
+    if(state.busy)return;const c=state.course;
+    if(!confirm(`Delete “${c.name}”? Its entire conversation and all uploaded course materials will be permanently deleted. This cannot be undone. Preserved pre-course import originals, if any, are not deleted.`))return;
+    busy(true);try{await api(`/api/courses/${c.id}`,{method:'DELETE',body:{confirm_course_id:c.id}});state.course=null;state.courses=state.courses.filter(x=>x.id!==c.id);remember(null);$('course-dialog').close();render();await Promise.all([loadCourses(),loadLegacy()]);if(state.courses.length){state.course=await api(`/api/courses/${state.courses[0].id}`);remember(state.course.id);}render();}
+    catch(e){if($('course-dialog').open){$('course-error').textContent=e.message;$('course-error').hidden=false;}else notice(e.message);}finally{busy(false);}
+  });
+  async function submit(e) {
+    e.preventDefault();const message=$('message').value.trim();if(!message||!state.course||state.busy)return;
+    const id=state.course.id;busy(true,true);notice('');
+    try{state.course.conversation.messages.push({role:'user',content:message});$('message').value='';renderMessages();resize();const result=await sendTurn(id,message,crypto.randomUUID().replaceAll('-',''));await refreshCourse();if(result.error)notice(result.error);}
+    catch(error){notice(error.message);$('message').value=message;try{await refreshCourse();}catch{/* Preserve draft while disconnected. */}}
     finally{busy(false);$('message').focus();resize();}
   }
-  function transfer(file, onProcessing) {
-    return new Promise((resolve,reject)=>{
-      const xhr=new XMLHttpRequest();xhr.open('POST',`/api/materials?filename=${encodeURIComponent(file.name)}`);xhr.setRequestHeader('X-Kippy-Request','1');xhr.setRequestHeader('Content-Type','application/octet-stream');xhr.timeout=180000;
-      xhr.upload.addEventListener('load',onProcessing);
-      xhr.onload=()=>{try{const data=JSON.parse(xhr.responseText);if(xhr.status<200||xhr.status>=300)throw new Error(data.error||'Upload failed.');resolve(data);}catch(error){reject(error);}};
-      xhr.onerror=()=>reject(new Error('Upload connection lost. Check the library before retrying.'));
-      xhr.ontimeout=()=>reject(new Error('Upload processing timed out. Check the library before retrying.'));
-      xhr.send(file);
-    });
+  function transfer(courseId,file,onProcessing) {
+    return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',`/api/courses/${courseId}/materials?filename=${encodeURIComponent(file.name)}`);xhr.setRequestHeader('X-Kippy-Request','1');xhr.setRequestHeader('Content-Type','application/octet-stream');xhr.timeout=180000;xhr.upload.addEventListener('load',onProcessing);
+      xhr.onload=()=>{try{const d=JSON.parse(xhr.responseText);if(xhr.status<200||xhr.status>=300)throw Error(d.error||'Upload failed.');resolve(d);}catch(e){reject(e);}};xhr.onerror=()=>reject(Error('Upload connection lost. Check course Materials before retrying.'));xhr.ontimeout=()=>reject(Error('Processing timed out. Check course Materials before retrying.'));xhr.send(file);});
   }
   async function uploadFiles(files) {
-    if(state.busy || state.uploads) {notice('Please wait for the current response or upload to finish.');return;}
-    state.uploads++;$('send').disabled=true;$('new-chat').disabled=true;notice('');
-    const accepted=[];
-    try {
-      for(const file of files) {
-        const error=validateFile(file,state.maxBytes);if(error){notice(`${file.name}: ${error}`);continue;}
-        const token=crypto.randomUUID();state.pending.set(token,{name:file.name,status:'uploading'});renderLists();
-        try {const saved=await transfer(file,()=>{state.pending.get(token).status='processing';renderLists();});if(saved.status==='ready')accepted.push(saved.id);else notice(`${saved.name}: ${saved.error}`);}
-        catch(error){notice(`${file.name}: ${error.message}`);}
-        finally{state.pending.delete(token);await loadMaterials();}
-      }
-      if(accepted.length){const conversation=await ensureConversation();const ids=[...new Set([...conversation.material_ids,...accepted])];if(ids.length<=20)state.conversation=await api(`/api/conversations/${conversation.id}/materials`,{method:'POST',body:{material_ids:ids}});else notice('Files saved. Select up to 20 materials in the library.');renderConversation();}
-    }catch(error){notice(error.message);}finally{state.uploads--; $('send').disabled=state.busy;$('new-chat').disabled=state.busy;renderLists();$('file-input').value='';}
+    if(!state.course){notice('Create or open a course before uploading materials.');return;}if(state.busy){notice('Please wait for the current response or upload.');return;}
+    const id=state.course.id;busy(true);notice('');
+    try{for(const file of files){const error=validateFile(file,state.maxBytes);if(error){notice(`${file.name}: ${error}`);continue;}
+      const token=crypto.randomUUID();state.pending.set(token,{name:file.name,status:'uploading'});renderMaterials();
+      try{const doc=await transfer(id,file,()=>{const pending=state.pending.get(token);if(pending){pending.status='processing';renderMaterials();}});if(doc.status!=='ready')notice(`${doc.name}: ${doc.error}`);}
+      catch(e){notice(`${file.name}: ${e.message}`);}finally{state.pending.delete(token);await refreshCourse();}
+    }}catch(e){notice(e.message);}finally{busy(false);$('file-input').value='';}
   }
-  async function connection() {
-    try {const status=await api('/api/ollama/status');$('connection').textContent=status.connected&&status.model_available?'Qwen connected':'Qwen offline';$('connection').title=status.message;$('connection').classList.toggle('ready',status.connected&&status.model_available);}
-    catch{$('connection').textContent='Connection unavailable';$('connection').classList.remove('ready');}
-  }
-  document.querySelectorAll('[data-prompt]').forEach(chip=>chip.addEventListener('click',()=>{
-    if(state.busy||state.uploads)return;
-    $('message').value=chip.dataset.prompt;resize();$('message').focus();
-  }));
-  $('composer').addEventListener('submit',submit);$('message').addEventListener('input',resize);
-  $('message').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('composer').requestSubmit();}});
-  $('new-chat').addEventListener('click',newChat);$('notice-close').addEventListener('click',()=>notice(''));
-  for(const id of ['attach','upload-library','upload-empty']) $(id).addEventListener('click',()=>{if(state.busy||state.uploads){notice('Please wait for the current response or upload.');return;}$('file-input').click();});
+  async function connection(){try{const s=await api('/api/ollama/status');$('connection').textContent=s.connected&&s.model_available?'Qwen connected':'Qwen offline';$('connection').title=s.message;$('connection').classList.toggle('ready',s.connected&&s.model_available);}catch{$('connection').textContent='Connection unavailable';$('connection').classList.remove('ready');}}
+  $('composer').addEventListener('submit',submit);$('message').addEventListener('input',resize);$('message').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit();}});
+  for(const id of ['add-course','add-first-course'])$(id).addEventListener('click',()=>editCourse());
+  $('recover-studies').addEventListener('click',()=>editCourse(false,true));$('edit-course').addEventListener('click',()=>editCourse(true));
+  $('close-course-dialog').addEventListener('click',()=>{if(!state.busy)$('course-dialog').close();});$('course-dialog').addEventListener('cancel',e=>{if(state.busy)e.preventDefault();});
+  $('show-materials').addEventListener('click',()=>{if(state.course)$('materials-dialog').showModal();});$('close-materials').addEventListener('click',()=>$('materials-dialog').close());
+  for(const id of ['attach','upload-materials','upload-empty'])$(id).addEventListener('click',()=>{if(state.course&&!state.busy)$('file-input').click();});
   $('file-input').addEventListener('change',()=>uploadFiles([...$('file-input').files]));
-  $('sidebar-close').addEventListener('click',()=>sidebar(false));$('sidebar-open').addEventListener('click',()=>sidebar(true));$('sidebar-shade').addEventListener('click',()=>sidebar(false));
-  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&matchMedia('(max-width: 760px)').matches){sidebar(false);$('sidebar-open').focus();}});
-  root.addEventListener('resize',()=>{sidebar(matchMedia('(max-width: 760px)').matches?document.body.classList.contains('sidebar-visible'):!state.collapsed);viewport();});
-  root.visualViewport?.addEventListener('resize',viewport);root.visualViewport?.addEventListener('scroll',viewport);
-  const drop=$('workspace');drop.addEventListener('dragenter',event=>{if(event.dataTransfer.types.includes('Files')){event.preventDefault();dragDepth++;$('drop-hint').hidden=false;}});
-  drop.addEventListener('dragover',event=>{if(event.dataTransfer.types.includes('Files'))event.preventDefault();});
-  drop.addEventListener('dragleave',()=>{if(--dragDepth<=0){dragDepth=0;$('drop-hint').hidden=true;}});
-  drop.addEventListener('drop',event=>{event.preventDefault();dragDepth=0;$('drop-hint').hidden=true;uploadFiles([...event.dataTransfer.files]);});
+  for(const chip of document.querySelectorAll('[data-prompt]'))chip.addEventListener('click',()=>{if(state.course&&!state.busy){$('message').value=chip.dataset.prompt;resize();$('message').focus();}});
+  $('notice-close').addEventListener('click',()=>notice(''));$('sidebar-close').addEventListener('click',()=>sidebar(false));$('sidebar-open').addEventListener('click',()=>sidebar(true));$('sidebar-shade').addEventListener('click',()=>sidebar(false));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('course-dialog').open&&!$('materials-dialog').open&&matchMedia('(max-width: 760px)').matches){sidebar(false);$('sidebar-open').focus();}});
+  root.addEventListener('resize',()=>{sidebar(matchMedia('(max-width: 760px)').matches?document.body.classList.contains('sidebar-visible'):!state.collapsed);viewport();});root.visualViewport?.addEventListener('resize',viewport);root.visualViewport?.addEventListener('scroll',viewport);
+  const drop=$('workspace');drop.addEventListener('dragenter',e=>{if(e.dataTransfer.types.includes('Files')){e.preventDefault();dragDepth++;$('drop-hint').hidden=false;}});drop.addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();});drop.addEventListener('dragleave',()=>{if(--dragDepth<=0){dragDepth=0;$('drop-hint').hidden=true;}});drop.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop-hint').hidden=true;uploadFiles([...e.dataTransfer.files]);});
   async function boot(){
-    sidebar(!matchMedia('(max-width: 760px)').matches);viewport();
-    try{const status=await api('/api/status');state.maxBytes=status.max_upload_bytes;$('upload-limit').textContent=`${Math.round(state.maxBytes/1048576)} MB`;await Promise.all([loadConversations(),loadMaterials()]);const id=lastConversation();if(id&&state.conversations.some(c=>c.id===id))await openConversation(id);else renderConversation();}catch(error){notice(`Could not load your saved workspace: ${error.message}`);}
-    connection();setInterval(()=>{if(!document.hidden)connection();},30000);$('message').focus();
+    busy(true);sidebar(!matchMedia('(max-width: 760px)').matches);viewport();
+    try{const s=await api('/api/status');state.maxBytes=s.max_upload_bytes;$('upload-limit').textContent=`${Math.round(state.maxBytes/1048576)} MB`;await Promise.all([loadCourses(),loadLegacy()]);let id;try{id=localStorage.getItem('kippy.course');}catch{}if(state.courses.length){const chosen=state.courses.some(c=>c.id===id)?id:state.courses[0].id;state.course=await api(`/api/courses/${chosen}`);remember(chosen);}render();}
+    catch(e){notice(`Could not load your saved courses: ${e.message}`);}finally{busy(false);}
+    connection();setInterval(()=>{if(!document.hidden)connection();},30000);
   }
   boot();
 })(typeof window==='undefined'?globalThis:window);
