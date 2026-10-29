@@ -152,3 +152,5 @@ Four new link/metadata tables implement an additive schema upgrade; original six
 
 - Re-ran all 68 Python tests, 33 frontend tests, JavaScript syntax, dependency validation and production wheel packaging successfully.
 - Refreshed the Windows online backup and repeated the candidate migration twice on its isolated copy; the original course and two messages remained intact. Live activation uses the existing automatic deployment workflow after the completed commit is pushed.
+
+- Windows staging found two migration-test connections that relied on garbage collection for closure. They now close explicitly, including rollback paths, so temporary SQLite files can be removed on Windows. The updater correctly left the serving release untouched when those tests failed.

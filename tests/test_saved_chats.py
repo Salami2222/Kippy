@@ -1,5 +1,6 @@
 """Independent conversations, transactional migration, shared sources and queued inference."""
 import copy
+from contextlib import closing
 import json
 import sqlite3
 import tempfile
@@ -96,16 +97,16 @@ class SavedChatTests(unittest.TestCase):
     def test_existing_one_to_one_schema_migrates_once_without_losing_history_or_files(self):
         c=self.course;cid=c['conversation']['id'];m=upload(self.store,'keep.txt',b'Original material',100,c['id']);self.store.begin_turn(cid,'a'*32,'Original question');self.store.finish_turn(cid,'a'*32,'Original answer',[])
         original=self.store.conversation(cid);materials=self.store.course_materials(c['id'])
-        with sqlite3.connect(self.store.path) as db:
+        with closing(sqlite3.connect(self.store.path)) as db, db:
             db.executescript('DROP TABLE course_layouts; DROP TABLE chat_splits; ALTER TABLE course_conversations RENAME TO newer_links; CREATE TABLE course_conversations(course_id TEXT PRIMARY KEY REFERENCES courses(id) ON DELETE CASCADE,conversation_id TEXT NOT NULL UNIQUE REFERENCES conversations(id) ON DELETE CASCADE); INSERT INTO course_conversations SELECT * FROM newer_links; DROP TABLE newer_links;')
         migrated=Store(self.temp.name);after=migrated.course(c['id']);self.assertEqual(after['conversation']['id'],cid);self.assertEqual(after['conversation']['title'],'Original Chat');self.assertEqual(after['conversation']['messages'],original['messages']);self.assertEqual(after['materials'],materials);self.assertEqual((migrated.uploads/m['id']).read_bytes(),b'Original material')
         migrated.rename_course_chat(c['id'],cid,'My Original');again=Store(self.temp.name);self.assertEqual(again.conversation(cid)['title'],'My Original');self.assertEqual(len(again.course(c['id'])['conversations']),1)
     def test_migration_failure_rolls_back_original_table_and_title(self):
         c=self.course
-        with sqlite3.connect(self.store.path) as db:
+        with closing(sqlite3.connect(self.store.path)) as db, db:
             db.executescript('DROP TABLE course_layouts; DROP TABLE chat_splits; ALTER TABLE course_conversations RENAME TO newer_links; CREATE TABLE course_conversations(course_id TEXT PRIMARY KEY REFERENCES courses(id),conversation_id TEXT NOT NULL UNIQUE REFERENCES conversations(id)); INSERT INTO course_conversations SELECT * FROM newer_links; DROP TABLE newer_links; CREATE TRIGGER prevent_rename BEFORE UPDATE ON conversations BEGIN SELECT RAISE(ABORT,"test failure"); END;')
         with self.assertRaises(sqlite3.IntegrityError):Store(self.temp.name)
-        with sqlite3.connect(self.store.path) as db:
+        with closing(sqlite3.connect(self.store.path)) as db, db:
             self.assertEqual(db.execute('SELECT count(*) FROM course_conversations').fetchone()[0],1);self.assertEqual(db.execute('SELECT title FROM conversations').fetchone()[0],'New Chat')
             db.execute('DROP TRIGGER prevent_rename')
         self.assertEqual(Store(self.temp.name).course(c['id'])['conversation']['title'],'Original Chat')
