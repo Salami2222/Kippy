@@ -43,14 +43,15 @@ class CourseTests(unittest.TestCase):
         app=App(self.temp.name,FakeClient());a=app.store.create_course({'name':'Math'});b=app.store.create_course({'name':'Chemistry'})
         da=upload(app.store,'same.txt',b'MATH_ONLY integrating factors',1000,a['id'])
         db=upload(app.store,'same.txt',b'CHEM_ONLY atomic orbitals',1000,b['id'])
-        app.chat({'course_id':a['id'],'request_id':'a'*32,'message':'Summarize my lectures','material_ids':[db['id']]})
+        app.chat({'course_id':a['id'],'conversation_id':a['conversation']['id'],'request_id':'a'*32,'message':'Summarize my lectures','material_ids':[db['id']]})
         first=str(app.client.calls[-1]);self.assertIn('MATH_ONLY',first);self.assertNotIn('CHEM_ONLY',first)
-        result=app.chat({'course_id':b['id'],'request_id':'a'*32,'message':'Summarize my lectures','conversation_id':a['conversation']['id'],'material_ids':[da['id']]})
+        with self.assertRaises(LookupError):app.chat({'course_id':b['id'],'request_id':'a'*32,'message':'Summarize my lectures','conversation_id':a['conversation']['id']})
+        result=app.chat({'course_id':b['id'],'request_id':'a'*32,'message':'Summarize my lectures','conversation_id':b['conversation']['id'],'material_ids':[da['id']]})
         second=str(app.client.calls[-1]);self.assertIn('CHEM_ONLY',second);self.assertNotIn('MATH_ONLY',second)
         self.assertIn('Chemistry',second);self.assertEqual({s['material_id'] for s in result['sources']},{db['id']})
         self.assertEqual(len(app.store.course(a['id'])['conversation']['messages']),2)
         self.assertEqual(len(app.store.course(b['id'])['conversation']['messages']),2)
-        app.chat({'course_id':b['id'],'request_id':'b'*32,'message':'Explain that again'})
+        app.chat({'course_id':b['id'],'conversation_id':b['conversation']['id'],'request_id':'b'*32,'message':'Explain that again'})
         self.assertNotIn('MATH_ONLY',str(app.client.calls[-1]))
     def test_failed_files_stay_in_their_course_but_not_retrieval(self):
         a=self.add();b=self.add('Chemistry')
@@ -169,7 +170,7 @@ class CourseHTTPTests(unittest.TestCase):
     def test_empty_course_asks_for_documents_and_never_uses_other_courses_files(self):
         a=self.course('Math');b=self.course('Chemistry')
         upload(self.server.app.store,'a.txt',b'SECRET_MATH equations',100,a['id'])
-        code,result=self.request('/api/chat',{'course_id':b['id'],'request_id':'a'*32,'message':'Summarize my lecture'})
+        code,result=self.request('/api/chat',{'course_id':b['id'],'conversation_id':b['conversation']['id'],'request_id':'a'*32,'message':'Summarize my lecture'})
         self.assertEqual(code,200);self.assertIn('upload',result['content']);self.assertEqual(self.client.calls,[])
     def test_legacy_discovery_and_import_do_not_reassign_course_owned_files(self):
         old=self.server.app.store.create_conversation();m=upload(self.server.app.store,'old.txt',b'Original',100)

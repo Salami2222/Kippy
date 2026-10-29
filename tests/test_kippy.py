@@ -48,24 +48,24 @@ class StorageTests(unittest.TestCase):
     def tearDown(self): self.temp.cleanup()
     def test_conversation_persists_and_isolated(self):
         client=FakeClient(); app=App(self.temp.name,client); first=course_conversation(app); second=course_conversation(app, 'Chemistry')
-        app.chat({'course_id':first['course_id'],'request_id':'1'*32,'message':'Explain linear equations'})
+        app.chat({'course_id':first['course_id'],'conversation_id':first['id'],'request_id':'1'*32,'message':'Explain linear equations'})
         restored=Store(self.temp.name)
         self.assertEqual(len(restored.conversation(first['id'])['messages']),2)
         self.assertEqual(restored.conversation(second['id'])['messages'],[])
-        self.assertEqual(restored.conversation(first['id'])['title'],'Physics')
+        self.assertEqual(restored.conversation(first['id'])['title'],'New Chat')
     def test_followup_uses_prior_messages(self):
         client=FakeClient(); app=App(self.temp.name,client); key=app.store.create_course({'name':'Physics'})['id']
         for i,message in enumerate(['Explain integrating factors','Show me another example']):
-            app.chat({'course_id':key,'request_id':str(i)*32,'message':message})
+            app.chat({'course_id':key,'conversation_id':app.store.course(key)['conversation']['id'],'request_id':str(i)*32,'message':message})
         self.assertIn('Explain integrating factors',str(client.calls[-1]))
         self.assertTrue(any(m['role']=='assistant' for m in client.calls[-1]))
     def test_duplicate_request_never_repeats_inference(self):
-        client=FakeClient(); app=App(self.temp.name,client); key=app.store.create_course({'name':'Physics'})['id']; payload={'course_id':key,'request_id':'a'*32,'message':'Explain'}
+        client=FakeClient(); app=App(self.temp.name,client); key=app.store.create_course({'name':'Physics'})['id']; payload={'course_id':key,'conversation_id':app.store.course(key)['conversation']['id'],'request_id':'a'*32,'message':'Explain'}
         self.assertEqual(app.chat(payload),app.chat(payload)); self.assertEqual(len(client.calls),1)
         self.assertEqual(len(app.store.course(key)['conversation']['messages']),2)
     def test_offline_answer_and_message_are_persisted(self):
         app=App(self.temp.name,FakeClient(True)); key=app.store.create_course({'name':'Physics'})['id']
-        result=app.chat({'course_id':key,'request_id':'b'*32,'message':'Help'})
+        result=app.chat({'course_id':key,'conversation_id':app.store.course(key)['conversation']['id'],'request_id':'b'*32,'message':'Help'})
         self.assertIn('offline',result['error']); self.assertTrue(app.store.course(key)['conversation']['messages'][-1]['error'])
     def test_selection_persists_and_deletion_cascades(self):
         doc=upload(self.store,'notes.txt',b'Integrating factors.',10000); key=self.store.create_conversation()['id']
@@ -85,7 +85,7 @@ class StorageTests(unittest.TestCase):
         self.assertIn('interrupted',restored.begin_turn(key,'c'*32,'Explain')['error'])
     def test_schema_is_independent(self):
         with self.store.connect() as db: tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        self.assertEqual(tables,{'conversations','messages','materials','chunks','selections','turns','courses','course_conversations','course_materials','legacy_imports'})
+        self.assertEqual(tables,{'conversations','messages','materials','chunks','selections','turns','courses','course_conversations','course_materials','legacy_imports','course_layouts','chat_splits','chat_creations'})
 
 
 class ExtractionTests(unittest.TestCase):
@@ -207,7 +207,7 @@ class HTTPTests(unittest.TestCase):
         _,course=self.request('/api/courses',{'name':'Calculus'},'POST');key=course['id']
         code,doc=self.request(f'/api/courses/{key}/materials?filename=lecture.pdf',pdf_bytes(['Integrating factors']),headers={'Content-Type':'application/octet-stream'})
         self.assertEqual(code,201);self.assertEqual(doc['status'],'ready')
-        code,result=self.request('/api/chat',{'course_id':key,'message':'Summarize this lecture','request_id':'a'*32});self.assertEqual(code,200);self.assertEqual(result['sources'][0]['location'],'page 1')
+        code,result=self.request('/api/chat',{'course_id':key,'conversation_id':course['conversation']['id'],'message':'Summarize this lecture','request_id':'a'*32});self.assertEqual(code,200);self.assertEqual(result['sources'][0]['location'],'page 1')
         self.assertEqual(len(self.request(f'/api/courses/{key}')[1]['conversation']['messages']),2)
         self.assertEqual(self.request(f'/api/courses/{key}/materials/'+doc['id'],method='DELETE')[0],200)
         self.assertEqual(self.request(f'/api/courses/{key}')[1]['materials'],[])

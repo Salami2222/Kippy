@@ -8,7 +8,10 @@ const root=path.resolve(__dirname,'../kippy/static');
 const settle=async()=>{for(let i=0;i<8;i++)await new Promise(r=>setImmediate(r));};
 async function load({offline=false,mobile=false,initialCourses=[],legacy={conversations:[],materials:[]},selectedId=null}={}) {
   const dom=new JSDOM(fs.readFileSync(path.join(root,'index.html'),'utf8'),{url:'http://localhost:8000',runScripts:'outside-only'});
-  const w=dom.window,courses=structuredClone(initialCourses),requests=[],uploads=[];let serial=20,chatResolve;
+  const w=dom.window,courses=structuredClone(initialCourses),requests=[],uploads=[];let serial=20;const chatResolvers=new Map();
+  const freshChat=(name)=>({id:(++serial).toString(16).padStart(32,'b'),title:name,messages:[],material_ids:[]});
+  function normalize(c){c.conversations=c.conversations||[c.conversation];c.workspace=c.workspace||{mode:'single',single_id:c.conversation.id,left_id:c.conversation.id,right_id:null,active_panel:'left',split_initialized:0};return c;}
+  courses.forEach(normalize);
   w.matchMedia=q=>({matches:mobile&&q.includes('760px')});w.requestAnimationFrame=cb=>cb();w.confirm=()=>true;
   w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
   w.setInterval=()=>{};w.navigator.clipboard={writeText:async text=>{w.copied=text;}};
@@ -21,17 +24,29 @@ async function load({offline=false,mobile=false,initialCourses=[],legacy={conver
     else if(url==='/api/legacy')result=legacy;
     else if(url==='/api/courses'&&options.method==='POST'){
       if(!payload.name.trim()){status=400;result={error:'Name required'};}
-      else {const id=(++serial).toString(16).padStart(32,'a');result={id,name:payload.name,code:payload.code||'',description:payload.description||'',conversation:{id:id.replace('a','b'),messages:[],material_ids:[]},materials:[]};courses.push(result);}
+      else {const id=(++serial).toString(16).padStart(32,'a');result=normalize({id,name:payload.name,code:payload.code||'',description:payload.description||'',conversation:freshChat('New Chat'),materials:[]});courses.push(result);}
     }
     else if(url==='/api/courses')result={courses:courses.map(({id,name,code,description})=>({id,name,code,description}))};
     else if(url==='/api/chat'){
-      const c=courses.find(c=>c.id===payload.course_id);c.conversation.messages.push({role:'user',content:payload.message});
-      await new Promise(resolve=>{chatResolve=resolve;});c.conversation.messages.push({role:'assistant',content:'**Integration**\n\n$$y=Ce^x$$\n\n```python\nx = 2\n```',sources:c.materials.filter(m=>m.status==='ready').map(m=>({name:m.name,location:'page 1'}))});result={content:'Done'};
+      const c=courses.find(c=>c.id===payload.course_id),chat=c.conversations.find(x=>x.id===payload.conversation_id);chat.messages.push({role:'user',content:payload.message});
+      await new Promise(resolve=>{chatResolvers.set(chat.id,resolve);});chat.messages.push({role:'assistant',content:'**Integration**\n\n$$y=Ce^x$$\n\n```python\nx = 2\n```',sources:c.materials.filter(m=>m.status==='ready').map(m=>({name:m.name,location:'page 1'}))});result={content:'Done'};
+    }
+    else if(course&&parts[4]==='layout'){Object.assign(course.workspace,payload);result=course.workspace;}
+    else if(course&&parts[4]==='split'){
+      course.splits=course.splits||[];if(!course.splits.includes(payload.request_id)&&(!course.workspace.split_initialized||payload.fresh)){const l=freshChat('Chat 1'),r=freshChat('Chat 2');course.conversations.push(l,r);Object.assign(course.workspace,{mode:'double',single_id:l.id,left_id:l.id,right_id:r.id,split_initialized:1,active_panel:'left'});}else course.workspace.mode='double';course.splits.push(payload.request_id);result=course;
+    }
+    else if(course&&parts[4]==='conversations'){
+      const chat=course.conversations.find(x=>x.id===parts[5]);
+      if(parts.length===5&&options.method==='POST'){result=freshChat(payload.name);course.conversations.push(result);}
+      else if(!chat){status=404;result={error:'Chat not found'};}
+      else if(options.method==='DELETE'){assert.equal(payload.confirm_conversation_id,chat.id);course.conversations.splice(course.conversations.indexOf(chat),1);const ids=course.conversations.map(x=>x.id);for(const field of ['single_id','left_id','right_id'])if(course.workspace[field]===chat.id)course.workspace[field]=null;if(!course.workspace.single_id)course.workspace.single_id=ids[0]||null;if(!course.workspace.left_id)course.workspace.left_id=ids.find(id=>id!==course.workspace.right_id)||null;if(!course.workspace.right_id&&course.workspace.split_initialized)course.workspace.right_id=ids.find(id=>id!==course.workspace.left_id)||null;result={deleted:true,course:{...course,conversation:course.conversations.find(c=>c.id===course.workspace.single_id)||null}};}
+      else if(options.method==='POST'){chat.title=payload.name;result=chat;}
+      else result=chat;
     }
     else if(course&&options.method==='DELETE'&&parts[4]==='materials'){course.materials.splice(course.materials.findIndex(m=>m.id===parts[5]),1);result={deleted:true};}
     else if(course&&options.method==='DELETE'){assert.equal(payload.confirm_course_id,course.id);courses.splice(courses.indexOf(course),1);result={deleted:true};}
     else if(course&&options.method==='POST'){Object.assign(course,payload);result=course;}
-    else if(course)result=course;
+    else if(course)result={...course,conversation:course.conversations.find(c=>c.id===course.workspace.single_id)||course.conversations[0]||null};
     else {status=404;result={error:'Not found'};}
     return {ok:status<400,status,json:async()=>structuredClone(result)};
   };
@@ -45,12 +60,12 @@ async function load({offline=false,mobile=false,initialCourses=[],legacy={conver
   const get=id=>w.document.getElementById(id);
   const create=async(name='Differential Equations',code='MATH246')=>{get('add-course').click();get('course-name').value=name;get('course-code-input').value=code;get('course-form').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();return courses.at(-1);};
   const upload=async(name='lecture.pdf')=>{Object.defineProperty(get('file-input'),'files',{value:[new w.File(['Lecture'],name)],configurable:true});get('file-input').dispatchEvent(new w.Event('change'));await settle();};
-  return {w,dom,get,courses,requests,uploads,create,upload,finish:async()=>{chatResolve();await settle();}};
+  return {w,dom,get,courses,requests,uploads,create,upload,finish:async(id)=>{const cid=id||chatResolvers.keys().next().value;chatResolvers.get(cid)();chatResolvers.delete(cid);await settle();}};
 }
 
 test('fresh workspace has no courses or conversations and no global chat/library controls',async()=>{
   const a=await load();assert.equal(a.courses.length,0);assert.equal(a.get('empty-global').hidden,false);assert.equal(a.get('composer-area').hidden,true);
-  assert.equal(a.get('new-chat'),null);assert.equal(a.get('conversations'),null);assert.equal(a.get('upload-library'),null);
+  assert.equal(a.get('panel-header').hidden,true);assert.equal(a.get('conversations'),null);assert.equal(a.get('upload-library'),null);
   assert.equal(a.requests.some(r=>r.method==='POST'),false);a.dom.window.close();
 });
 test('create a named course, persist selection, and rename the same conversation',async()=>{
@@ -73,7 +88,7 @@ test('course deletion dialog requires explicit confirmation and Cancel makes no 
 });
 test('sidebar menu deletes an inactive course without changing active history or draft',async()=>{
   const a=await load({mobile:true});const math=await a.create('Math'),chem=await a.create('Chemistry');await a.upload('chemistry.txt');
-  const history=chem.conversation.id;a.get('message').value='Unsent chemistry question';a.get('sidebar-open').click();
+  const history=chem.conversation.id;a.get('message').value='Unsent chemistry question';a.get('message').dispatchEvent(new a.w.Event('input'));a.get('sidebar-open').click();
   const toggle=a.get(`course-actions-${math.id}`);toggle.click();assert.equal(toggle.getAttribute('aria-expanded'),'true');
   const menu=a.get(`course-menu-${math.id}`);menu.querySelector('button').click();assert.equal(a.get('delete-course-title').textContent,'Delete Math?');
   a.get('confirm-delete-course').click();await settle();assert.equal(a.courses.length,1);assert.equal(a.courses[0].id,chem.id);assert.equal(chem.conversation.id,history);assert.equal(chem.materials.length,1);
@@ -144,7 +159,7 @@ test('drag and drop uploads into the active course',async()=>{
   const a=await load();const c=await a.create();const e=new a.w.Event('drop',{cancelable:true});Object.defineProperty(e,'dataTransfer',{value:{files:[new a.w.File(['Notes'],'notes.txt')]}});a.get('workspace').dispatchEvent(e);await settle();assert.equal(c.materials.length,1);assert.match(a.uploads[0].url,new RegExp(c.id));a.dom.window.close();
 });
 test('suggestion chips prepare a course question without sending automatically',async()=>{
-  const a=await load();await a.create();for(const chip of a.w.document.querySelectorAll('[data-prompt]')){chip.click();assert.equal(a.get('message').value,chip.dataset.prompt);assert.equal(a.w.document.activeElement,a.get('message'));}assert.equal(a.requests.filter(r=>r.url==='/api/chat').length,0);a.dom.window.close();
+  const a=await load();await a.create();for(const chip of a.get('chat-left').querySelectorAll('[data-prompt]')){chip.click();assert.equal(a.get('message').value,chip.dataset.prompt);assert.equal(a.w.document.activeElement,a.get('message'));}assert.equal(a.requests.filter(r=>r.url==='/api/chat').length,0);a.dom.window.close();
 });
 test('existing studies are offered explicitly; chosen import IDs go only into course creation',async()=>{
   const a=await load({legacy:{conversations:[{id:'a'.repeat(32),title:'Old math'}],materials:[{id:'b'.repeat(32),name:'Old notes.pdf',imported:false}]}});
@@ -156,7 +171,7 @@ test('validation rejects unsupported, empty and oversized uploads',()=>{
   for(const f of [{name:'x.exe',size:1},{name:'x.txt',size:0},{name:'x.txt',size:101}])assert.notEqual(validateFile(f,100),'');
 });
 test('request helper retains safe transport and HTTP/JSON errors',async()=>{
-  const calls=[];await sendTurn('a'.repeat(32),' Explain ','b'.repeat(32),async(...args)=>calls.push(args));assert.deepEqual(calls[0],['/api/chat',{method:'POST',body:{course_id:'a'.repeat(32),message:'Explain',request_id:'b'.repeat(32)}}]);
+  const calls=[];await sendTurn('a'.repeat(32),'c'.repeat(32),' Explain ','b'.repeat(32),async(...args)=>calls.push(args));assert.deepEqual(calls[0],['/api/chat',{method:'POST',body:{course_id:'a'.repeat(32),conversation_id:'c'.repeat(32),message:'Explain',request_id:'b'.repeat(32)}}]);
   await assert.rejects(api('/test',{fetcher:async()=>({ok:false,json:async()=>({error:'Too large'})})}),/Too large/);await assert.rejects(api('/test',{fetcher:async()=>({json:async()=>{throw Error();}})}),/unreadable/);
 });
 
@@ -167,4 +182,65 @@ test('successful course creation remains visible if a later list refresh fails',
 test('confirmed deletion does not leave a phantom course after refresh failure',async()=>{
   const a=await load();await a.create('Math');const transport=a.w.fetch;a.w.fetch=async(url,options)=>{if(url==='/api/courses'&&(options?.method||'GET')==='GET')throw Error('Connection lost');return transport(url,options);};
   a.get('edit-course').click();a.get('delete-course').click();a.get('confirm-delete-course').click();await settle();assert.equal(a.courses.length,0);assert.equal(a.get('course-dialog').open,false);assert.equal(a.get('empty-global').hidden,false);assert.equal(a.w.document.querySelectorAll('.course-entry').length,0);assert.match(a.get('notice-text').textContent,/Connection lost/);a.dom.window.close();
+});
+
+async function newSavedChat(a,name,side='left'){
+  a.get(side==='right'?'new-chat-right':'new-chat').click();a.get('chat-name').value=name;a.get('chat-form').dispatchEvent(new a.w.Event('submit',{cancelable:true}));await settle();return a.courses[0].conversations.at(-1);
+}
+function typeDraft(a,text,side='left'){const input=a.get(side==='right'?'message-right':'message');input.value=text;input.dispatchEvent(new a.w.Event('input'));}
+function selectChat(a,id,side='left'){const select=a.get(side==='right'?'chat-selector-right':'chat-selector');select.value=id;select.dispatchEvent(new a.w.Event('change'));}
+
+test('saved chats create empty named history and can rename and reopen original',async()=>{
+  const a=await load();const c=await a.create();const original=c.conversation.id;c.conversation.messages.push({role:'user',content:'Original history'});
+  const chat=await newSavedChat(a,'Lecture Review');assert.equal(chat.messages.length,0);assert.equal(a.get('chat-selector').value,chat.id);assert.equal(a.get('messages').textContent,'');
+  a.get('rename-chat').click();a.get('chat-name').value='Exam Preparation';a.get('chat-form').dispatchEvent(new a.w.Event('submit',{cancelable:true}));await settle();assert.equal(chat.title,'Exam Preparation');assert.match(a.get('saved-chats').textContent,/Exam Preparation/);
+  selectChat(a,original);await settle();assert.match(a.get('messages').textContent,/Original history/);assert.equal(c.conversations.length,2);a.dom.window.close();
+});
+test('first Double Chat creates a fresh pair, keeps original, and shares one material library',async()=>{
+  const a=await load();const c=await a.create();await a.upload('variation.pdf');const original=c.conversation.id;c.conversation.messages.push({role:'user',content:'Original private context'});
+  a.get('double-mode').click();await settle();const l=c.workspace.left_id,r=c.workspace.right_id;
+  assert.equal(c.conversations.length,3);assert.notEqual(l,r);assert.notEqual(l,original);assert.equal(a.get('messages').textContent,'');assert.equal(a.get('messages-right').textContent,'');assert.match(a.get('layout-note').textContent,/not chat history/);
+  assert.equal(c.materials.length,1);assert.equal(a.get('material-count').textContent,'1');assert.equal(a.get('chat-selector-right').querySelector(`option[value="${l}"]`).disabled,true);
+  selectChat(a,original);await settle();assert.equal(c.workspace.right_id,r);assert.match(a.get('messages').textContent,/Original private context/);assert.equal(a.get('messages-right').textContent,'');a.dom.window.close();
+});
+test('layout toggles retain pair and independent drafts; explicit new pair alone creates chats',async()=>{
+  const a=await load({mobile:true});const c=await a.create();a.get('double-mode').click();await settle();const pair=[c.workspace.left_id,c.workspace.right_id];
+  typeDraft(a,'Draft A');typeDraft(a,'Draft B','right');a.get('tab-right').click();assert.equal(a.get('chat-right').classList.contains('targeted'),true);
+  a.get('single-mode').click();await settle();assert.equal(a.get('chat-selector').value,pair[1]);assert.equal(a.get('message').value,'Draft B');typeDraft(a,'Edited B');
+  a.get('double-mode').click();await settle();assert.deepEqual([c.workspace.left_id,c.workspace.right_id],pair);assert.equal(c.conversations.length,3);assert.equal(a.get('message').value,'Draft A');assert.equal(a.get('message-right').value,'Edited B');
+  const saved=structuredClone(a.courses);a.dom.window.close();const restored=await load({mobile:true,initialCourses:saved,selectedId:c.id});assert.equal(restored.get('chat-right').hidden,false);assert.equal(restored.get('chat-selector').value,pair[0]);assert.equal(restored.get('chat-selector-right').value,pair[1]);
+  restored.get('new-double-chat').click();await settle();assert.equal(restored.courses[0].conversations.length,5);assert.notEqual(restored.get('chat-selector').value,pair[0]);restored.dom.window.close();
+});
+test('both panels submit independently, remain editable separately, and never mix replies or scrolling',async()=>{
+  const a=await load();const c=await a.create();a.get('double-mode').click();await settle();const l=c.workspace.left_id,r=c.workspace.right_id;
+  a.get('feed-right').scrollTop=37;a.get('feed-right').dispatchEvent(new a.w.Event('scroll'));typeDraft(a,'LEFT_QUESTION');a.get('composer').dispatchEvent(new a.w.Event('submit',{cancelable:true}));await settle();
+  assert.equal(a.get('thinking').hidden,false);assert.equal(a.get('message-right').disabled,false);assert.equal(a.get('feed-right').scrollTop,37);
+  typeDraft(a,'RIGHT_QUESTION','right');a.get('composer-right').dispatchEvent(new a.w.Event('submit',{cancelable:true}));await settle();assert.equal(a.get('thinking-right').hidden,false);
+  const requests=a.requests.filter(x=>x.url==='/api/chat');assert.equal(requests.length,2);assert.notEqual(JSON.parse(requests[0].body).request_id,JSON.parse(requests[1].body).request_id);
+  await a.finish(r);assert.equal(a.get('thinking-right').hidden,true);assert.equal(a.get('thinking').hidden,false);assert.match(a.get('messages-right').textContent,/RIGHT_QUESTION/);assert.doesNotMatch(a.get('messages-right').textContent,/LEFT_QUESTION/);
+  await a.finish(l);assert.equal(a.get('thinking').hidden,true);assert.match(a.get('messages').textContent,/LEFT_QUESTION/);assert.doesNotMatch(a.get('messages').textContent,/RIGHT_QUESTION/);assert.ok(a.get('messages-right').querySelector('.katex'));a.dom.window.close();
+});
+test('deleting a saved chat requires confirmation, preserves documents, and last chat can be recreated',async()=>{
+  const a=await load();const c=await a.create();await a.upload();const first=c.conversation.id;await newSavedChat(a,'Second');a.get('delete-chat').click();a.get('cancel-delete-chat').click();assert.equal(c.conversations.length,2);
+  a.get('delete-chat').click();a.get('confirm-delete-chat').click();await settle();assert.equal(c.conversations.length,1);assert.equal(c.materials.length,1);assert.equal(a.get('chat-selector').value,first);
+  a.get('delete-chat').click();a.get('confirm-delete-chat').click();await settle();assert.equal(c.conversations.length,0);assert.equal(c.materials.length,1);assert.equal(a.get('composer-area').hidden,true);assert.equal(a.get('new-chat').disabled,false);
+  await newSavedChat(a,'Fresh Start');assert.equal(c.conversations.length,1);assert.equal(a.get('composer-area').hidden,false);assert.equal(a.get('messages').textContent,'');a.dom.window.close();
+});
+test('switching courses restores only their saved chats and selected layout',async()=>{
+  const a=await load();const math=await a.create('Math');a.get('double-mode').click();await settle();const pair=[math.workspace.left_id,math.workspace.right_id];const chem=await a.create('Chemistry');
+  assert.equal(a.get('chat-right').hidden,true);assert.equal(chem.conversations.length,1);assert.doesNotMatch(a.get('saved-chats').textContent,/Chat 1/);
+  a.w.document.querySelector('[aria-label="Open course: Math"]').click();await settle();assert.equal(a.get('chat-right').hidden,false);assert.deepEqual([a.get('chat-selector').value,a.get('chat-selector-right').value],pair);a.dom.window.close();
+});
+test('panel-local connection error preserves retry identity and the other draft',async()=>{
+  const a=await load();await a.create();a.get('double-mode').click();await settle();typeDraft(a,'Keep right draft','right');const transport=a.w.fetch;const attempted=[];let fail=true;
+  a.w.fetch=async(url,opt)=>{if(url==='/api/chat'){attempted.push(JSON.parse(opt.body));if(fail){fail=false;throw Error('Connection lost');}}return transport(url,opt);};
+  typeDraft(a,'Retry this');a.get('composer').dispatchEvent(new a.w.Event('submit',{cancelable:true}));await settle();assert.match(a.get('panel-error').textContent,/Connection lost/);assert.equal(a.get('panel-error-right').hidden,true);assert.equal(a.get('message-right').value,'Keep right draft');
+  a.get('composer').dispatchEvent(new a.w.Event('submit',{cancelable:true}));await settle();assert.equal(attempted[0].request_id,attempted[1].request_id);await a.finish();assert.equal(a.get('panel-error').hidden,true);assert.equal(a.get('message-right').value,'Keep right draft');a.dom.window.close();
+});
+
+test('confirmed chat creation is not duplicated after a follow-up read failure',async()=>{
+  const a=await load();const c=await a.create();const transport=a.w.fetch;let fail=true;
+  a.w.fetch=async(url,opt)=>{if(fail&&url===`/api/courses/${c.id}`&&(!opt?.method||opt.method==='GET')){fail=false;throw Error('List unavailable');}return transport(url,opt);};
+  await newSavedChat(a,'Saved once');assert.equal(c.conversations.length,2);assert.equal(a.get('chat-dialog').open,true);assert.match(a.get('chat-error').textContent,/List unavailable/);
+  a.get('chat-form').dispatchEvent(new a.w.Event('submit',{cancelable:true}));await settle();assert.equal(c.conversations.length,2);assert.equal(a.get('chat-selector').value,c.conversations[1].id);assert.equal(a.get('chat-dialog').open,false);a.dom.window.close();
 });

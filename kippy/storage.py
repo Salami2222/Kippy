@@ -58,8 +58,8 @@ class Store:
                     id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT NOT NULL DEFAULT '',
                     description TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS course_conversations (
-                    course_id TEXT PRIMARY KEY REFERENCES courses(id) ON DELETE CASCADE,
-                    conversation_id TEXT NOT NULL UNIQUE REFERENCES conversations(id) ON DELETE CASCADE);
+                    course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+                    conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE);
                 CREATE TABLE IF NOT EXISTS course_materials (
                     course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
                     material_id TEXT NOT NULL UNIQUE REFERENCES materials(id) ON DELETE CASCADE,
@@ -69,6 +69,26 @@ class Store:
                     course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
                     PRIMARY KEY (kind, legacy_id, course_id));
             ''')
+            # Upgrade the former one-conversation-per-course link atomically.
+            db.execute('BEGIN IMMEDIATE')
+            if any(r['name'] == 'course_id' and r['pk'] for r in db.execute('PRAGMA table_info(course_conversations)')):
+                db.execute('ALTER TABLE course_conversations RENAME TO course_conversations_v1')
+                db.execute('CREATE TABLE course_conversations (course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE, conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE)')
+                db.execute('INSERT INTO course_conversations SELECT course_id,conversation_id FROM course_conversations_v1')
+                db.execute("UPDATE conversations SET title='Original Chat' WHERE id IN (SELECT conversation_id FROM course_conversations_v1)")
+                db.execute('DROP TABLE course_conversations_v1')
+            db.execute('CREATE INDEX IF NOT EXISTS course_conversations_course ON course_conversations(course_id)')
+            db.execute("""CREATE TABLE IF NOT EXISTS course_layouts (
+                course_id TEXT PRIMARY KEY REFERENCES courses(id) ON DELETE CASCADE,
+                mode TEXT NOT NULL DEFAULT 'single', single_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+                left_id TEXT REFERENCES conversations(id) ON DELETE SET NULL, right_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+                active_panel TEXT NOT NULL DEFAULT 'left', split_initialized INTEGER NOT NULL DEFAULT 0)""")
+            db.execute("""CREATE TABLE IF NOT EXISTS chat_splits (
+                course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE, request_id TEXT NOT NULL,
+                PRIMARY KEY(course_id,request_id))""")
+            db.execute('CREATE TABLE IF NOT EXISTS chat_creations (course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE, request_id TEXT NOT NULL, conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL, PRIMARY KEY(course_id,request_id))')
+            for c in db.execute('SELECT course_id,conversation_id FROM course_conversations ORDER BY rowid').fetchall():
+                db.execute('INSERT OR IGNORE INTO course_layouts(course_id,single_id,left_id) VALUES (?,?,?)', (c[0],c[1],c[1]))
             self._recover_course_deletions(db)
             # A crash never leaves an apparently active upload or inference forever.
             db.execute("UPDATE materials SET status='failed', error='Processing interrupted. Remove and upload again.' WHERE status='processing'")
@@ -185,7 +205,7 @@ class Store:
                 return json.loads(previous['response'])
             db.execute('INSERT INTO turns VALUES (?,?,?,NULL)', (key, request_id, 'pending'))
             db.execute('INSERT INTO messages VALUES (?,?,?,?,?,?,?)', (identifier(), key, 'user', content, '[]', 0, now()))
-            db.execute("UPDATE conversations SET title=CASE WHEN title='New chat' THEN ? ELSE title END, updated_at=? WHERE id=?", (content[:70], now(), key))
+            db.execute("UPDATE conversations SET title=CASE WHEN title='New chat' AND NOT EXISTS (SELECT 1 FROM course_conversations WHERE conversation_id=conversations.id) THEN ? ELSE title END, updated_at=? WHERE id=?", (content[:70], now(), key))
         return None
 
     def finish_turn(self, key, request_id, content, sources, error=False):
@@ -214,18 +234,104 @@ class Store:
         with self.connect() as db:
             return [dict(r) for r in db.execute('SELECT * FROM courses ORDER BY created_at, rowid')]
 
-    def course(self, key):
+    def course(self, key, include_conversation=True):
         with self.connect() as db:
             row = db.execute('SELECT * FROM courses WHERE id=?', (key,)).fetchone()
             if not row:
                 raise LookupError('Course not found.')
-            link = db.execute('SELECT conversation_id FROM course_conversations WHERE course_id=?', (key,)).fetchone()
             result = dict(row)
-        result['conversation'] = self.conversation(link[0])
+            result['conversations'] = [dict(r) for r in db.execute('SELECT c.* FROM conversations c JOIN course_conversations cc ON cc.conversation_id=c.id WHERE cc.course_id=? ORDER BY c.created_at,c.rowid', (key,))]
+            layout = db.execute('SELECT * FROM course_layouts WHERE course_id=?', (key,)).fetchone()
+            result['workspace'] = dict(layout) if layout else {'course_id':key,'mode':'single','single_id':None,'left_id':None,'right_id':None,'active_panel':'left','split_initialized':0}
         result['materials'] = self.course_materials(key)
-        # All ready course documents are available; there is no global selection scope.
-        result['conversation']['material_ids'] = [m['id'] for m in result['materials'] if m['status'] == 'ready']
+        # Compatibility view for older local clients; inference always validates its target.
+        chosen = result['workspace']['single_id'] or (result['conversations'][0]['id'] if result['conversations'] else None)
+        result['conversation'] = self.course_conversation(key,chosen) if chosen and include_conversation else None
         return result
+
+    def course_conversation(self, key, chat_id):
+        with self.connect() as db:
+            if not db.execute('SELECT 1 FROM course_conversations WHERE course_id=? AND conversation_id=?',(key,chat_id)).fetchone():
+                raise LookupError('Conversation not found in this course.')
+        result = self.conversation(chat_id)
+        result['material_ids'] = [m['id'] for m in self.course_materials(key) if m['status']=='ready']
+        return result
+
+    @staticmethod
+    def chat_name(value):
+        if not isinstance(value,str) or not value.strip() or len(value.strip())>120 or any(ord(c)<32 for c in value):
+            raise ValueError('Enter a chat name of 1–120 characters without control characters.')
+        return value.strip()
+
+    def create_course_chat(self, key, name='New Chat', request_id=None):
+        self.course(key);name=self.chat_name(name);chat_id,stamp=identifier(),now()
+        if request_id is not None and (not isinstance(request_id,str) or not re.fullmatch(r'[a-f0-9]{32}',request_id)):
+            raise ValueError('Invalid chat creation identifier.')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            old=db.execute('SELECT conversation_id FROM chat_creations WHERE course_id=? AND request_id=?',(key,request_id)).fetchone() if request_id else None
+            if old:
+                if old[0] is None:raise ValueError('This creation request belongs to a deleted chat. Start a new chat explicitly.')
+                chat_id=old[0]
+            else:
+                db.execute('INSERT INTO conversations VALUES (?,?,?,?)',(chat_id,name,stamp,stamp))
+                db.execute('INSERT INTO course_conversations VALUES (?,?)',(key,chat_id))
+                if request_id:db.execute('INSERT INTO chat_creations VALUES (?,?,?)',(key,request_id,chat_id))
+        return self.course_conversation(key,chat_id)
+
+    def rename_course_chat(self,key,chat_id,name):
+        self.course_conversation(key,chat_id);name=self.chat_name(name)
+        with self.connect() as db:
+            db.execute('UPDATE conversations SET title=?,updated_at=? WHERE id=?',(name,now(),chat_id))
+        return self.course_conversation(key,chat_id)
+
+    def update_layout(self,key,data):
+        course=self.course(key);layout=course['workspace'];ids={c['id'] for c in course['conversations']}
+        for field in ('mode','single_id','left_id','right_id','active_panel'):
+            if field in data:layout[field]=data[field]
+        if layout['mode'] not in ('single','double') or layout['active_panel'] not in ('left','right'):
+            raise ValueError('Invalid chat layout.')
+        if layout['mode']=='double' and not layout['split_initialized']:
+            raise ValueError('Create a fresh independent pair before using Double Chat.')
+        for field in ('single_id','left_id','right_id'):
+            if layout[field] is not None and (not isinstance(layout[field],str) or layout[field] not in ids):raise ValueError('Choose a chat belonging to this course.')
+        if layout['left_id'] and layout['left_id']==layout['right_id']:raise ValueError('Choose different chats for the two panels.')
+        with self.connect() as db:
+            db.execute('INSERT OR REPLACE INTO course_layouts VALUES (?,?,?,?,?,?,?)',(key,layout['mode'],layout['single_id'],layout['left_id'],layout['right_id'],layout['active_panel'],layout['split_initialized']))
+        return self.course(key)['workspace']
+
+    def split_course(self,key,request_id,fresh=False):
+        self.course(key)
+        if not isinstance(request_id,str) or not re.fullmatch(r'[a-f0-9]{32}',request_id):raise ValueError('Invalid split request identifier.')
+        if not isinstance(fresh,bool):raise ValueError('Invalid fresh-pair option.')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            old=db.execute('SELECT 1 FROM chat_splits WHERE course_id=? AND request_id=?',(key,request_id)).fetchone()
+            layout=db.execute('SELECT * FROM course_layouts WHERE course_id=?',(key,)).fetchone()
+            if not old and (fresh or not layout or not layout['split_initialized']):
+                left,right,stamp=identifier(),identifier(),now()
+                for cid,title in [(left,'Chat 1'),(right,'Chat 2')]:
+                    db.execute('INSERT INTO conversations VALUES (?,?,?,?)',(cid,title,stamp,stamp))
+                    db.execute('INSERT INTO course_conversations VALUES (?,?)',(key,cid))
+                db.execute("INSERT OR REPLACE INTO course_layouts VALUES (?,'double',?,?,?,'left',1)",(key,left,left,right))
+            elif not old:
+                db.execute("UPDATE course_layouts SET mode='double' WHERE course_id=?",(key,))
+            db.execute('INSERT OR IGNORE INTO chat_splits VALUES (?,?)',(key,request_id))
+        return self.course(key)
+
+    def delete_course_chat(self,key,chat_id):
+        self.course_conversation(key,chat_id)
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            db.execute('DELETE FROM conversations WHERE id=?',(chat_id,))
+            layout=dict(db.execute('SELECT * FROM course_layouts WHERE course_id=?',(key,)).fetchone())
+            ids=[r[0] for r in db.execute('SELECT c.id FROM conversations c JOIN course_conversations cc ON cc.conversation_id=c.id WHERE cc.course_id=? ORDER BY c.created_at,c.rowid',(key,))]
+            if not layout['single_id']:layout['single_id']=next(iter(ids),None)
+            if not layout['left_id']:layout['left_id']=next((c for c in ids if c!=layout['right_id']),None)
+            if not layout['right_id'] and layout['split_initialized']:layout['right_id']=next((c for c in ids if c!=layout['left_id']),None)
+            if not layout[layout['active_panel']+'_id']:layout['active_panel']='left' if layout['left_id'] else 'right'
+            db.execute('UPDATE course_layouts SET single_id=?,left_id=?,right_id=?,active_panel=? WHERE course_id=?',(layout['single_id'],layout['left_id'],layout['right_id'],layout['active_panel'],key))
+        return self.course(key)
 
     def course_materials(self, key):
         with self.connect() as db:
@@ -272,8 +378,9 @@ class Store:
                 if len(ids) > 300:
                     raise ValueError('Import fewer files at once (maximum 300).')
                 db.execute('INSERT INTO courses VALUES (?,?,?,?,?,?)', (key, fields['name'], fields['code'], fields['description'], stamp, stamp))
-                db.execute('INSERT INTO conversations VALUES (?,?,?,?)', (conv_id, fields['name'], stamp, stamp))
+                db.execute('INSERT INTO conversations VALUES (?,?,?,?)', (conv_id, 'Original Chat' if old else 'New Chat', stamp, stamp))
                 db.execute('INSERT INTO course_conversations VALUES (?,?)', (key, conv_id))
+                db.execute('INSERT INTO course_layouts(course_id,single_id,left_id) VALUES (?,?,?)',(key,conv_id,conv_id))
                 mapping = {}
                 for mid in ids:
                     if not re.fullmatch(r'[a-f0-9]{32}', mid):
@@ -308,7 +415,6 @@ class Store:
         with self.connect() as db:
             db.execute('UPDATE courses SET name=?,code=?,description=?,updated_at=? WHERE id=?',
                        (fields['name'], fields['code'], fields['description'], now(), key))
-            db.execute('UPDATE conversations SET title=? WHERE id=?', (fields['name'], existing['conversation']['id']))
         return self.course(key)
 
     def add_course_material(self, key, material_id):
@@ -340,7 +446,7 @@ class Store:
                 if path.exists():
                     target = trash / m['id']; path.replace(target); moved.append((path, target))
             with self.connect() as db:
-                db.execute('DELETE FROM conversations WHERE id=?', (course['conversation']['id'],))
+                db.executemany('DELETE FROM conversations WHERE id=?', [(c['id'],) for c in course['conversations']])
                 db.executemany('DELETE FROM materials WHERE id=?', [(m['id'],) for m in course['materials']])
                 db.execute('DELETE FROM courses WHERE id=?', (key,))
         except Exception:
