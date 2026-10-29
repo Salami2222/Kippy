@@ -124,3 +124,13 @@ See [conversion verification](docs/verification.md) for actual test counts, live
 ### Course database upgrade
 
 Startup automatically upgrades the former one-to-one course/chat link to one-to-many in a transaction. Existing chat IDs, messages, courses and document links are preserved; each original course chat is named **Original Chat** once. Layout and request-idempotency tables are added without copying course documents. Reload already-open browser tabs after deployment: chat requests now require an explicit conversation ID. No manual SQL, new dependencies, Windows task changes, model changes or storage relocation are required. See [migration and rollback notes](docs/course-migration.md).
+
+### Deleting saved studies
+
+Each saved conversation has a compact ⋯ menu with **Delete Conversation**; the panel's existing delete control opens the same named confirmation. Confirming removes only that chat's messages, turns, selections and cached drafts, never the shared course materials. Cancel makes no deletion request.
+
+**Delete Course** first lists everything being removed. Choose **Continue to Delete**, then type the exact, case-sensitive course name in a separate final dialog. The red **Delete Course** button stays disabled until it matches; Cancel or Escape at either step exits the entire flow. The backend also requires `confirm_course_id` and `confirm_course_name` matching the current course. Older browser tabs must reload before deleting courses. Success appears only after the server confirms deletion.
+
+Course deletion cascades through every owned chat, message, turn, layout and retrieval record. Existing transactional file quarantine restores files if deletion fails and recovers interrupted cleanup at startup. Other courses and independently copied legacy materials remain intact. Kippy stores no separate AI summaries or external vector index; prompt context comes from the retained messages and course chunks. Deletion clears active in-browser caches and saved selections in the initiating tab. Already-open tabs cannot erase text already displayed elsewhere; refresh them after deletion.
+
+Kippy remains a single-user local application behind the existing private Tailscale access. It has no account-level ownership/authentication system and cannot claim multi-user authorization. Scoped routes reject conversations/files belonging to another course; write requests retain the existing origin and custom-header protections.

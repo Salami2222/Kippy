@@ -228,10 +228,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self.reply(200,{'deleted':True,'course':course})
                 return self.reply(200,self.app.store.rename_course_chat(course_id,chat_id,data.get('name')))
             if method == 'DELETE':
-                if data.get('confirm_course_id') != course_id:
-                    raise ValueError('Confirm deletion of this course, its conversation, and all its materials.')
+                course = self.app.store.course(course_id)
+                if data.get('confirm_course_id') != course_id or data.get('confirm_course_name') != course['name']:
+                    raise ValueError('Confirm deletion with this course ID and its exact current name.')
                 self.app.store.delete_course(course_id)
-                return self.reply(200, {'deleted': True})
+                return self.reply(200, {'deleted': True, 'deleted_conversation_ids': [c['id'] for c in course['conversations']]})
             if route == '/api/courses':
                 return self.reply(201, self.app.store.create_course(data))
             if course_path and len(parts)==4 and parts[3]=='conversations':

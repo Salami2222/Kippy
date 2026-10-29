@@ -110,6 +110,22 @@ class SavedChatTests(unittest.TestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM course_conversations').fetchone()[0],1);self.assertEqual(db.execute('SELECT title FROM conversations').fetchone()[0],'New Chat')
             db.execute('DROP TRIGGER prevent_rename')
         self.assertEqual(Store(self.temp.name).course(c['id'])['conversation']['title'],'Original Chat')
+    def test_course_deletion_cleans_all_chat_state_and_retains_other_course(self):
+        c=self.course;split=self.store.split_course(c['id'],'a'*32);made=self.store.create_course_chat(c['id'],'Extra','b'*32)
+        for chat in self.store.course(c['id'])['conversations']:
+            self.store.begin_turn(chat['id'],'c'*32,'Private context');self.store.finish_turn(chat['id'],'c'*32,'Private answer',[])
+        material=upload(self.store,'private.txt',b'Private source',100,c['id'])
+        other=self.store.create_course({'name':'Chemistry'});shared=upload(self.store,'keep.txt',b'Keep source',100,other['id'])
+        self.store.delete_course(c['id']);restored=Store(self.temp.name)
+        with restored.connect() as db:
+            for table in ['course_layouts','chat_splits','chat_creations','course_conversations','course_materials','legacy_imports']:
+                self.assertEqual(db.execute('SELECT count(*) FROM '+table+' WHERE course_id=?',(c['id'],)).fetchone()[0],0)
+            for table in ['messages','turns','selections']:
+                self.assertEqual(db.execute('SELECT count(*) FROM '+table).fetchone()[0],0)
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+        self.assertEqual([x['id'] for x in restored.conversations()],[other['conversation']['id']])
+        self.assertFalse((restored.uploads/material['id']).exists());self.assertEqual((restored.uploads/shared['id']).read_bytes(),b'Keep source')
+
     def test_two_requests_queue_one_model_and_duplicate_does_not_append_again(self):
         c=self.course;a=c['conversation']['id'];b=self.store.create_course_chat(c['id'],'Second')['id'];entered=threading.Event();release=threading.Event()
         class Slow(FakeClient):

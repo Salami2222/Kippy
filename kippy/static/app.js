@@ -32,7 +32,7 @@
   if (!root.document) return;
 
   const $ = id => document.getElementById(id);
-  const state = {courses: [], course: null, legacy: {conversations: [], materials: []}, busy: false, pending: new Map(), maxBytes: 25*1048576, collapsed: false, editing: false, menuId: null, deleteTarget: null, chats:new Map(), turns:new Map(), errors:new Map(), drafts:new Map(), scrolls:new Map(), activePanel:'left', chatEditing:null, deleteChatTarget:null, retries:new Map()};
+  const state = {courses: [], course: null, legacy: {conversations: [], materials: []}, busy: false, pending: new Map(), maxBytes: 25*1048576, collapsed: false, editing: false, menuId: null, deleteTarget: null, deleteStage:null, chats:new Map(), turns:new Map(), errors:new Map(), drafts:new Map(), scrolls:new Map(), activePanel:'left', chatEditing:null, deleteChatTarget:null, retries:new Map()};
   let dragDepth = 0;
   try{state.drafts=new Map(Object.entries(JSON.parse(sessionStorage.getItem('kippy.drafts')||'{}')));}catch{/* Optional draft persistence. */}
   const sides=['left','right'];
@@ -64,7 +64,8 @@
   function controls() {
     const locked=working();
     for(const id of ['add-course','add-first-course','edit-course','save-course','delete-course','upload-materials','upload-empty','recover-studies','single-mode','double-mode','new-double-chat','save-chat'])$(id).disabled=locked;
-    for(const id of ['confirm-delete-course','cancel-delete-course','confirm-delete-chat','cancel-delete-chat'])$(id).disabled=state.busy;
+    for(const id of ['cancel-delete-course','continue-delete-course','cancel-final-delete-course','delete-course-name','confirm-delete-chat','cancel-delete-chat'])$(id).disabled=state.busy;
+    $('confirm-delete-course').disabled=state.busy||state.deleteStage!=='final'||$('delete-course-name').value!==state.deleteTarget?.name;
     for(const side of sides){const id=chatId(side);for(const chip of view('empty-course',side).querySelectorAll('[data-prompt]'))chip.disabled=locked||!id;for(const name of ['send','message'])view(name,side).disabled=state.busy||!id||state.turns.has(id);for(const name of ['chat-selector','new-chat','rename-chat','delete-chat','attach','upload-empty'])view(name,side).disabled=locked||(!id&&name!=='new-chat'&&name!=='chat-selector');}
     renderCourses();
   }
@@ -85,7 +86,7 @@
       row.addEventListener('focusout',()=>queueMicrotask(()=>{if(state.menuId===course.id&&!row.contains(document.activeElement))closeCourseMenu();}));
       row.append(open,toggle,menu);$('courses').append(row);
       if(course.id===state.course?.id){const list=element('div','saved-chats');list.id='saved-chats';list.append(element('h3','','Saved chats'));const add=button('＋ New Chat','sidebar-new-chat',()=>editChat(null,layout().mode==='double'?state.activePanel:'left'));add.disabled=working();list.append(add);
-        for(const chat of state.course.conversations||[]){const pick=button(chat.title,'saved-chat',()=>chooseChat(layout().mode==='double'?state.activePanel:'left',chat.id),`Open chat: ${chat.title}`);pick.disabled=working();if(chat.id===chatId('left')||layout().mode==='double'&&chat.id===chatId('right'))pick.classList.add('active');if(layout().mode==='double'&&(chat.id===chatId('left')||chat.id===chatId('right')))pick.append(element('span','chat-position',chat.id===chatId('left')?'A':'B'));list.append(pick);}$('courses').append(list);}
+        for(const chat of state.course.conversations||[]){const pick=button(chat.title,'saved-chat',()=>chooseChat(layout().mode==='double'?state.activePanel:'left',chat.id),`Open chat: ${chat.title}`);pick.disabled=working();if(chat.id===chatId('left')||layout().mode==='double'&&chat.id===chatId('right'))pick.classList.add('active');if(layout().mode==='double'&&(chat.id===chatId('left')||chat.id===chatId('right')))pick.append(element('span','chat-position',chat.id===chatId('left')?'A':'B'));const row=element('div','saved-chat-row');const menu=element('details','chat-menu');const toggle=element('summary','','⋯');toggle.setAttribute('aria-label',`Conversation actions: ${chat.title}`);const remove=button('Delete Conversation','',()=>requestChatDeletion(chat.id),`Delete conversation: ${chat.title}`);remove.disabled=working();menu.append(toggle,remove);row.append(pick,menu);list.append(row);}$('courses').append(list);}
 
     }
     const pending=state.legacy.conversations.length||state.legacy.materials.some(m=>!m.imported);
@@ -172,25 +173,29 @@
     if(!wasOpen||focus){state.menuId=id;$(`course-menu-${id}`).hidden=false;$(`course-actions-${id}`).setAttribute('aria-expanded','true');$(`course-menu-${id}`).querySelector('button').focus();}
   }
   function requestCourseDeletion(course) {
-    if(working()||!course)return;closeCourseMenu();state.deleteTarget={id:course.id,name:course.name};
-    $('delete-course-title').textContent=`Delete ${course.name}?`;$('delete-course-error').hidden=true;$('delete-course-dialog').showModal();$('cancel-delete-course').focus();
+    if(working()||!course)return;$('deletion-status').hidden=true;closeCourseMenu();state.deleteTarget={id:course.id,name:course.name};state.deleteStage='warning';$('delete-course-name').value='';$('confirm-delete-course').disabled=true;
+    $('delete-course-title').textContent=`Delete ${course.name}?`;$('delete-course-description').textContent=`Are you sure you want to delete '${course.name}'?`;$('delete-course-error').hidden=true;$('delete-course-dialog').showModal();$('cancel-delete-course').focus();
   }
-  function cancelCourseDeletion() {if(state.busy)return;const id=state.deleteTarget?.id;$('delete-course-dialog').close();state.deleteTarget=null;if($('course-dialog').open)$('delete-course').focus();else $(`course-actions-${id}`)?.focus();}
+  function cancelCourseDeletion() {if(state.busy)return;const id=state.deleteTarget?.id;$('delete-course-dialog').close();$('final-delete-course-dialog').close();state.deleteTarget=null;state.deleteStage=null;$('delete-course-name').value='';$('confirm-delete-course').disabled=true;if($('course-dialog').open)$('delete-course').focus();else $(`course-actions-${id}`)?.focus();}
   $('delete-course').addEventListener('click',()=>requestCourseDeletion(state.course));
-  $('cancel-delete-course').addEventListener('click',cancelCourseDeletion);
+  $('cancel-delete-course').addEventListener('click',cancelCourseDeletion);$('cancel-final-delete-course').addEventListener('click',cancelCourseDeletion);
+  $('final-delete-course-dialog').addEventListener('cancel',e=>{e.preventDefault();cancelCourseDeletion();});
+  $('continue-delete-course').addEventListener('click',()=>{if(working()||state.deleteStage!=='warning'||!state.deleteTarget||!$('delete-course-dialog').open)return;$('delete-course-dialog').close();state.deleteStage='final';$('final-delete-course-description').textContent=`You are about to permanently delete '${state.deleteTarget.name}' and all of its conversations, uploaded materials, and AI context.`;$('final-delete-course-dialog').showModal();$('delete-course-name').focus();});
+  $('delete-course-name').addEventListener('input',()=>{$('confirm-delete-course').disabled=state.busy||state.deleteStage!=='final'||$('delete-course-name').value!==state.deleteTarget?.name;});
   $('delete-course-dialog').addEventListener('cancel',e=>{e.preventDefault();cancelCourseDeletion();});
   $('confirm-delete-course').addEventListener('click',async()=>{
-    if(state.busy||!state.deleteTarget)return;const c=state.deleteTarget;const wasActive=state.course?.id===c.id;
+    if(working()||!state.deleteTarget||state.deleteStage!=='final'||!$('final-delete-course-dialog').open||$('delete-course-name').value!==state.deleteTarget.name)return;const c=state.deleteTarget;const wasActive=state.course?.id===c.id;
     busy(true);$('delete-course-error').hidden=true;
     try{
-      await api(`/api/courses/${c.id}`,{method:'DELETE',body:{confirm_course_id:c.id}});
-      state.courses=state.courses.filter(x=>x.id!==c.id);state.deleteTarget=null;$('delete-course-dialog').close();
+      const result=await api(`/api/courses/${c.id}`,{method:'DELETE',body:{confirm_course_id:c.id,confirm_course_name:$('delete-course-name').value}});
+      forgetChats(result.deleted_conversation_ids||[]);try{localStorage.removeItem(`kippy.active.${c.id}`);}catch{}deletionSuccess('Course deleted.');
+      state.courses=state.courses.filter(x=>x.id!==c.id);state.deleteTarget=null;state.deleteStage=null;$('delete-course-name').value='';$('final-delete-course-dialog').close();
       if(wasActive){state.course=null;remember(null);$('message').value='';if($('course-dialog').open)$('course-dialog').close();}
       render();
       if(wasActive&&state.courses.length){state.course=await api(`/api/courses/${state.courses[0].id}`);restorePanel();await loadVisible(true);remember(state.course.id);render();}
       await Promise.all([loadCourses(),loadLegacy()]);
-    }catch(e){if($('delete-course-dialog').open){$('delete-course-error').textContent=e.message;$('delete-course-error').hidden=false;}else notice(e.message);}
-    finally{busy(false);if(!$('delete-course-dialog').open){if(state.course&&document.body.classList.contains('sidebar-visible'))$('courses').querySelector('[aria-current="true"]')?.focus();else if(state.course)$('message').focus();else $('add-course').focus();}}
+    }catch(e){if($('final-delete-course-dialog').open){$('delete-course-error').textContent=e.message;$('delete-course-error').hidden=false;}else notice(e.message);}
+    finally{busy(false);if(!$('final-delete-course-dialog').open){if(state.course&&document.body.classList.contains('sidebar-visible'))$('courses').querySelector('[aria-current="true"]')?.focus();else if(state.course)$('message').focus();else $('add-course').focus();}}
   });
   async function submit(e,side='left') {
     e.preventDefault();const id=chatId(side),courseId=state.course?.id,message=view('message',side).value.trim();if(!message||!id||state.busy||state.turns.has(id))return;
@@ -210,9 +215,12 @@
       if(!edit.id||edit.selectAfterCreate){const data=layout().mode==='double'?{[edit.side+'_id']:chat.id,single_id:chat.id,active_panel:edit.side}:{single_id:chat.id};state.course.workspace=await api(`/api/courses/${state.course.id}/layout`,{method:'POST',body:data});state.activePanel=edit.side;}
       $('chat-dialog').close();await loadVisible(true);render();
     }catch(error){$('chat-error').textContent=error.message;$('chat-error').hidden=false;}finally{busy(false);}});
+  function deletionSuccess(text){$('deletion-status').textContent=text;$('deletion-status').hidden=false;}
+  function forgetChats(ids){for(const id of ids){for(const cache of [state.chats,state.drafts,state.errors,state.retries,state.scrolls,state.turns])cache.delete(id);}try{sessionStorage.setItem('kippy.drafts',JSON.stringify(Object.fromEntries(state.drafts)));}catch{}}
+  function requestChatDeletion(id){if(working()||!id)return;$('deletion-status').hidden=true;const chat=state.course?.conversations.find(c=>c.id===id);if(!chat)return;for(const menu of document.querySelectorAll('.chat-menu'))menu.open=false;state.deleteChatTarget=id;$('delete-chat-title').textContent=`Delete ${chat.title}?`;$('delete-chat-description').textContent=`Are you sure you want to delete '${chat.title}'? This will permanently delete its messages and conversation history. This action cannot be undone.`;$('delete-chat-error').hidden=true;$('delete-chat-dialog').showModal();$('cancel-delete-chat').focus();}
   function cancelChatDelete(){if(state.busy)return;$('delete-chat-dialog').close();state.deleteChatTarget=null;}
   $('cancel-delete-chat').addEventListener('click',cancelChatDelete);$('delete-chat-dialog').addEventListener('cancel',e=>{e.preventDefault();cancelChatDelete();});
-  $('confirm-delete-chat').addEventListener('click',async()=>{if(working()||!state.deleteChatTarget)return;const id=state.deleteChatTarget;busy(true);try{const result=await api(`/api/courses/${state.course.id}/conversations/${id}`,{method:'DELETE',body:{confirm_conversation_id:id}});state.course=result.course;state.chats.delete(id);state.drafts.delete(id);state.errors.delete(id);state.retries.delete(id);try{sessionStorage.setItem('kippy.drafts',JSON.stringify(Object.fromEntries(state.drafts)));}catch{}$('delete-chat-dialog').close();state.deleteChatTarget=null;restorePanel();render();await loadVisible(true);render();}catch(e){if($('delete-chat-dialog').open){$('delete-chat-error').textContent=e.message;$('delete-chat-error').hidden=false;}else notice(e.message);}finally{busy(false);}});
+  $('confirm-delete-chat').addEventListener('click',async()=>{if(working()||!state.deleteChatTarget||!$('delete-chat-dialog').open)return;const id=state.deleteChatTarget;busy(true);try{const result=await api(`/api/courses/${state.course.id}/conversations/${id}`,{method:'DELETE',body:{confirm_conversation_id:id}});state.course=result.course;forgetChats([id]);try{localStorage.removeItem(`kippy.active.${state.course.id}`);}catch{}deletionSuccess('Conversation deleted.');$('delete-chat-dialog').close();state.deleteChatTarget=null;restorePanel();render();await loadVisible(true);render();}catch(e){if($('delete-chat-dialog').open){$('delete-chat-error').textContent=e.message;$('delete-chat-error').hidden=false;}else notice(e.message);}finally{busy(false);}});
   function transfer(courseId,file,onProcessing) {
     return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',`/api/courses/${courseId}/materials?filename=${encodeURIComponent(file.name)}`);xhr.setRequestHeader('X-Kippy-Request','1');xhr.setRequestHeader('Content-Type','application/octet-stream');xhr.timeout=180000;xhr.upload.addEventListener('load',onProcessing);
       xhr.onload=()=>{try{const d=JSON.parse(xhr.responseText);if(xhr.status<200||xhr.status>=300)throw Error(d.error||'Upload failed.');resolve(d);}catch(e){reject(e);}};xhr.onerror=()=>reject(Error('Upload connection lost. Check course Materials before retrying.'));xhr.ontimeout=()=>reject(Error('Processing timed out. Check course Materials before retrying.'));xhr.send(file);});
@@ -229,7 +237,7 @@
   async function connection(){try{const s=await api('/api/ollama/status');$('connection').textContent=s.connected&&s.model_available?'Qwen connected':'Qwen offline';$('connection').title=s.message;$('connection').classList.toggle('ready',s.connected&&s.model_available);}catch{$('connection').textContent='Connection unavailable';$('connection').classList.remove('ready');}}
   for(const side of sides){$('chat-'+side).addEventListener('pointerdown',()=>setActive(side));view('composer',side).addEventListener('submit',e=>submit(e,side));view('message',side).addEventListener('input',()=>{saveDraft(chatId(side),view('message',side).value);resize(side);});view('message',side).addEventListener('focus',()=>setActive(side));view('message',side).addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();view('composer',side).requestSubmit();}});
     view('feed',side).addEventListener('scroll',()=>{const id=chatId(side);if(id)state.scrolls.set(id,view('feed',side).scrollTop);});
-    view('chat-selector',side).addEventListener('change',()=>chooseChat(side,view('chat-selector',side).value));view('new-chat',side).addEventListener('click',()=>editChat(null,side));view('rename-chat',side).addEventListener('click',()=>editChat(chatId(side),side));view('delete-chat',side).addEventListener('click',()=>{if(working()||!chatId(side))return;state.deleteChatTarget=chatId(side);$('delete-chat-title').textContent=`Delete ${state.chats.get(chatId(side)).title}?`;$('delete-chat-error').hidden=true;$('delete-chat-dialog').showModal();$('cancel-delete-chat').focus();});
+    view('chat-selector',side).addEventListener('change',()=>chooseChat(side,view('chat-selector',side).value));view('new-chat',side).addEventListener('click',()=>editChat(null,side));view('rename-chat',side).addEventListener('click',()=>editChat(chatId(side),side));view('delete-chat',side).addEventListener('click',()=>requestChatDeletion(chatId(side)));
     for(const name of ['attach','upload-empty'])view(name,side).addEventListener('click',()=>{if(state.course&&!working())$('file-input').click();});
   }
   $('single-mode').addEventListener('click',()=>{if(layout().mode==='double')changeLayout({mode:'single',single_id:chatId(state.activePanel)||chatId('left')});});
@@ -245,7 +253,7 @@
   for(const chip of document.querySelectorAll('[data-prompt]'))chip.addEventListener('click',()=>{if(state.course&&!working()){const side=chip.closest('.chat-panel').id==='chat-right'?'right':'left';saveDraft(chatId(side),chip.dataset.prompt);view('message',side).value=chip.dataset.prompt;resize(side);view('message',side).focus();}});
   $('notice-close').addEventListener('click',()=>notice(''));$('sidebar-close').addEventListener('click',()=>sidebar(false));$('sidebar-open').addEventListener('click',()=>sidebar(true));$('sidebar-shade').addEventListener('click',()=>sidebar(false));
   document.addEventListener('click',e=>{if(!e.target.closest('.course-row'))closeCourseMenu();});
-  document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(state.menuId){e.preventDefault();closeCourseMenu(true);return;}if(!$('course-dialog').open&&!$('materials-dialog').open&&!$('delete-course-dialog').open&&!$('chat-dialog').open&&!$('delete-chat-dialog').open&&matchMedia('(max-width: 760px)').matches){sidebar(false);$('sidebar-open').focus();}});
+  document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(state.menuId){e.preventDefault();closeCourseMenu(true);return;}if(!$('course-dialog').open&&!$('materials-dialog').open&&!$('delete-course-dialog').open&&!$('chat-dialog').open&&!$('delete-chat-dialog').open&&!$('final-delete-course-dialog').open&&matchMedia('(max-width: 760px)').matches){sidebar(false);$('sidebar-open').focus();}});
   root.addEventListener('resize',()=>{sidebar(matchMedia('(max-width: 760px)').matches?document.body.classList.contains('sidebar-visible'):!state.collapsed);viewport();});root.visualViewport?.addEventListener('resize',viewport);root.visualViewport?.addEventListener('scroll',viewport);
   const drop=$('workspace');drop.addEventListener('dragenter',e=>{if(e.dataTransfer.types.includes('Files')){e.preventDefault();dragDepth++;$('drop-hint').hidden=false;}});drop.addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();});drop.addEventListener('dragleave',()=>{if(--dragDepth<=0){dragDepth=0;$('drop-hint').hidden=true;}});drop.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop-hint').hidden=true;uploadFiles([...e.dataTransfer.files]);});
   async function boot(){

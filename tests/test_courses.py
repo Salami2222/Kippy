@@ -155,7 +155,10 @@ class CourseHTTPTests(unittest.TestCase):
         self.assertEqual(self.request('/api/courses/'+id,{'name':'ODEs'})[1]['name'],'ODEs')
         self.assertEqual(self.request('/api/courses/'+id,{},'DELETE')[0],400)
         self.assertEqual(self.request('/api/courses/'+id,{'confirm_course_id':'f'*32},'DELETE')[0],400)
-        self.assertEqual(self.request('/api/courses/'+id,{'confirm_course_id':id},'DELETE')[0],200)
+        self.assertEqual(self.request('/api/courses/'+id,{'confirm_course_id':id},'DELETE')[0],400)
+        for name in ['Math','odes','ODEs ',None]:
+            self.assertEqual(self.request('/api/courses/'+id,{'confirm_course_id':id,'confirm_course_name':name},'DELETE')[0],400)
+        self.assertEqual(self.request('/api/courses/'+id,{'confirm_course_id':id,'confirm_course_name':'ODEs'},'DELETE')[0],200)
         self.assertEqual(self.request('/api/courses/'+id)[0],404)
     def test_foreign_course_material_deletion_is_rejected_and_global_routes_removed(self):
         a=self.course('Math');b=self.course('Chemistry')

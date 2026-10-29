@@ -44,7 +44,7 @@ async function load({offline=false,mobile=false,initialCourses=[],legacy={conver
       else result=chat;
     }
     else if(course&&options.method==='DELETE'&&parts[4]==='materials'){course.materials.splice(course.materials.findIndex(m=>m.id===parts[5]),1);result={deleted:true};}
-    else if(course&&options.method==='DELETE'){assert.equal(payload.confirm_course_id,course.id);courses.splice(courses.indexOf(course),1);result={deleted:true};}
+    else if(course&&options.method==='DELETE'){assert.equal(payload.confirm_course_id,course.id);assert.equal(payload.confirm_course_name,course.name);courses.splice(courses.indexOf(course),1);result={deleted:true,deleted_conversation_ids:course.conversations.map(c=>c.id)};}
     else if(course&&options.method==='POST'){Object.assign(course,payload);result=course;}
     else if(course)result={...course,conversation:course.conversations.find(c=>c.id===course.workspace.single_id)||course.conversations[0]||null};
     else {status=404;result={error:'Not found'};}
@@ -62,6 +62,8 @@ async function load({offline=false,mobile=false,initialCourses=[],legacy={conver
   const upload=async(name='lecture.pdf')=>{Object.defineProperty(get('file-input'),'files',{value:[new w.File(['Lecture'],name)],configurable:true});get('file-input').dispatchEvent(new w.Event('change'));await settle();};
   return {w,dom,get,courses,requests,uploads,create,upload,finish:async(id)=>{const cid=id||chatResolvers.keys().next().value;chatResolvers.get(cid)();chatResolvers.delete(cid);await settle();}};
 }
+
+function finalCourse(a){a.get('continue-delete-course').click();a.get('delete-course-name').value=a.get('delete-course-title').textContent.slice(7,-1);a.get('delete-course-name').dispatchEvent(new a.w.Event('input'));}
 
 test('fresh workspace has no courses or conversations and no global chat/library controls',async()=>{
   const a=await load();assert.equal(a.courses.length,0);assert.equal(a.get('empty-global').hidden,false);assert.equal(a.get('composer-area').hidden,true);
@@ -81,9 +83,9 @@ test('switching courses and refreshing restore independent history',async()=>{
 test('course deletion dialog requires explicit confirmation and Cancel makes no request',async()=>{
   const a=await load();const c=await a.create();a.get('edit-course').click();a.get('delete-course').click();await settle();
   assert.equal(a.get('delete-course-dialog').open,true);assert.equal(a.get('delete-course-title').textContent,`Delete ${c.name}?`);
-  assert.match(a.get('delete-course-description').textContent,/conversation history, and all uploaded materials/);assert.equal(a.w.document.activeElement,a.get('cancel-delete-course'));
+  assert.match(a.get('delete-course-dialog').textContent,/Every conversation/);assert.equal(a.w.document.activeElement,a.get('cancel-delete-course'));
   a.get('cancel-delete-course').click();await settle();assert.equal(a.courses.length,1);assert.equal(a.requests.filter(r=>r.method==='DELETE').length,0);
-  a.get('delete-course').click();a.get('confirm-delete-course').click();await settle();assert.equal(a.courses.length,0);assert.equal(a.get('empty-global').hidden,false);assert.equal(a.get('delete-course-dialog').open,false);
+  a.get('delete-course').click();finalCourse(a);a.get('confirm-delete-course').click();await settle();assert.equal(a.courses.length,0);assert.equal(a.get('empty-global').hidden,false);assert.equal(a.get('delete-course-dialog').open,false);
   const r=a.requests.find(r=>r.method==='DELETE');assert.equal(JSON.parse(r.body).confirm_course_id,c.id);assert.equal(a.w.localStorage.getItem('kippy.course'),null);a.dom.window.close();
 });
 test('sidebar menu deletes an inactive course without changing active history or draft',async()=>{
@@ -91,11 +93,11 @@ test('sidebar menu deletes an inactive course without changing active history or
   const history=chem.conversation.id;a.get('message').value='Unsent chemistry question';a.get('message').dispatchEvent(new a.w.Event('input'));a.get('sidebar-open').click();
   const toggle=a.get(`course-actions-${math.id}`);toggle.click();assert.equal(toggle.getAttribute('aria-expanded'),'true');
   const menu=a.get(`course-menu-${math.id}`);menu.querySelector('button').click();assert.equal(a.get('delete-course-title').textContent,'Delete Math?');
-  a.get('confirm-delete-course').click();await settle();assert.equal(a.courses.length,1);assert.equal(a.courses[0].id,chem.id);assert.equal(chem.conversation.id,history);assert.equal(chem.materials.length,1);
+  finalCourse(a);a.get('confirm-delete-course').click();await settle();assert.equal(a.courses.length,1);assert.equal(a.courses[0].id,chem.id);assert.equal(chem.conversation.id,history);assert.equal(chem.materials.length,1);
   assert.equal(a.get('course-title').textContent,'Chemistry');assert.equal(a.get('message').value,'Unsent chemistry question');assert.equal(a.w.localStorage.getItem('kippy.course'),chem.id);a.dom.window.close();
 });
 test('deleting selected course selects a surviving course and persists that selection',async()=>{
-  const a=await load();const math=await a.create('Math'),chem=await a.create('Chemistry');a.get(`course-actions-${chem.id}`).click();a.get(`course-menu-${chem.id}`).querySelector('button').click();a.get('confirm-delete-course').click();await settle();
+  const a=await load();const math=await a.create('Math'),chem=await a.create('Chemistry');a.get(`course-actions-${chem.id}`).click();a.get(`course-menu-${chem.id}`).querySelector('button').click();finalCourse(a);a.get('confirm-delete-course').click();await settle();
   assert.equal(a.get('course-title').textContent,'Math');assert.equal(a.w.localStorage.getItem('kippy.course'),math.id);const saved=structuredClone(a.courses);a.dom.window.close();
   const b=await load({initialCourses:saved,selectedId:math.id});assert.equal(b.get('course-title').textContent,'Math');assert.equal(b.w.document.querySelectorAll('.course-entry').length,1);b.dom.window.close();
 });
@@ -108,13 +110,13 @@ test('course menus close on Escape and outside click; deletion Escape cancels sa
 });
 test('failed deletion keeps the course and offers a visible retry error',async()=>{
   const a=await load();const c=await a.create('Math');const transport=a.w.fetch;a.w.fetch=async(url,options)=>{if(options?.method==='DELETE')throw Error('Deletion unavailable');return transport(url,options);};
-  a.get(`course-actions-${c.id}`).click();a.get(`course-menu-${c.id}`).querySelector('button').click();a.get('confirm-delete-course').click();await settle();
-  assert.equal(a.courses.length,1);assert.equal(a.get('delete-course-dialog').open,true);assert.match(a.get('delete-course-error').textContent,/Deletion unavailable/);assert.equal(a.get('confirm-delete-course').disabled,false);assert.equal(a.get('course-title').textContent,'Math');a.dom.window.close();
+  a.get(`course-actions-${c.id}`).click();a.get(`course-menu-${c.id}`).querySelector('button').click();finalCourse(a);a.get('confirm-delete-course').click();await settle();
+  assert.equal(a.courses.length,1);assert.equal(a.get('final-delete-course-dialog').open,true);assert.match(a.get('delete-course-error').textContent,/Deletion unavailable/);assert.equal(a.get('confirm-delete-course').disabled,false);assert.equal(a.get('course-title').textContent,'Math');a.dom.window.close();
 });
 test('pending deletion prevents duplicate submissions and cancellation',async()=>{
   const a=await load();const c=await a.create('Math');const transport=a.w.fetch;let finish,count=0;a.w.fetch=async(url,options)=>{if(options?.method==='DELETE'){count++;await new Promise(resolve=>finish=resolve);}return transport(url,options);};
-  a.get(`course-actions-${c.id}`).click();a.get(`course-menu-${c.id}`).querySelector('button').click();a.get('confirm-delete-course').click();await settle();
-  a.get('confirm-delete-course').click();a.get('cancel-delete-course').click();a.get('delete-course-dialog').dispatchEvent(new a.w.Event('cancel',{cancelable:true}));assert.equal(count,1);assert.equal(a.get('delete-course-dialog').open,true);
+  a.get(`course-actions-${c.id}`).click();a.get(`course-menu-${c.id}`).querySelector('button').click();finalCourse(a);a.get('confirm-delete-course').click();await settle();
+  a.get('confirm-delete-course').click();a.get('cancel-final-delete-course').click();a.get('final-delete-course-dialog').dispatchEvent(new a.w.Event('cancel',{cancelable:true}));assert.equal(count,1);assert.equal(a.get('final-delete-course-dialog').open,true);
   finish();await settle();assert.equal(a.courses.length,0);assert.equal(a.get('delete-course-dialog').open,false);a.dom.window.close();
 });
 test('decorative sidebar copy and its bordered box are removed; turtle remains',async()=>{
@@ -181,7 +183,7 @@ test('successful course creation remains visible if a later list refresh fails',
 });
 test('confirmed deletion does not leave a phantom course after refresh failure',async()=>{
   const a=await load();await a.create('Math');const transport=a.w.fetch;a.w.fetch=async(url,options)=>{if(url==='/api/courses'&&(options?.method||'GET')==='GET')throw Error('Connection lost');return transport(url,options);};
-  a.get('edit-course').click();a.get('delete-course').click();a.get('confirm-delete-course').click();await settle();assert.equal(a.courses.length,0);assert.equal(a.get('course-dialog').open,false);assert.equal(a.get('empty-global').hidden,false);assert.equal(a.w.document.querySelectorAll('.course-entry').length,0);assert.match(a.get('notice-text').textContent,/Connection lost/);a.dom.window.close();
+  a.get('edit-course').click();a.get('delete-course').click();finalCourse(a);a.get('confirm-delete-course').click();await settle();assert.equal(a.courses.length,0);assert.equal(a.get('course-dialog').open,false);assert.equal(a.get('empty-global').hidden,false);assert.equal(a.w.document.querySelectorAll('.course-entry').length,0);assert.match(a.get('notice-text').textContent,/Connection lost/);a.dom.window.close();
 });
 
 async function newSavedChat(a,name,side='left'){
@@ -243,4 +245,24 @@ test('confirmed chat creation is not duplicated after a follow-up read failure',
   a.w.fetch=async(url,opt)=>{if(fail&&url===`/api/courses/${c.id}`&&(!opt?.method||opt.method==='GET')){fail=false;throw Error('List unavailable');}return transport(url,opt);};
   await newSavedChat(a,'Saved once');assert.equal(c.conversations.length,2);assert.equal(a.get('chat-dialog').open,true);assert.match(a.get('chat-error').textContent,/List unavailable/);
   a.get('chat-form').dispatchEvent(new a.w.Event('submit',{cancelable:true}));await settle();assert.equal(c.conversations.length,2);assert.equal(a.get('chat-selector').value,c.conversations[1].id);assert.equal(a.get('chat-dialog').open,false);a.dom.window.close();
+});
+
+test('course deletion requires separate warning, exact-name verification, and supports cancellation at either step',async()=>{
+ const a=await load();const c=await a.create('Math');
+ const open=()=>{a.get(`course-actions-${c.id}`).click();a.get(`course-menu-${c.id}`).querySelector('button').click();};
+ open();assert.equal(a.get('confirm-delete-course').disabled,true);a.get('confirm-delete-course').dispatchEvent(new a.w.Event('click'));await settle();assert.equal(a.requests.some(r=>r.method==='DELETE'),false);
+ a.get('cancel-delete-course').click();open();a.get('continue-delete-course').click();assert.equal(a.get('delete-course-dialog').open,false);assert.equal(a.get('final-delete-course-dialog').open,true);
+ for(const name of ['math','Math ','','MATH']){a.get('delete-course-name').value=name;a.get('delete-course-name').dispatchEvent(new a.w.Event('input'));assert.equal(a.get('confirm-delete-course').disabled,true);a.get('confirm-delete-course').dispatchEvent(new a.w.Event('click'));}
+ await settle();assert.equal(a.requests.some(r=>r.method==='DELETE'),false);a.get('cancel-final-delete-course').click();assert.equal(a.get('final-delete-course-dialog').open,false);assert.equal(a.get('delete-course-name').value,'');assert.equal(a.courses.length,1);
+ open();finalCourse(a);assert.equal(a.get('confirm-delete-course').disabled,false);a.get('confirm-delete-course').click();await settle();assert.equal(a.courses.length,0);assert.equal(a.get('deletion-status').textContent,'Course deleted.');a.dom.window.close();
+});
+test('every saved conversation offers confirmed deletion, clears its draft and leaves shared files and other chats',async()=>{
+ const a=await load();const c=await a.create('Math');await a.upload('notes.txt');a.get('message').value='Private draft';a.get('message').dispatchEvent(new a.w.Event('input'));const original=c.conversation.id;
+ a.get('double-mode').click();await settle();const remove=()=>a.w.document.querySelector(`[aria-label="Delete conversation: New Chat"]`).click();
+ remove();assert.match(a.get('delete-chat-description').textContent,/New Chat/);a.get('cancel-delete-chat').click();assert.equal(c.conversations.length,3);assert.equal(a.requests.some(r=>r.method==='DELETE'),false);
+ remove();a.get('confirm-delete-chat').click();await settle();assert.equal(c.conversations.length,2);assert.equal(c.materials.length,1);assert.equal(JSON.parse(a.w.sessionStorage.getItem('kippy.drafts'))[original],undefined);assert.equal(a.get('deletion-status').textContent,'Conversation deleted.');
+ const restored=await load({initialCourses:structuredClone(a.courses),selectedId:c.id});assert.equal(restored.courses[0].conversations.some(x=>x.id===original),false);a.dom.window.close();restored.dom.window.close();
+});
+test('conversation deletion failures remain visible and never report success',async()=>{
+ const a=await load();await a.create('Math');const transport=a.w.fetch;a.w.fetch=async(url,options)=>{if(options?.method==='DELETE')throw Error('Cannot delete');return transport(url,options);};a.get('delete-chat').click();a.get('confirm-delete-chat').click();await settle();assert.equal(a.courses[0].conversations.length,1);assert.match(a.get('delete-chat-error').textContent,/Cannot delete/);assert.equal(a.get('deletion-status').hidden,true);a.dom.window.close();
 });
