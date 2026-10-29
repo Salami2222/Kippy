@@ -436,3 +436,29 @@ dialog::backdrop { background: #080D1CC9; }
 .deletion-list { padding-left:22px; line-height:1.6; }
 #delete-course-name { width:100%; margin-top:10px; padding:10px; color:var(--ink); background:#FFF3D8; border:1px solid #BE9759; font:inherit; }
 .deletion-status { margin:0; padding:8px 18px; color:#234E42; background:#E6EACF; border-bottom:1px solid #BE9759; font-size:12px; }
+
+/* Course files: one shared library, with a persistent modal drop target. */
+.materials-drawer { width:min(460px,100%); }
+.materials-drop-zone { padding:18px 12px 12px; border:2px dashed #9D7B45; background:#FFF3D8; text-align:center; transition:background .15s,border-color .15s; }
+.materials-drop-zone .upload-symbol { display:block; color:#20565B; font-size:36px; line-height:1; }
+.materials-drop-zone h3 { margin:10px 0 14px; font:bold 20px/1.3 var(--heading-font); color:#423044; }
+.materials-drawer .materials-drop-zone .library-help { margin:13px 0 0; font-size:11px; line-height:1.6; }
+.materials-drop-zone.drag-over { background:#DCE8D7; border-color:#20565B; box-shadow:inset 0 0 0 3px #B79657; }
+.materials-drop-zone.upload-busy { border-style:solid; }
+.saved-files-heading { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin:20px 0 12px; }
+.saved-files-heading h3 { margin:0; font:bold 20px/1.3 var(--heading-font); }
+#saved-file-count { flex:none; font-size:12px; color:#61534A; }
+.materials-drawer[open] { display:flex; flex-direction:column; }
+.materials-drawer > * { flex-shrink:0; }
+.materials-drawer .material-list { flex:1; min-height:100px; overflow-y:auto; overscroll-behavior:contain; padding:2px 4px 2px 2px; }
+.materials-drawer .upload-activity,.materials-drawer #materials-error { max-height:100px; overflow-y:auto; }
+.material-name,.material-filename { min-width:0; }
+.material-filename { overflow-wrap:anywhere; }
+.material-row[data-status='failed'] { border-color:#873D39; background:#F4DECF; }
+.material-row[data-status='failed'] > .material-detail { color:#782B29; }
+.material-row[data-status='ready'] > .material-detail { color:#245445; }
+.upload-activity { margin:10px 0; font-size:12px; overflow-wrap:anywhere; }
+.upload-feedback { margin:7px 0; }
+.upload-feedback.failed { color:#782B29; }
+.drop-hint { border:4px dashed #F1D48D; background:#122B3EEB; color:#FFF0CD; box-shadow:inset 0 0 0 5px #9D7B45; }
+@media(prefers-reduced-motion:reduce) { .materials-drop-zone { transition:none; } }

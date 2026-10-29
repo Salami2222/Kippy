@@ -55,7 +55,7 @@
     </div>
 </section>
     </div>
-    <div id="drop-hint" class="drop-hint" hidden>Drop materials into this course</div>
+    <div id="drop-hint" class="drop-hint" hidden>⇧ Drop files to add them to this course</div>
   </main>
   <dialog id="course-dialog" class="pixel-panel" aria-labelledby="course-dialog-title">
     <form id="course-form"><div class="dialog-header"><h2 id="course-dialog-title">Add a course</h2><button id="close-course-dialog" type="button" class="icon-button" aria-label="Close course editor">×</button></div>
@@ -83,9 +83,15 @@
   <dialog id="materials-dialog" class="materials-drawer pixel-panel" aria-labelledby="materials-title">
     <div class="dialog-header"><div><p id="materials-course-name" class="eyebrow"></p><h2 id="materials-title">Course materials</h2></div><button id="close-materials" class="icon-button" aria-label="Close materials">×</button></div>
     <p class="dialog-intro">Kippy uses all ready files in this course. Other courses’ documents are never included.</p>
-    <button id="upload-materials" class="primary-action pixel-action">＋ Upload files</button>
-    <p class="library-help">PDF · PPTX · DOCX · TXT · <span id="upload-limit">25 MB</span> per file</p>
-    <p id="materials-error" class="form-error" role="alert" hidden></p><div id="materials" class="material-list"></div>
+    <section id="materials-drop-zone" class="materials-drop-zone" aria-label="Upload course files" aria-describedby="materials-upload-help">
+      <span class="upload-symbol" aria-hidden="true">⇧</span><h3>Drag &amp; drop files here</h3>
+      <button id="upload-materials" class="primary-action pixel-action" type="button">Browse Files</button>
+      <p id="materials-upload-help" class="library-help">PDF · PPTX · DOCX · TXT · <span id="upload-limit">25 MB</span> per file</p>
+    </section>
+    <div id="upload-activity" class="upload-activity" role="status" aria-live="polite" hidden></div>
+    <p id="materials-error" class="form-error" role="alert" hidden></p>
+    <div class="saved-files-heading"><h3 id="saved-files-title">Saved Course Files</h3><span id="saved-file-count">0 files</span></div>
+    <div id="materials" class="material-list" role="region" aria-labelledby="saved-files-title" tabindex="0"></div>
   </dialog>
   <input id="file-input" type="file" accept=".pdf,.pptx,.docx,.txt" multiple hidden>
 </body>

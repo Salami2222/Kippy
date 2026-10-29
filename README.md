@@ -134,3 +134,11 @@ Each saved conversation has a compact ⋯ menu with **Delete Conversation**; the
 Course deletion cascades through every owned chat, message, turn, layout and retrieval record. Existing transactional file quarantine restores files if deletion fails and recovers interrupted cleanup at startup. Other courses and independently copied legacy materials remain intact. Kippy stores no separate AI summaries or external vector index; prompt context comes from the retained messages and course chunks. Deletion clears active in-browser caches and saved selections in the initiating tab. Already-open tabs cannot erase text already displayed elsewhere; refresh them after deletion.
 
 Kippy remains a single-user local application behind the existing private Tailscale access. It has no account-level ownership/authentication system and cannot claim multi-user authorization. Scoped routes reject conversations/files belonging to another course; write requests retain the existing origin and custom-header protections.
+
+### Course Materials uploads
+
+Open **Materials** for the current course. The permanent dashed zone accepts one or multiple PDF, PPTX, DOCX or TXT files; **Browse Files** uses the same upload API and configured size limit. Files can also be dropped onto the main chat workspace. Drawer and workspace drop handlers each consume a drop once, including drops onto nested controls; ordinary text drags remain unchanged.
+
+**Saved Course Files** lists persisted course records with complete wrapping filenames, format badges, Ready/Processing/Failed status, extraction warnings and confirmed removal. Its count includes failed saved records; failed files are excluded from AI retrieval. The list refreshes from the backend when opened, after each upload/removal, when switching courses and after browser reload. Both saved-chat panels share this single course library.
+
+Uploading/processing feedback is separate from the saved list. A connection failure is marked **upload not confirmed**, because the server may have saved the file before the connection was lost. Check the refreshed saved list before manually retrying; Kippy does not automatically retry uploads or deduplicate intentionally separate files by filename. Read failures retain confirmed upload results and do not stop the rest of a multi-file batch.

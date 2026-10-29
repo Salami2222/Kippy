@@ -33,7 +33,7 @@
 
   const $ = id => document.getElementById(id);
   const state = {courses: [], course: null, legacy: {conversations: [], materials: []}, busy: false, pending: new Map(), maxBytes: 25*1048576, collapsed: false, editing: false, menuId: null, deleteTarget: null, deleteStage:null, chats:new Map(), turns:new Map(), errors:new Map(), drafts:new Map(), scrolls:new Map(), activePanel:'left', chatEditing:null, deleteChatTarget:null, retries:new Map()};
-  let dragDepth = 0;
+  const dragDepth = new Map();
   try{state.drafts=new Map(Object.entries(JSON.parse(sessionStorage.getItem('kippy.drafts')||'{}')));}catch{/* Optional draft persistence. */}
   const sides=['left','right'];
   const view=(id,side='left')=>$(id+(side==='right'?'-right':''));
@@ -93,22 +93,30 @@
     $('recover-studies').hidden=!pending;$('recover-studies').disabled=working();
   }
   function renderMaterials() {
-    $('materials').replaceChildren();
-    const materials=[...state.pending.values(),...(state.course?.materials||[])];
-    $('material-count').textContent=String(state.course?.materials.length||0);
-    if(!materials.length)$('materials').append(element('p','list-empty','No materials yet. Upload your first lecture or set of notes.'));
+    $('materials').replaceChildren();$('upload-activity').replaceChildren();
+    const materials=state.course?.materials||[],pending=[...state.pending.values()].filter(f=>f.courseId===state.course?.id);
+    $('material-count').textContent=String(materials.length);$('saved-file-count').textContent=`${materials.length} ${materials.length===1?'file':'files'}`;
+    $('materials-drop-zone').classList.toggle('upload-busy',state.busy&&pending.some(f=>f.status!=='failed'));
+    $('materials-drop-zone').setAttribute('aria-busy',String(pending.some(f=>f.status!=='failed')));
+    $('upload-activity').hidden=!pending.length;
+    for(const file of pending){const row=element('p',`upload-feedback ${file.status}`,`${file.name} — ${file.status==='processing'?'Processing':file.status==='failed'?'Failed (upload not confirmed)':'Uploading'}${file.error?' · '+file.error:''}`);$('upload-activity').append(row);}
+    if(!materials.length)$('materials').append(element('p','list-empty','No files uploaded yet. Drag your lecture notes, slides, or study guides above to get started.'));
     for(const file of materials) {
       const row=element('div','material-row pixel-panel');row.dataset.status=file.status;
       const top=element('div','material-top');const name=element('div','material-name');
-      const type=element('span','file-type',(file.type||file.name.split('.').pop()).toUpperCase());type.setAttribute('aria-hidden','true');name.append(type,element('span','',file.name));top.append(name);
+      const type=element('span','file-type',(file.type||file.name.split('.').pop()).toUpperCase());type.setAttribute('aria-label',`${file.type?.toUpperCase()||'Document'} file`);const filename=element('span','material-filename',file.name);filename.title=file.name;name.append(type,filename);top.append(name);
       if(file.id){const remove=button('×','delete-button',async()=>{
         if(working()||!confirm(`Remove “${file.name}” from this course? Its extracted text and original file will be deleted. Saved responses remain.`))return;
-        busy(true);try{await api(`/api/courses/${state.course.id}/materials/${file.id}`,{method:'DELETE'});await refreshCourse();}catch(e){notice(e.message);}finally{busy(false);}
+        busy(true);try{await api(`/api/courses/${state.course.id}/materials/${file.id}`,{method:'DELETE'});state.course.materials=state.course.materials.filter(f=>f.id!==file.id);renderMaterials();await refreshMaterials();}catch(e){notice(e.message);}finally{busy(false);}
       },`Remove material: ${file.name}`);remove.disabled=working();top.append(remove);}
-      row.append(top,element('p','material-detail',`${file.status}${file.error?' — '+file.error:''}`));
+      const status={uploading:'Uploading',processing:'Processing',ready:'Ready',failed:'Failed'}[file.status]||'Unknown';
+      row.append(top,element('p','material-detail',`${status}${file.error?' — '+file.error:''}`));
       if(file.warning){const d=element('details','material-detail');d.append(element('summary','','Extraction limits'),element('p','',file.warning));row.append(d);}$('materials').append(row);
     }
   }
+  let materialRead=0;
+  async function refreshMaterials(){if(!state.course)return;const id=state.course.id,ticket=++materialRead;const course=await api(`/api/courses/${id}`);if(state.course?.id===id&&ticket===materialRead){state.course.materials=course.materials;renderMaterials();}}
+  async function openMaterials(){if(!state.course)return;$('materials-dialog').showModal();renderMaterials();try{await refreshMaterials();}catch(e){notice(`Could not refresh saved course files: ${e.message}`);}}
   function renderMessages(side='left',bottom=false) {
     const id=chatId(side),messages=state.chats.get(id)?.messages||[],feed=view('feed',side),box=view('messages',side);
     box.replaceChildren();
@@ -228,10 +236,12 @@
   async function uploadFiles(files) {
     if(!state.course){notice('Create or open a course before uploading materials.');return;}if(working()){notice('Please wait for the current response or upload.');return;}
     const id=state.course.id;busy(true);notice('');
+    for(const [token,pending] of state.pending)if(pending.courseId===id&&pending.status==='failed')state.pending.delete(token);
     try{for(const file of files){const error=validateFile(file,state.maxBytes);if(error){notice(`${file.name}: ${error}`);continue;}
-      const token=crypto.randomUUID();state.pending.set(token,{name:file.name,status:'uploading'});renderMaterials();
-      try{const doc=await transfer(id,file,()=>{const pending=state.pending.get(token);if(pending){pending.status='processing';renderMaterials();}});if(doc.status!=='ready')notice(`${doc.name}: ${doc.error}`);}
-      catch(e){notice(`${file.name}: ${e.message}`);}finally{state.pending.delete(token);await refreshCourse();}
+      const token=crypto.randomUUID();state.pending.set(token,{courseId:id,name:file.name,status:'uploading'});renderMaterials();
+      try{const doc=await transfer(id,file,()=>{const pending=state.pending.get(token);if(pending){pending.status='processing';renderMaterials();}});if(state.course?.id===id){const old=state.course.materials.findIndex(f=>f.id===doc.id);if(old<0)state.course.materials.push(doc);else state.course.materials[old]=doc;}if(doc.status!=='ready')notice(`${doc.name}: ${doc.error}`);state.pending.delete(token);}
+      catch(e){const pending=state.pending.get(token);pending.status='failed';pending.error=e.message;notice(`${file.name}: ${e.message}`);}
+      finally{try{await refreshMaterials();}catch(e){notice(`Could not refresh saved course files: ${e.message}`);}renderMaterials();}
     }}catch(e){notice(e.message);}finally{busy(false);$('file-input').value='';}
   }
   async function connection(){try{const s=await api('/api/ollama/status');$('connection').textContent=s.connected&&s.model_available?'Qwen connected':'Qwen offline';$('connection').title=s.message;$('connection').classList.toggle('ready',s.connected&&s.model_available);}catch{$('connection').textContent='Connection unavailable';$('connection').classList.remove('ready');}}
@@ -247,7 +257,7 @@
   for(const id of ['add-course','add-first-course'])$(id).addEventListener('click',()=>editCourse());
   $('recover-studies').addEventListener('click',()=>editCourse(false,true));$('edit-course').addEventListener('click',()=>editCourse(true));
   $('close-course-dialog').addEventListener('click',()=>{if(!state.busy)$('course-dialog').close();});$('course-dialog').addEventListener('cancel',e=>{if(state.busy)e.preventDefault();});
-  $('show-materials').addEventListener('click',()=>{if(state.course)$('materials-dialog').showModal();});$('close-materials').addEventListener('click',()=>$('materials-dialog').close());
+  $('show-materials').addEventListener('click',openMaterials);$('close-materials').addEventListener('click',()=>$('materials-dialog').close());
   for(const id of ['upload-materials'])$(id).addEventListener('click',()=>{if(state.course&&!working())$('file-input').click();});
   $('file-input').addEventListener('change',()=>uploadFiles([...$('file-input').files]));
   for(const chip of document.querySelectorAll('[data-prompt]'))chip.addEventListener('click',()=>{if(state.course&&!working()){const side=chip.closest('.chat-panel').id==='chat-right'?'right':'left';saveDraft(chatId(side),chip.dataset.prompt);view('message',side).value=chip.dataset.prompt;resize(side);view('message',side).focus();}});
@@ -255,7 +265,19 @@
   document.addEventListener('click',e=>{if(!e.target.closest('.course-row'))closeCourseMenu();});
   document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(state.menuId){e.preventDefault();closeCourseMenu(true);return;}if(!$('course-dialog').open&&!$('materials-dialog').open&&!$('delete-course-dialog').open&&!$('chat-dialog').open&&!$('delete-chat-dialog').open&&!$('final-delete-course-dialog').open&&matchMedia('(max-width: 760px)').matches){sidebar(false);$('sidebar-open').focus();}});
   root.addEventListener('resize',()=>{sidebar(matchMedia('(max-width: 760px)').matches?document.body.classList.contains('sidebar-visible'):!state.collapsed);viewport();});root.visualViewport?.addEventListener('resize',viewport);root.visualViewport?.addEventListener('scroll',viewport);
-  const drop=$('workspace');drop.addEventListener('dragenter',e=>{if(e.dataTransfer.types.includes('Files')){e.preventDefault();dragDepth++;$('drop-hint').hidden=false;}});drop.addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();});drop.addEventListener('dragleave',()=>{if(--dragDepth<=0){dragDepth=0;$('drop-hint').hidden=true;}});drop.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop-hint').hidden=true;uploadFiles([...e.dataTransfer.files]);});
+  function fileDrag(e){return !!e.dataTransfer&&(Array.from(e.dataTransfer.types||[]).includes('Files')||e.dataTransfer.files?.length>0);}
+  function clearDrop(){dragDepth.clear();$('drop-hint').hidden=true;$('materials-drop-zone').classList.remove('drag-over');}
+  function installDrop(host,isDrawer=false){
+    const highlight=active=>{if(isDrawer)$('materials-drop-zone').classList.toggle('drag-over',active);else $('drop-hint').hidden=!active;};
+    host.addEventListener('dragenter',e=>{if(!fileDrag(e))return;e.preventDefault();e.stopPropagation();dragDepth.set(host,(dragDepth.get(host)||0)+1);highlight(true);});
+    host.addEventListener('dragover',e=>{if(!fileDrag(e))return;e.preventDefault();e.stopPropagation();if(e.dataTransfer)e.dataTransfer.dropEffect=working()?'none':'copy';highlight(true);});
+    host.addEventListener('dragleave',e=>{if(!dragDepth.has(host))return;e.stopPropagation();const depth=Math.max(0,(dragDepth.get(host)||0)-1);dragDepth.set(host,depth);if(!depth||!host.contains(e.relatedTarget)&&e.relatedTarget){highlight(false);dragDepth.delete(host);}});
+    host.addEventListener('drop',e=>{if(!fileDrag(e))return;e.preventDefault();e.stopPropagation();const files=Array.from(e.dataTransfer.files||[]);clearDrop();if(files.length)uploadFiles(files);});
+  }
+  installDrop($('workspace'));installDrop($('materials-dialog'),true);
+  $('materials-dialog').addEventListener('close',clearDrop);root.addEventListener('dragend',clearDrop);root.addEventListener('blur',clearDrop);
+  // Refuse browser navigation for file drops outside either upload surface; normal text drags remain untouched.
+  for(const type of ['dragover','drop'])document.addEventListener(type,e=>{if(fileDrag(e)){e.preventDefault();if(type==='drop')clearDrop();}});
   async function boot(){
     busy(true);sidebar(!matchMedia('(max-width: 760px)').matches);viewport();
     try{const s=await api('/api/status');state.maxBytes=s.max_upload_bytes;$('upload-limit').textContent=`${Math.round(state.maxBytes/1048576)} MB`;await Promise.all([loadCourses(),loadLegacy()]);let id;try{id=localStorage.getItem('kippy.course');}catch{}if(state.courses.length){const chosen=state.courses.some(c=>c.id===id)?id:state.courses[0].id;state.course=await api(`/api/courses/${chosen}`);restorePanel();await loadVisible();remember(chosen);}render();}

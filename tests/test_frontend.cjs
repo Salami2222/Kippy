@@ -124,7 +124,7 @@ test('decorative sidebar copy and its bordered box are removed; turtle remains',
   assert.equal(a.w.document.querySelector('.sidebar-note'),null);assert.equal(a.w.document.querySelector('.vignette-caption'),null);assert.equal(a.w.document.querySelectorAll('.study-turtle').length,1);a.dom.window.close();
 });
 test('course-scoped upload, materials drawer and removal use existing file transport',async()=>{
-  const a=await load();const c=await a.create();a.get('show-materials').click();assert.equal(a.get('materials-dialog').open,true);await a.upload();assert.match(a.uploads[0].url,new RegExp(`/api/courses/${c.id}/materials`));assert.match(a.get('materials').textContent,/ready/);assert.equal(a.get('material-count').textContent,'1');
+  const a=await load();const c=await a.create();a.get('show-materials').click();assert.equal(a.get('materials-dialog').open,true);await a.upload();assert.match(a.uploads[0].url,new RegExp(`/api/courses/${c.id}/materials`));assert.match(a.get('materials').textContent,/Ready/i);assert.equal(a.get('material-count').textContent,'1');
   a.w.document.querySelector('[aria-label="Remove material: lecture.pdf"]').click();await settle();assert.equal(c.materials.length,0);a.get('close-materials').click();assert.equal(a.get('materials-dialog').open,false);a.dom.window.close();
 });
 test('chat is course-scoped, guarded while busy, and renders Markdown math code sources and copy',async()=>{
@@ -151,7 +151,7 @@ test('Enter sends, Shift+Enter and IME do not submit',async()=>{
 test('upload processing locks course switching and errors stay visible without mixing files',async()=>{
   const a=await load();await a.create('Math');await a.create('Chemistry');let xhr;
   a.w.XMLHttpRequest=class{constructor(){xhr=this;this.upload={addEventListener:(_,cb)=>this.processing=cb};}open(){}setRequestHeader(){}send(){this.processing();}};
-  Object.defineProperty(a.get('file-input'),'files',{value:[new a.w.File(['notes'],'lecture.txt')],configurable:true});a.get('file-input').dispatchEvent(new a.w.Event('change'));await settle();assert.match(a.get('materials').textContent,/processing/);assert.equal(a.w.document.querySelector('[aria-label="Open course: Math"]').disabled,true);
+  Object.defineProperty(a.get('file-input'),'files',{value:[new a.w.File(['notes'],'lecture.txt')],configurable:true});a.get('file-input').dispatchEvent(new a.w.Event('change'));await settle();assert.match(a.get('upload-activity').textContent,/Processing/i);assert.equal(a.w.document.querySelector('[aria-label="Open course: Math"]').disabled,true);
   xhr.onerror();await settle();assert.match(a.get('notice-text').textContent,/connection lost/);assert.equal(a.get('send').disabled,false);a.dom.window.close();
 });
 test('unsupported uploads are refused and uploads without a course do not create one',async()=>{
@@ -265,4 +265,31 @@ test('every saved conversation offers confirmed deletion, clears its draft and l
 });
 test('conversation deletion failures remain visible and never report success',async()=>{
  const a=await load();await a.create('Math');const transport=a.w.fetch;a.w.fetch=async(url,options)=>{if(options?.method==='DELETE')throw Error('Cannot delete');return transport(url,options);};a.get('delete-chat').click();a.get('confirm-delete-chat').click();await settle();assert.equal(a.courses[0].conversations.length,1);assert.match(a.get('delete-chat-error').textContent,/Cannot delete/);assert.equal(a.get('deletion-status').hidden,true);a.dom.window.close();
+});
+
+function fileEvent(a,type,files,target){const e=new a.w.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(e,'dataTransfer',{value:{files,types:['Files'],dropEffect:'none'}});(target||a.get('materials-drop-zone')).dispatchEvent(e);return e;}
+test('materials drawer always exposes upload zone, Browse Files, limit and saved-file empty state',async()=>{
+ const a=await load();await a.create();a.get('show-materials').click();await settle();assert.equal(a.get('materials-drop-zone').hidden,false);assert.match(a.get('materials-drop-zone').textContent,/Drag & drop files here/);assert.equal(a.get('upload-materials').textContent,'Browse Files');assert.match(a.get('materials-upload-help').textContent,/PDF.*PPTX.*DOCX.*TXT.*25 MB/);assert.equal(a.get('saved-file-count').textContent,'0 files');assert.match(a.get('materials').textContent,/No files uploaded yet/);
+ let browsed=0;a.get('file-input').click=()=>browsed++;a.get('upload-materials').click();assert.equal(browsed,1);a.dom.window.close();
+});
+test('drawer nested drop uploads multiple files exactly once and resets highlighting',async()=>{
+ const a=await load();const c=await a.create();a.get('show-materials').click();await settle();const files=[new a.w.File(['A'],'a.txt'),new a.w.File(['B'],'b.txt')];
+ fileEvent(a,'dragenter',files,a.get('upload-materials'));assert.equal(a.get('materials-drop-zone').classList.contains('drag-over'),true);fileEvent(a,'dragleave',files,a.get('upload-materials'));assert.equal(a.get('materials-drop-zone').classList.contains('drag-over'),false);
+ fileEvent(a,'dragenter',files);const e=fileEvent(a,'drop',files,a.get('upload-materials'));await settle();assert.equal(e.defaultPrevented,true);assert.equal(a.uploads.length,2);assert.equal(c.materials.length,2);assert.equal(a.get('saved-file-count').textContent,'2 files');assert.equal(a.get('materials-drop-zone').classList.contains('drag-over'),false);assert.equal(a.get('drop-hint').hidden,true);a.dom.window.close();
+});
+test('workspace nested drop uploads once and ordinary text drag does not show an overlay',async()=>{
+ const a=await load();await a.create();const text=new a.w.Event('dragenter',{bubbles:true,cancelable:true});Object.defineProperty(text,'dataTransfer',{value:{types:['text/plain'],files:[]}});a.get('message').dispatchEvent(text);assert.equal(a.get('drop-hint').hidden,true);assert.equal(text.defaultPrevented,false);
+ const files=[new a.w.File(['Notes'],'notes.txt')];fileEvent(a,'dragenter',files,a.get('message'));assert.equal(a.get('drop-hint').hidden,false);fileEvent(a,'drop',files,a.get('message'));await settle();assert.equal(a.uploads.length,1);assert.equal(a.get('drop-hint').hidden,true);a.dom.window.close();
+});
+test('reopening materials fetches persisted files and course switches never show foreign files',async()=>{
+ const a=await load();const math=await a.create('Math');await a.upload('math.txt');const chem=await a.create('Chemistry');await a.upload('chem.txt');
+ a.get('show-materials').click();await settle();assert.match(a.get('materials').textContent,/chem.txt/);assert.doesNotMatch(a.get('materials').textContent,/math.txt/);a.get('close-materials').click();chem.materials.push({id:'f'.repeat(32),name:'Saved elsewhere.pdf',type:'pdf',status:'failed',error:'No readable text'});a.get('show-materials').click();await settle();assert.equal(a.get('saved-file-count').textContent,'2 files');assert.match(a.get('materials').textContent,/Saved elsewhere.pdf/);assert.equal(a.w.document.querySelector('[data-status="failed"]').textContent.includes('Failed'),true);a.get('close-materials').click();
+ const saved=structuredClone(a.courses);a.dom.window.close();const b=await load({initialCourses:saved,selectedId:math.id});b.get('show-materials').click();await settle();assert.equal(b.get('saved-file-count').textContent,'1 file');assert.match(b.get('materials').textContent,/math.txt/);assert.doesNotMatch(b.get('materials').textContent,/chem.txt|Saved elsewhere/);b.dom.window.close();
+});
+test('invalid drawer drops reject unsupported and oversized files without creating ready records',async()=>{
+ const a=await load();await a.create();const big=new a.w.File(['Big'],'huge.txt');Object.defineProperty(big,'size',{value:26*1048576});fileEvent(a,'drop',[new a.w.File(['X'],'bad.exe'),big]);await settle();assert.equal(a.uploads.length,0);assert.equal(a.get('saved-file-count').textContent,'0 files');assert.match(a.get('materials-error').textContent,/under 25 MB/);a.dom.window.close();
+});
+test('failed upload is visible as unconfirmed, and refresh failure does not discard a confirmed saved file or abort the batch',async()=>{
+ const a=await load();await a.create();a.w.XMLHttpRequest=class{constructor(){this.upload={addEventListener:()=>{}};}open(){}setRequestHeader(){}send(){this.onerror();}};fileEvent(a,'drop',[new a.w.File(['X'],'lost.txt')]);await settle();assert.match(a.get('upload-activity').textContent,/Failed.*not confirmed/);assert.equal(a.get('saved-file-count').textContent,'0 files');assert.equal(a.get('materials-drop-zone').getAttribute('aria-busy'),'false');a.dom.window.close();
+ const b=await load();await b.create();const transport=b.w.fetch;b.w.fetch=async(url,options)=>{if(/api\/courses\/[a-f0-9]+$/.test(url)&&!options.method)throw Error('Read unavailable');if(/api\/courses\/[a-f0-9]+$/.test(url)&&options.method==='GET')throw Error('Read unavailable');return transport(url,options);};fileEvent(b,'drop',[new b.w.File(['A'],'a.txt'),new b.w.File(['B'],'b.txt')]);await settle();assert.equal(b.uploads.length,2);assert.equal(b.get('saved-file-count').textContent,'2 files');assert.match(b.get('materials').textContent,/a.txt/);assert.match(b.get('materials-error').textContent,/refresh saved course files/);b.dom.window.close();
 });
