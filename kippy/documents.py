@@ -1,13 +1,22 @@
 """Bounded local extraction. Artwork and scanned text are never inferred."""
 from __future__ import annotations
 
+import io
 import re
+import stat
+import struct
+import zlib
 import zipfile
 from pathlib import Path
 
 from .storage import identifier, now
 
 SUPPORTED = {'.pdf', '.pptx', '.docx', '.txt'}
+UPLOAD_TYPES = SUPPORTED | {'.zip'}
+MAX_ARCHIVE_FILES = 50
+MAX_ARCHIVE_BYTES = 100 * 1024 * 1024
+MAX_ARCHIVE_ENTRIES = 1000
+MAX_ARCHIVE_RATIO = 1000
 MAX_TEXT = 2_000_000
 MAX_ZIP_BYTES = 200_000_000
 WARNING = 'Text extraction only: images, diagrams, handwriting, and scanned text are not read. Check the original material.'
@@ -98,12 +107,14 @@ def extract(path, extension):
 def upload(store, filename, content, max_bytes, course_id=None):
     name = safe_name(filename)
     extension = Path(name).suffix.lower()
-    if extension not in SUPPORTED:
-        raise ValueError('Supported formats: PDF, PPTX, DOCX, and TXT.')
+    if extension not in UPLOAD_TYPES:
+        raise ValueError('Supported formats: PDF, PPTX, DOCX, TXT, and ZIP.')
     if not content or len(content) > max_bytes:
         raise ValueError('The file is empty or exceeds the upload size limit.')
     if course_id is not None:
         store.course(course_id)
+    if extension == '.zip':
+        return import_archive(store, name, content, max_bytes, course_id)
     key = identifier()
     with store.connect() as db:
         db.execute('INSERT INTO materials (id,name,type,size,status,created_at) VALUES (?,?,?,?,?,?)',
@@ -125,3 +136,92 @@ def upload(store, filename, content, max_bytes, course_id=None):
         with store.connect() as db:
             db.execute("UPDATE materials SET status='failed',error=? WHERE id=?", (message[:400], key))
     return store.material(key)
+
+
+def _archive_directory(content):
+    """Bound the central directory before ZipFile constructs entry objects; no ZIP64/multidisk."""
+    offset = content.rfind(b'PK\x05\x06', max(0, len(content)-65557))
+    if offset < 0 or offset+22 > len(content):
+        raise ValueError('This is not a valid ZIP archive.')
+    _, disk, central_disk, disk_count, count, size, start, comment = struct.unpack_from('<4s4H2LH', content, offset)
+    if offset+22+comment != len(content) or disk or central_disk or disk_count != count:
+        raise ValueError('Malformed or multi-disk ZIP archives are not supported.')
+    if count == 65535 or size == 0xffffffff or start == 0xffffffff or (offset>=20 and content[offset-20:offset-16]==b'PK\x06\x07'):
+        raise ValueError('ZIP64 archives are not supported; export a standard ZIP.')
+    if count > MAX_ARCHIVE_ENTRIES or size > 1024*1024 or start+size != offset:
+        raise ValueError('ZIP directory exceeds the safe limit or is malformed (maximum 1,000 entries).')
+    return count
+
+
+def _archive_path(info):
+    name = info.orig_filename
+    normalized = name.replace('\\','/')
+    parts = normalized.split('/')
+    kind = stat.S_IFMT(info.external_attr >> 16)
+    if (not name or len(name)>1024 or normalized.startswith('/') or ':' in name
+            or '..' in parts or any(ord(c)<32 or ord(c)==127 for c in name)
+            or kind not in (0,stat.S_IFREG,stat.S_IFDIR) or info.external_attr & 0x400):
+        raise ValueError('ZIP contains an unsafe path, symlink, or special file; nothing was imported.')
+    if info.flag_bits & (1 | 64):
+        raise ValueError('Encrypted/password-protected ZIP archives are not supported; nothing was imported.')
+    return normalized
+
+
+def import_archive(store, name, content, max_bytes, course_id):
+    """Preflight every entry, then read bounded bytes one document at a time. Never extract paths."""
+    expected = _archive_directory(content)
+    result = {'kind':'archive','name':name,'materials':[],'imported':[],'failed':[],'skipped':[]}
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            infos = archive.infolist()
+            if len(infos) != expected:
+                raise ValueError('Malformed ZIP directory; nothing was imported.')
+            paths = [(info,_archive_path(info)) for info in infos]
+            if sum(info.file_size for info in infos) > MAX_ARCHIVE_BYTES:
+                raise ValueError('ZIP exceeds 100 MiB total uncompressed content; nothing was imported.')
+            candidates = []
+            # Check bomb/entry constraints even on ignored entries before writing anything.
+            for info,path in paths:
+                if info.file_size > max(1024*1024,info.compress_size*MAX_ARCHIVE_RATIO):
+                    raise ValueError('ZIP compression ratio exceeds the safe extraction limit; nothing was imported.')
+                if info.is_dir() or path.endswith('/'):
+                    continue
+                base = path.rsplit('/',1)[-1]
+                if '__MACOSX' in path.split('/') or base == '.DS_Store' or base.startswith('._'):
+                    continue
+                if Path(base).suffix.lower() not in SUPPORTED:
+                    result['skipped'].append({'name':path,'reason':'Unsupported file type (nested ZIPs are not extracted).'})
+                    continue
+                candidates.append((info,path))
+            if len(candidates)>MAX_ARCHIVE_FILES:
+                raise ValueError('ZIP contains more than 50 supported documents; split it into smaller archives. Nothing was imported.')
+            expanded = 0
+            for info,path in candidates:
+                try:
+                    filename = safe_name(path)
+                    if info.file_size < 1 or info.file_size > max_bytes:
+                        raise ValueError('Document is empty or exceeds the configured per-file upload limit.')
+                    if info.compress_type not in (zipfile.ZIP_STORED,zipfile.ZIP_DEFLATED):
+                        raise ValueError('Use ZIP stored or deflate compression for this entry.')
+                    # Bound reads independently of the directory declarations, and verify CRC by reaching EOF.
+                    with archive.open(info) as stream, io.BytesIO() as buffer:
+                        while True:
+                            chunk = stream.read(min(65536,max_bytes-buffer.tell()+1))
+                            if not chunk:break
+                            expanded += len(chunk)
+                            if buffer.tell()+len(chunk)>max_bytes or expanded>MAX_ARCHIVE_BYTES:
+                                raise ValueError('Expanded document exceeds the safe extraction limit.')
+                            buffer.write(chunk)
+                        if buffer.tell()!=info.file_size:
+                            raise ValueError('ZIP entry size does not match its directory record.')
+                        doc = upload(store,filename,buffer.getvalue(),max_bytes,course_id)
+                    result['materials'].append(doc)
+                    if doc['status']=='ready':result['imported'].append({'name':path,'material_id':doc['id']})
+                    else:result['failed'].append({'name':path,'error':doc['error'],'material_id':doc['id']})
+                except (ValueError,zipfile.BadZipFile,RuntimeError,NotImplementedError,EOFError,zlib.error) as error:
+                    message = str(error) if isinstance(error,ValueError) else 'Malformed or unreadable ZIP entry (data or CRC validation failed).'
+                    result['failed'].append({'name':path,'error':message})
+    except (zipfile.BadZipFile,EOFError,NotImplementedError,RuntimeError,zlib.error) as error:
+        raise ValueError('Malformed or unreadable ZIP archive.') from error
+    result['summary']={key:len(result[key]) for key in ('imported','failed','skipped')}
+    return result

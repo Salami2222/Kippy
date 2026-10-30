@@ -1,9 +1,9 @@
 /* Vanilla JS client. The model is called only by the Python backend. */
 (function (root) {
   'use strict';
-  const supported = /\.(pdf|pptx|docx|txt)$/i;
+  const supported = /\.(pdf|pptx|docx|txt|zip)$/i;
   function validateFile(file, limit) {
-    if (!supported.test(file.name)) return 'Supported formats: PDF, PPTX, DOCX, and TXT.';
+    if (!supported.test(file.name)) return 'Supported formats: PDF, PPTX, DOCX, TXT, and ZIP.';
     if (!file.size || file.size > limit) return `Choose a nonempty file under ${Math.round(limit / 1048576)} MB.`;
     return '';
   }
@@ -32,7 +32,7 @@
   if (!root.document) return;
 
   const $ = id => document.getElementById(id);
-  const state = {courses: [], course: null, legacy: {conversations: [], materials: []}, busy: false, pending: new Map(), maxBytes: 25*1048576, collapsed: false, editing: false, menuId: null, deleteTarget: null, deleteStage:null, chats:new Map(), turns:new Map(), errors:new Map(), drafts:new Map(), scrolls:new Map(), activePanel:'left', chatEditing:null, deleteChatTarget:null, retries:new Map()};
+  const state = {courses: [], course: null, legacy: {conversations: [], materials: []}, busy: false, pending: new Map(), importReports:new Map(), maxBytes: 25*1048576, collapsed: false, editing: false, menuId: null, deleteTarget: null, deleteStage:null, chats:new Map(), turns:new Map(), errors:new Map(), drafts:new Map(), scrolls:new Map(), activePanel:'left', chatEditing:null, deleteChatTarget:null, retries:new Map()};
   const dragDepth = new Map();
   try{state.drafts=new Map(Object.entries(JSON.parse(sessionStorage.getItem('kippy.drafts')||'{}')));}catch{/* Optional draft persistence. */}
   const sides=['left','right'];
@@ -93,13 +93,15 @@
     $('recover-studies').hidden=!pending;$('recover-studies').disabled=working();
   }
   function renderMaterials() {
-    $('materials').replaceChildren();$('upload-activity').replaceChildren();
+    $('materials').replaceChildren();$('upload-activity').replaceChildren();$('archive-reports').replaceChildren();
+    const reports=state.importReports.get(state.course?.id)||[];$('archive-reports').hidden=!reports.length;
+    for(const report of reports){const block=element('div','archive-report');block.append(element('p','',`Successfully imported ${report.summary.imported} ${report.summary.imported===1?'file':'files'} from ${report.name}. ${report.summary.failed} failed; ${report.summary.skipped} skipped.`));if(report.failed.length||report.skipped.length){const details=element('details');details.open=true;const list=element('ul');for(const file of report.failed)list.append(element('li','archive-failed',`${file.name} — Failed: ${file.error}`));for(const file of report.skipped)list.append(element('li','',`${file.name} — Skipped: ${file.reason}`));details.append(element('summary','','Import details'),list);block.append(details);}$('archive-reports').append(block);}
     const materials=state.course?.materials||[],pending=[...state.pending.values()].filter(f=>f.courseId===state.course?.id);
     $('material-count').textContent=String(materials.length);$('saved-file-count').textContent=`${materials.length} ${materials.length===1?'file':'files'}`;
     $('materials-drop-zone').classList.toggle('upload-busy',state.busy&&pending.some(f=>f.status!=='failed'));
     $('materials-drop-zone').setAttribute('aria-busy',String(pending.some(f=>f.status!=='failed')));
     $('upload-activity').hidden=!pending.length;
-    for(const file of pending){const row=element('p',`upload-feedback ${file.status}`,`${file.name} — ${file.status==='processing'?'Processing':file.status==='failed'?'Failed (upload not confirmed)':'Uploading'}${file.error?' · '+file.error:''}`);$('upload-activity').append(row);}
+    for(const file of pending){const row=element('p',`upload-feedback ${file.status}`,`${file.name} — ${file.status==='processing'?(/\.zip$/i.test(file.name)?'Processing ZIP — extracting and importing files…':'Processing'):file.status==='failed'?'Failed (upload not confirmed)':`Uploading${file.percent===undefined?'':` ${file.percent}%`}`}${file.error?' · '+file.error:''}`);$('upload-activity').append(row);}
     if(!materials.length)$('materials').append(element('p','list-empty','No files uploaded yet. Drag your lecture notes, slides, or study guides above to get started.'));
     for(const file of materials) {
       const row=element('div','material-row pixel-panel');row.dataset.status=file.status;
@@ -196,7 +198,7 @@
     busy(true);$('delete-course-error').hidden=true;
     try{
       const result=await api(`/api/courses/${c.id}`,{method:'DELETE',body:{confirm_course_id:c.id,confirm_course_name:$('delete-course-name').value}});
-      forgetChats(result.deleted_conversation_ids||[]);try{localStorage.removeItem(`kippy.active.${c.id}`);}catch{}deletionSuccess('Course deleted.');
+      forgetChats(result.deleted_conversation_ids||[]);state.importReports.delete(c.id);for(const [token,pending] of state.pending)if(pending.courseId===c.id)state.pending.delete(token);try{localStorage.removeItem(`kippy.active.${c.id}`);}catch{}deletionSuccess('Course deleted.');
       state.courses=state.courses.filter(x=>x.id!==c.id);state.deleteTarget=null;state.deleteStage=null;$('delete-course-name').value='';$('final-delete-course-dialog').close();
       if(wasActive){state.course=null;remember(null);$('message').value='';if($('course-dialog').open)$('course-dialog').close();}
       render();
@@ -229,17 +231,17 @@
   function cancelChatDelete(){if(state.busy)return;$('delete-chat-dialog').close();state.deleteChatTarget=null;}
   $('cancel-delete-chat').addEventListener('click',cancelChatDelete);$('delete-chat-dialog').addEventListener('cancel',e=>{e.preventDefault();cancelChatDelete();});
   $('confirm-delete-chat').addEventListener('click',async()=>{if(working()||!state.deleteChatTarget||!$('delete-chat-dialog').open)return;const id=state.deleteChatTarget;busy(true);try{const result=await api(`/api/courses/${state.course.id}/conversations/${id}`,{method:'DELETE',body:{confirm_conversation_id:id}});state.course=result.course;forgetChats([id]);try{localStorage.removeItem(`kippy.active.${state.course.id}`);}catch{}deletionSuccess('Conversation deleted.');$('delete-chat-dialog').close();state.deleteChatTarget=null;restorePanel();render();await loadVisible(true);render();}catch(e){if($('delete-chat-dialog').open){$('delete-chat-error').textContent=e.message;$('delete-chat-error').hidden=false;}else notice(e.message);}finally{busy(false);}});
-  function transfer(courseId,file,onProcessing) {
-    return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',`/api/courses/${courseId}/materials?filename=${encodeURIComponent(file.name)}`);xhr.setRequestHeader('X-Kippy-Request','1');xhr.setRequestHeader('Content-Type','application/octet-stream');xhr.timeout=180000;xhr.upload.addEventListener('load',onProcessing);
+  function transfer(courseId,file,onProcessing,onProgress) {
+    return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',`/api/courses/${courseId}/materials?filename=${encodeURIComponent(file.name)}`);xhr.setRequestHeader('X-Kippy-Request','1');xhr.setRequestHeader('Content-Type','application/octet-stream');xhr.timeout=180000;xhr.upload.addEventListener('progress',e=>{if(e.lengthComputable)onProgress?.(Math.round(e.loaded/e.total*100));});xhr.upload.addEventListener('load',onProcessing);
       xhr.onload=()=>{try{const d=JSON.parse(xhr.responseText);if(xhr.status<200||xhr.status>=300)throw Error(d.error||'Upload failed.');resolve(d);}catch(e){reject(e);}};xhr.onerror=()=>reject(Error('Upload connection lost. Check course Materials before retrying.'));xhr.ontimeout=()=>reject(Error('Processing timed out. Check course Materials before retrying.'));xhr.send(file);});
   }
   async function uploadFiles(files) {
     if(!state.course){notice('Create or open a course before uploading materials.');return;}if(working()){notice('Please wait for the current response or upload.');return;}
-    const id=state.course.id;busy(true);notice('');
+    const id=state.course.id;state.importReports.set(id,[]);busy(true);notice('');
     for(const [token,pending] of state.pending)if(pending.courseId===id&&pending.status==='failed')state.pending.delete(token);
     try{for(const file of files){const error=validateFile(file,state.maxBytes);if(error){notice(`${file.name}: ${error}`);continue;}
       const token=crypto.randomUUID();state.pending.set(token,{courseId:id,name:file.name,status:'uploading'});renderMaterials();
-      try{const doc=await transfer(id,file,()=>{const pending=state.pending.get(token);if(pending){pending.status='processing';renderMaterials();}});if(state.course?.id===id){const old=state.course.materials.findIndex(f=>f.id===doc.id);if(old<0)state.course.materials.push(doc);else state.course.materials[old]=doc;}if(doc.status!=='ready')notice(`${doc.name}: ${doc.error}`);state.pending.delete(token);}
+      try{const doc=await transfer(id,file,()=>{const pending=state.pending.get(token);if(pending){pending.status='processing';renderMaterials();}},percent=>{const pending=state.pending.get(token);if(pending){pending.percent=percent;renderMaterials();}});const materials=doc.kind==='archive'?doc.materials:[doc];if(state.course?.id===id){for(const material of materials){const old=state.course.materials.findIndex(f=>f.id===material.id);if(old<0)state.course.materials.push(material);else state.course.materials[old]=material;}}if(doc.kind==='archive'){state.importReports.get(id).push(doc);}else if(doc.status!=='ready')notice(`${doc.name}: ${doc.error}`);state.pending.delete(token);}
       catch(e){const pending=state.pending.get(token);pending.status='failed';pending.error=e.message;notice(`${file.name}: ${e.message}`);}
       finally{try{await refreshMaterials();}catch(e){notice(`Could not refresh saved course files: ${e.message}`);}renderMaterials();}
     }}catch(e){notice(e.message);}finally{busy(false);$('file-input').value='';}

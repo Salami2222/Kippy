@@ -169,7 +169,7 @@ test('existing studies are offered explicitly; chosen import IDs go only into co
   const body=JSON.parse(a.requests.find(r=>r.url==='/api/courses'&&r.method==='POST').body);assert.equal(body.legacy_conversation_id,'a'.repeat(32));assert.deepEqual(body.legacy_material_ids,['b'.repeat(32)]);a.dom.window.close();
 });
 test('validation rejects unsupported, empty and oversized uploads',()=>{
-  for(const name of ['x.pdf','x.PPTX','x.docx','x.txt'])assert.equal(validateFile({name,size:10},100),'');
+  for(const name of ['x.pdf','x.PPTX','x.docx','x.txt','x.ZIP'])assert.equal(validateFile({name,size:10},100),'');
   for(const f of [{name:'x.exe',size:1},{name:'x.txt',size:0},{name:'x.txt',size:101}])assert.notEqual(validateFile(f,100),'');
 });
 test('request helper retains safe transport and HTTP/JSON errors',async()=>{
@@ -292,4 +292,16 @@ test('invalid drawer drops reject unsupported and oversized files without creati
 test('failed upload is visible as unconfirmed, and refresh failure does not discard a confirmed saved file or abort the batch',async()=>{
  const a=await load();await a.create();a.w.XMLHttpRequest=class{constructor(){this.upload={addEventListener:()=>{}};}open(){}setRequestHeader(){}send(){this.onerror();}};fileEvent(a,'drop',[new a.w.File(['X'],'lost.txt')]);await settle();assert.match(a.get('upload-activity').textContent,/Failed.*not confirmed/);assert.equal(a.get('saved-file-count').textContent,'0 files');assert.equal(a.get('materials-drop-zone').getAttribute('aria-busy'),'false');a.dom.window.close();
  const b=await load();await b.create();const transport=b.w.fetch;b.w.fetch=async(url,options)=>{if(/api\/courses\/[a-f0-9]+$/.test(url)&&!options.method)throw Error('Read unavailable');if(/api\/courses\/[a-f0-9]+$/.test(url)&&options.method==='GET')throw Error('Read unavailable');return transport(url,options);};fileEvent(b,'drop',[new b.w.File(['A'],'a.txt'),new b.w.File(['B'],'b.txt')]);await settle();assert.equal(b.uploads.length,2);assert.equal(b.get('saved-file-count').textContent,'2 files');assert.match(b.get('materials').textContent,/a.txt/);assert.match(b.get('materials-error').textContent,/refresh saved course files/);b.dom.window.close();
+});
+
+test('ZIP drawer drop handles a partial batch response and never lists the ZIP as a material',async()=>{
+ const a=await load();const c=await a.create('Math');a.w.XMLHttpRequest=class{
+ constructor(){this.upload={addEventListener:(type,cb)=>{if(type==='load')this.processing=cb;if(type==='progress')this.progress=cb;}};}open(){}setRequestHeader(){}send(file){this.progress?.({lengthComputable:true,loaded:1,total:2});assert.match(a.get('upload-activity').textContent,/50%/);this.processing();assert.match(a.get('upload-activity').textContent,/Processing ZIP/);
+ const good={id:'1'.repeat(32),name:'Lecture.pdf',type:'pdf',status:'ready'},bad={id:'2'.repeat(32),name:'broken.pdf',type:'pdf',status:'failed',error:'Not readable'};c.materials.push(good,bad);this.status=201;this.responseText=JSON.stringify({kind:'archive',name:file.name,materials:[good,bad],imported:[{name:'Week/Lecture.pdf',material_id:good.id}],failed:[{name:'Week/broken.pdf',error:bad.error}],skipped:[{name:'nested.zip',reason:'Nested archives are not extracted.'}],summary:{imported:1,failed:1,skipped:1}});this.onload();}};
+ fileEvent(a,'drop',[new a.w.File(['zip fixture'],'lectures.zip')]);await settle();assert.equal(a.get('saved-file-count').textContent,'2 files');assert.match(a.get('archive-reports').textContent,/Successfully imported 1 file from lectures.zip/);assert.match(a.get('archive-reports').textContent,/Week\/broken.pdf.*Not readable/);assert.match(a.get('archive-reports').textContent,/nested.zip.*Skipped/);assert.doesNotMatch(a.get('materials').textContent,/lectures.zip/);assert.equal(c.materials.filter(m=>m.status==='ready').length,1);
+ const restored=await load({initialCourses:structuredClone(a.courses),selectedId:c.id});restored.get('show-materials').click();await settle();assert.equal(restored.get('saved-file-count').textContent,'2 files');assert.match(restored.get('materials').textContent,/Lecture.pdf/);a.dom.window.close();restored.dom.window.close();
+});
+test('Browse Files advertises ZIP and rejected archives never create ready rows',async()=>{
+ const a=await load();await a.create();assert.match(a.get('file-input').accept,/\.zip/);assert.match(a.get('materials-upload-help').textContent,/ZIP/);a.w.XMLHttpRequest=class{constructor(){this.upload={addEventListener:()=>{}};}open(){}setRequestHeader(){}send(){this.status=400;this.responseText=JSON.stringify({error:'Encrypted ZIP rejected; nothing imported.'});this.onload();}};
+ fileEvent(a,'drop',[new a.w.File(['encrypted'],'locked.zip')]);await settle();assert.equal(a.get('saved-file-count').textContent,'0 files');assert.match(a.get('materials-error').textContent,/Encrypted ZIP rejected/);assert.match(a.get('upload-activity').textContent,/Failed/);assert.equal(a.get('archive-reports').hidden,true);a.dom.window.close();
 });

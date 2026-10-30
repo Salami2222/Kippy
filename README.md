@@ -36,7 +36,7 @@ Then launch Kippy with `export OLLAMA_BASE_URL=http://127.0.0.1:11445`. This doe
 
 A fresh installation starts with **zero courses**. Click **Add Course**, enter any course name, and optionally add a code and description. Kippy creates an empty **New Chat** for that course and opens it immediately. Each course can hold multiple independently named, persistent conversations sharing one document library. Switch courses in the sidebar; the last active course is remembered by the browser. There is no global New Chat or Library.
 
-- **Materials** in the course header opens its file drawer. Upload PDF, PPTX, DOCX or TXT using the drawer, the composer’s **＋**, or drag/drop. Files automatically belong to the active course, including failed uploads whose errors remain visible. All ready course files are available for retrieval; no global document-selection step is needed.
+- **Materials** in the course header opens its file drawer. Upload PDF, PPTX, DOCX, TXT or ZIP using the drawer, the composer’s **＋**, or drag/drop. Files automatically belong to the active course, including failed uploads whose errors remain visible. All ready course files are available for retrieval; no global document-selection step is needed.
 - Type a question, press Enter to send, or Shift+Enter for a newline. Responses support sanitized Markdown, code blocks and KaTeX math (`$…$`, `$$…$$`, `\\(…\\)`, `\\[…\\]`). **Copy response** copies the original Markdown. Source details show actual context locations.
 - The **⋯ Edit course** control lets you rename a course or change its code/description without renaming or replacing its saved chats. Each sidebar course also has a small **⋯** actions menu with **Delete Course**. A confirmation dialog defaults to **Cancel** and names the target course before deleting all its saved chats, messages, extracted sections and uploaded files. Deleting another course leaves the current conversation and draft intact; deleting the selected course opens another available course or the empty selection screen. The course editor’s delete action uses the same dialog. Removing an individual material also requires confirmation; saved answers remain.
 - Every request identifies both its course and saved chat. Python validates that relationship, reads only that chat’s history, and retrieves only course-owned documents. Foreign conversation IDs are rejected; supplied material IDs cannot broaden retrieval. General academic knowledge is still available and is distinguished from document evidence.
@@ -137,8 +137,26 @@ Kippy remains a single-user local application behind the existing private Tailsc
 
 ### Course Materials uploads
 
-Open **Materials** for the current course. The permanent dashed zone accepts one or multiple PDF, PPTX, DOCX or TXT files; **Browse Files** uses the same upload API and configured size limit. Files can also be dropped onto the main chat workspace. Drawer and workspace drop handlers each consume a drop once, including drops onto nested controls; ordinary text drags remain unchanged.
+Open **Materials** for the current course. The permanent dashed zone accepts one or multiple PDF, PPTX, DOCX, TXT or ZIP files; **Browse Files** uses the same upload API and configured size limit. Files can also be dropped onto the main chat workspace. Drawer and workspace drop handlers each consume a drop once, including drops onto nested controls; ordinary text drags remain unchanged.
 
 **Saved Course Files** lists persisted course records with complete wrapping filenames, format badges, Ready/Processing/Failed status, extraction warnings and confirmed removal. Its count includes failed saved records; failed files are excluded from AI retrieval. The list refreshes from the backend when opened, after each upload/removal, when switching courses and after browser reload. Both saved-chat panels share this single course library.
 
 Uploading/processing feedback is separate from the saved list. A connection failure is marked **upload not confirmed**, because the server may have saved the file before the connection was lost. Check the refreshed saved list before manually retrying; Kippy does not automatically retry uploads or deduplicate intentionally separate files by filename. Read failures retain confirmed upload results and do not stop the rest of a multi-file batch.
+
+### ZIP course imports
+
+ZIP is accepted by the existing Materials drop zone, workspace drop target and Browse Files (including selections mixed with ordinary documents). Each supported PDF, PPTX, DOCX or TXT entry is imported independently through the normal extraction pipeline. Nested folders are supported; filenames and page/slide/section citations remain document-specific. Existing files, even those with the same filename, are never overwritten: every imported document receives its own storage ID. The ZIP itself is not saved as a material.
+
+The response includes `kind: "archive"`, individual `materials`, `imported`, `failed` and `skipped` lists, and summary counts. Ordinary uploads retain their original single-document response. The drawer shows upload percentage, ZIP processing activity and a completion summary with named failure/skip reasons. Successful and extraction-failed records persist in Saved Course Files; only Ready documents enter retrieval. Read/validation failures without a saved record appear only in the report. Both chats share all ready imports from their course.
+
+Limits per archive:
+
+- Compressed upload: existing configured per-file limit (25 MiB by default).
+- At most **50 supported documents**, each also subject to the configured per-file limit.
+- At most **100 MiB total declared uncompressed content**, including unsupported entries, with bounded reads while processing.
+- At most **1,000 directory entries** and a **1 MiB central directory**; archives requiring ZIP64 central directories and multi-disk archives are rejected.
+- Compression-ratio guard: each entry may expand to at most the greater of 1 MiB or 1,000 times its compressed size. Supported documents must use stored or deflate compression.
+
+All paths, encryption flags, entry types and archive-wide limits are checked before importing anything. Absolute/traversal paths, control characters, alternate-stream paths, symlinks and special files are rejected. Nothing is extracted using archive paths: bounded document bytes pass to the existing generated-ID storage code, one file at a time. Malformed central directories and encrypted/password-protected archives are rejected; individual corrupt entries are reported without discarding earlier successful imports. Existing PDF/PPTX/DOCX extraction limits still apply.
+
+Directories, `.DS_Store`, `__MACOSX` and AppleDouble metadata are ignored. Other unsupported files, including nested ZIP archives, are reported as skipped; no recursive archive extraction occurs. Import reports are local to the current browser session and reset on the next upload batch; imported materials persist after refresh/server restart. There is no automatic retry or archive deduplication, and no per-document streaming progress while the server processes a batch. Check the saved list before manually retrying after a lost connection.

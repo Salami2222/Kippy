@@ -86,13 +86,14 @@
     <section id="materials-drop-zone" class="materials-drop-zone" aria-label="Upload course files" aria-describedby="materials-upload-help">
       <span class="upload-symbol" aria-hidden="true">⇧</span><h3>Drag &amp; drop files here</h3>
       <button id="upload-materials" class="primary-action pixel-action" type="button">Browse Files</button>
-      <p id="materials-upload-help" class="library-help">PDF · PPTX · DOCX · TXT · <span id="upload-limit">25 MB</span> per file</p>
+      <p id="materials-upload-help" class="library-help">PDF · PPTX · DOCX · TXT · ZIP · <span id="upload-limit">25 MB</span> per file</p>
     </section>
     <div id="upload-activity" class="upload-activity" role="status" aria-live="polite" hidden></div>
+    <div id="archive-reports" class="archive-reports" role="status" aria-live="polite" hidden></div>
     <p id="materials-error" class="form-error" role="alert" hidden></p>
     <div class="saved-files-heading"><h3 id="saved-files-title">Saved Course Files</h3><span id="saved-file-count">0 files</span></div>
     <div id="materials" class="material-list" role="region" aria-labelledby="saved-files-title" tabindex="0"></div>
   </dialog>
-  <input id="file-input" type="file" accept=".pdf,.pptx,.docx,.txt" multiple hidden>
+  <input id="file-input" type="file" accept=".pdf,.pptx,.docx,.txt,.zip" multiple hidden>
 </body>
 </html>

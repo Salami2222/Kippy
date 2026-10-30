@@ -462,3 +462,9 @@ dialog::backdrop { background: #080D1CC9; }
 .upload-feedback.failed { color:#782B29; }
 .drop-hint { border:4px dashed #F1D48D; background:#122B3EEB; color:#FFF0CD; box-shadow:inset 0 0 0 5px #9D7B45; }
 @media(prefers-reduced-motion:reduce) { .materials-drop-zone { transition:none; } }
+
+.archive-reports { max-height:160px; overflow-y:auto; margin-top:10px; font-size:12px; line-height:1.6; overflow-wrap:anywhere; }
+.archive-report { padding:8px; border:1px solid #9D7B45; background:#FFF3D8; }
+.archive-report p { margin:0 0 5px; }
+.archive-report ul { padding-left:18px; }
+.archive-failed { color:#782B29; }
