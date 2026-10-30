@@ -26,7 +26,7 @@
   --error-surface: #F6DECF;
   --success: #356148;
   --pixel-font: Silkscreen, ui-monospace, monospace;
-  --sidebar-width: clamp(250px,22vw,330px);
+  --sidebar-width: 220px;
   --heading-font: Georgia, 'Times New Roman', serif;
   --panel-shadow: inset 0 0 0 1px var(--frame-highlight), 3px 3px 0 var(--frame);
   font: 14px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -121,7 +121,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .message-body pre code { padding: 0; background: none; }
 .message-body blockquote { border-left: 3px solid var(--accent-secondary); margin: 12px 0; padding-left: 16px; color: var(--muted); }
 .message-body table { display: block; overflow-x: auto; border-collapse: collapse; max-width: 100%; }
-.message-body td, .message-body th { border: 1px solid var(--line); padding: 8px 12px; text-align: left; }
+.message-body td, .message-body th { min-width: 8rem; overflow-wrap: normal; word-break: normal; border: 1px solid var(--line); padding: 8px 12px; text-align: left; }
 .message-body a { color: var(--accent); text-underline-offset: 3px; }
 .katex-display { overflow-x: auto; overflow-y: hidden; padding: 6px 0; }
 .message-body pre, .message-body table, .katex-display { overscroll-behavior-x: contain; }
@@ -149,7 +149,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .sidebar-collapsed .sidebar { margin-left: -266px; }
 ::selection { background: var(--soft); color: var(--ink); }
 @keyframes cursor { to { opacity: .25; } }
-@media (max-width: 760px) {
+@media (max-width: 980px) {
   .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 20; width: 266px; padding-top: 18px; box-shadow: inset -1px 0 var(--frame-highlight); transform: translateX(-100%); transition: transform 160ms; }
   body.sidebar-visible .sidebar { transform: none; box-shadow: inset -1px 0 var(--frame-highlight), 6px 0 var(--frame); }
   .sidebar-collapsed .sidebar { margin-left: 0; }
@@ -243,7 +243,7 @@ dialog::backdrop { background: #0C1715C9; }
   .header-actions .connection { width: 8px; max-width: none; padding: 0; border: 0; background: none; font-size: 0; }
   .header-actions .connection::before { margin: 0; }
   .materials-control { font-size: 10px; padding: 8px; }
-  .chat-header { height: 66px; }
+  .chat-header { height: 56px; }
   .course-heading { max-width: 100%; }
   .header-left { gap: 6px; }
   .course-heading h1 { font-size: 12px; }
@@ -254,36 +254,36 @@ dialog::backdrop { background: #0C1715C9; }
 
 /* The room is scenery only: no text, controls or message content baked into art. */
 body { image-rendering: pixelated; background: #101825 url('/assets/enchanted/study-room.png') center center / cover no-repeat; padding: 0; }
-.sidebar { width: var(--sidebar-width); padding: 14px 16px 10px; background: transparent; border: 0; box-shadow: none; color: #F5E3BD; }
-.brand-row { position: relative; flex: none; min-height: 121px; padding: 9px 10px 17px; align-items: flex-start; background: #101A2DEB; border: 4px solid transparent; border-image: url('/assets/enchanted/gold-frame.svg') 5; }
-.brand { position: relative; display: block; margin: auto; padding-top: 18px; text-align: center; font: bold 46px/1 var(--heading-font); letter-spacing: 1px; color: #F9DFA4; text-shadow: 2px 2px #302519; }
+.sidebar { width: var(--sidebar-width); padding: 8px 6px 6px; background: transparent; border: 0; box-shadow: none; color: #F5E3BD; }
+.brand-row { position: relative; flex: none; min-height: 96px; padding: 7px 6px 10px; align-items: flex-start; background: #101A2DEB; border: 4px solid transparent; border-image: url('/assets/enchanted/gold-frame.svg') 5; }
+.brand { position: relative; display: block; margin: auto; padding-top: 18px; text-align: center; font: bold 36px/1 var(--heading-font); letter-spacing: 1px; color: #F9DFA4; text-shadow: 2px 2px #302519; }
 .brand span:not(.wizard-hat) { font: 9px/1.5 var(--heading-font); letter-spacing: 2.3px; color: #F1E3C8; margin-top: 10px; }
 .wizard-hat { position: absolute; width: 52px; height: 42px; top: -15px; left: 43%; background: url('/assets/enchanted/wizard-hat.svg') center / contain no-repeat; transform: rotate(-9deg); }
 #sidebar-close { position: absolute; right: 1px; top: 2px; width: 26px; height: 28px; color: #E7C98A; }
 .add-course-action { flex: none; margin: 9px 0 0; text-align: center; color: #FFF1CE; background: #184B50; padding: 10px 8px; font: 18px/1.2 var(--heading-font); border: 5px solid transparent; border-image: url('/assets/enchanted/gold-frame.svg') 5; }
 .add-course-action:hover { background: #235F62; color: #FFF3D5; }
-.sidebar-scroll { flex: 0 1 auto; max-height: 42%; min-height: 95px; margin-top: 10px; padding: 11px 6px; background: #10182BEF; border: 5px solid transparent; border-image: url('/assets/enchanted/gold-frame.svg') 5; }
+.sidebar-scroll { flex: 1; max-height: none; min-height: 95px; margin-top: 10px; padding: 11px 6px; background: #10182BEF; border: 5px solid transparent; border-image: url('/assets/enchanted/gold-frame.svg') 5; }
 .sidebar h2 { color: #B5B8BE; font: 10px/1.5 var(--pixel-font); margin: 1px 7px 8px; }
 .sidebar .list-empty { color: #D3CBBA; }
-.course-entry { color: #F0E6D4; padding: 10px 8px; gap: 11px; border: 4px solid transparent; border-bottom-color: #93836635; }
+.course-entry { color: #F0E6D4; padding: 7px 5px; gap: 6px; border: 4px solid transparent; border-bottom-color: #93836635; }
 .course-entry:hover { background: #253341; }
 .course-entry.active { background: #F4E5C2 url('/assets/enchanted/parchment.svg'); color: #29243C; border: 4px solid transparent; border-image: url('/assets/enchanted/gold-frame.svg') 5; box-shadow: 1px 2px #080F1B; }
-.course-entry-name { font: bold 17px/1.3 var(--heading-font); }
+.course-entry-name { font: bold 15px/1.3 var(--heading-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .course-entry-code { color: #C2BCA8; }
 .course-entry.active .course-entry-code { color: #766045; }
-.book-icon { width: 36px; height: 39px; background: #131C30 url('/assets/enchanted/compass.svg') center / 29px no-repeat; border: 2px solid #AA884F; clip-path: none; box-shadow: inset 0 0 0 2px #243348; }
+.book-icon { width: 26px; height: 30px; background: #131C30 url('/assets/enchanted/compass.svg') center / 23px no-repeat; border: 2px solid #AA884F; clip-path: none; box-shadow: inset 0 0 0 2px #243348; }
 .course-row[data-icon='flask'] .book-icon { background-image: url('/assets/enchanted/flask.svg'); }
 .course-row[data-icon='book'] .book-icon { background-image: url('/assets/enchanted/book.svg'); }
 .study-vignette { flex: 1; min-height: 130px; position: relative; pointer-events: none; }
 .study-turtle { position: absolute; width: min(91%,255px); height: calc(100% - 28px); max-height: 180px; object-fit: contain; object-position: bottom center; bottom: 0; left: 3%; image-rendering: pixelated; filter: drop-shadow(2px 4px 1px #0A0C1C80); }
 .recovery-link { color: #EED5A4; background: #121D30EE; margin: 6px 0; flex: none; }
 .recovery-link:hover { background: #253341; }
-.workspace { margin-right: clamp(12px,5vw,76px); border: 6px solid transparent; border-image: url('/assets/enchanted/gold-frame.svg') 5; background: #F4E7C8 url('/assets/enchanted/parchment.svg'); box-shadow: 0 2px 0 3px #221B18, 0 0 0 5px #A8793E, 0 0 24px #050A1480; }
-.chat-header { height: 76px; padding: 0 22px; background: #121E2DEF; border-bottom: 4px solid transparent; border-image: url('/assets/enchanted/gold-frame.svg') 5; box-shadow: none; color: #F5E1B2; gap: 12px; }
+.workspace { margin-right: 0; border: 6px solid transparent; border-image: url('/assets/enchanted/gold-frame.svg') 5; background: #F4E7C8 url('/assets/enchanted/parchment.svg'); box-shadow: 0 2px 0 3px #221B18, 0 0 0 5px #A8793E, 0 0 24px #050A1480; }
+.chat-header { height: 56px; padding: 0 12px; background: #121E2DEF; border-bottom: 4px solid transparent; border-image: url('/assets/enchanted/gold-frame.svg') 5; box-shadow: none; color: #F5E1B2; gap: 12px; }
 .header-left { flex: 1; }
-.header-left::before { content: ''; width: 42px; height: 42px; flex: none; background: url('/assets/enchanted/compass.svg') center / contain no-repeat; }
+.header-left::before { content: ''; width: 32px; height: 32px; flex: none; background: url('/assets/enchanted/compass.svg') center / contain no-repeat; }
 .course-heading { flex: 1; }
-.course-heading h1 { font: bold 25px/1.2 var(--heading-font); color: #F5E1B2; }
+.course-heading h1 { font: bold 22px/1.2 var(--heading-font); color: #F5E1B2; }
 #course-code { color: #D0C6AE; font: 11px/1.6 var(--heading-font); letter-spacing: 2px; margin-top: 5px; }
 .header-actions { gap: 9px; }
 .connection { color: #D9D1BA; background: #0C1524; border-color: #76613F; font-size: 9px; }
@@ -292,10 +292,10 @@ body { image-rendering: pixelated; background: #101825 url('/assets/enchanted/st
 .materials-control:hover { background: #304C50; }
 .chat-header .icon-button:hover, #sidebar-close:hover { background: #32404A; }
 #material-count { color: #EACC8D; }
-.feed { padding: 27px 32px; background: transparent; scrollbar-color: #B89964 #E9D8B5; }
-.messages { max-width: 950px; }
+.feed { padding: 12px 14px; background: transparent; scrollbar-color: #B89964 #E9D8B5; }
+.messages { max-width: none; width: 100%; margin: 0; }
 .message { position: relative; margin-bottom: 25px; }
-.message.assistant { width: fit-content; max-width: min(92%,800px); padding: 15px 20px 10px; border: 1px solid #BD9459; border-radius: 4px 15px 15px 15px; background: #FFF8E54D; box-shadow: inset 0 0 0 3px #FAF0D580, 1px 2px 0 #B4925730; }
+.message.assistant { width: fit-content; max-width: min(100%,1100px); padding: 15px 20px 10px; border: 1px solid #BD9459; border-radius: 4px 15px 15px 15px; background: #FFF8E54D; box-shadow: inset 0 0 0 3px #FAF0D580, 1px 2px 0 #B4925730; }
 .message.assistant::after { content: '✧'; position: absolute; top: -13px; right: 10px; font: 23px var(--heading-font); color: #AB8247; pointer-events: none; }
 .message-label { color: #463348; font: bold 17px/1.3 var(--heading-font); margin-bottom: 10px; }
 .message.user { font: 16px/1.6 Georgia, 'Times New Roman', serif; background: #DCD0EE; border: 1px solid #9C8DB6; border-radius: 12px 4px 12px 12px; box-shadow: inset 0 0 0 2px #F4EBFC66,1px 2px #B2A1C344; color: #352C50; padding: 12px 17px; }
@@ -304,9 +304,9 @@ body { image-rendering: pixelated; background: #101825 url('/assets/enchanted/st
 .message-body code { background: #E9DCC1; }
 .copy-button { font: 11px/1.5 Inter,-apple-system,sans-serif; }
 .thinking { max-width: 950px; }
-.composer-area { max-width: none; padding: 10px 14px max(8px,env(safe-area-inset-bottom)); border-top: 1px solid #C4A16C; background: #F4E7C8 url('/assets/enchanted/parchment.svg'); }
-.composer { display: flex; align-items: center; gap: 12px; padding: 8px 11px; background: #FFF6DEAA; }
-.composer textarea { min-height: 44px; flex: 1; min-width: 0; font-size: 15px; }
+.composer-area { max-width: none; padding: 6px 8px max(6px,env(safe-area-inset-bottom)); border-top: 1px solid #C4A16C; background: #F4E7C8 url('/assets/enchanted/parchment.svg'); }
+.composer { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #FFF6DEAA; }
+.composer textarea { min-height: 38px; flex: 1; min-width: 0; font-size: 15px; }
 .composer-bottom { flex: none; gap: 7px; }
 .composer-hint { display: none; }
 .composer .icon-button { background: transparent; border: 0; color: #463348; }
@@ -335,18 +335,18 @@ dialog::backdrop { background: #080D1CC9; }
 @media(min-width:761px) and (max-width:1100px) { .connection { font-size: 0; padding: 5px; } .connection::before { margin: 0; } .course-heading h1 { font-size: 22px; } }
 @media(max-width:760px) {
   body { padding: 0; }
-  .workspace { margin: 0 6px; border-width: 4px; box-shadow: 0 0 0 2px #A8793E; }
+  .workspace { margin: 0; border-width: 4px; box-shadow: 0 0 0 2px #A8793E; }
   .sidebar { width: 280px; padding: 20px 14px 10px; background: #101929 url('/assets/enchanted/study-room.png') left center / auto 100% no-repeat; }
   .sidebar-scroll { max-height: 45%; }
   .sidebar-collapsed .sidebar { margin-left: 0; }
-  .chat-header { height: 66px; padding: 0 9px; gap: 5px; }
+  .chat-header { height: 56px; padding: 0 9px; gap: 5px; }
   .course-heading h1 { font-size: 19px; }
   #course-code { font-size: 10px; letter-spacing: 1px; margin-top: 3px; }
   .header-actions { gap: 4px; }
   .header-left::before { display: none; }
   .materials-control { padding: 7px 5px; font-size: 12px; }
   #material-count { font-size: 10px; margin-left: 2px; }
-  .feed { padding: 20px 12px; }
+  .feed { padding: 10px 10px; }
   .message.assistant { max-width: 100%; padding: 13px 12px 9px; }
   .message.user { max-width: 94%; padding: 10px 12px; font-size: 16px; }
   .message-body { font-size: 16px; }
@@ -378,22 +378,22 @@ dialog::backdrop { background: #080D1CC9; }
 .delete-action { padding: 10px 14px; background: #873D39; color: #FFF3DB; font: 14px/1.5 var(--heading-font); }
 .delete-action:hover { background: #6E2D2D; }
 /* Independent saved conversations, sharing only course documents. */
-.chat-toolbar { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 5px 12px; border-bottom: 1px solid var(--line); background: #EEDCB7; font-size: 11px; }
+.chat-toolbar { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 3px 8px; border-bottom: 1px solid var(--line); background: #EEDCB7; font-size: 11px; }
 .mode-controls { display: flex; gap: 3px; }
-.mode-controls button,.new-pair,.mobile-chat-tabs button { padding: 6px 9px; border: 1px solid transparent; }
+.mode-controls button,.new-pair,.mobile-chat-tabs button { padding: 4px 8px; border: 1px solid transparent; }
 .mode-controls [aria-pressed='true'],.mobile-chat-tabs [aria-pressed='true'] { background: #20565B; color: #FFF0CD; border-color: #9D7B45; }
 .new-pair { margin-left: auto; color: #355C58; }
 .layout-note { flex: none; font-size: 11px; line-height: 1.5; margin: 0; padding: 5px 14px; color: #355C58; background: #E6E3C9; }
 .chat-deck { display: flex; flex: 1; min-height: 0; min-width: 0; }
 .chat-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
 .chat-deck.double #chat-right { border-left: 2px solid #B99559; }
-.panel-header { display: flex; gap: 3px; align-items: center; padding: 6px 12px; border-bottom: 1px solid #C6A46C; background: #F5E8CACC; flex: none; }
-.panel-header select { flex: 1; min-width: 0; width: 0; padding: 6px 4px; border: 1px solid #C6A46C; background: #FFF3D9; color: #392E40; font: bold 15px Georgia,serif; }
+.panel-header { display: flex; gap: 3px; align-items: center; padding: 4px 8px; border-bottom: 1px solid #C6A46C; background: #F5E8CACC; flex: none; }
+.panel-header select { flex: 1; min-width: 0; width: 0; padding: 4px; border: 1px solid #C6A46C; background: #FFF3D9; color: #392E40; font: bold 15px Georgia,serif; }
 .panel-action { width: 29px; height: 30px; flex: none; color: #625044; font-size: 19px; }
 .chat-panel.targeted .panel-header { box-shadow: inset 0 -2px #B09153; }
 .panel-error { flex: none; padding: 8px 12px; font-size: 12px; line-height: 1.5; color: var(--error); background: var(--error-surface); overflow-wrap: anywhere; }
 .chat-panel .composer-area { align-self: stretch; }
-.chat-deck.double .feed { padding: 20px 16px; }
+.chat-deck.double .feed { padding: 12px; }
 .chat-deck.double .message.assistant { max-width: 100%; }
 .chat-deck.double .message-body { font-size: 16px; }
 .chat-deck.double .composer-area { padding-left: 7px; padding-right: 7px; }
@@ -407,10 +407,11 @@ dialog::backdrop { background: #080D1CC9; }
 .saved-chat.active { color: #FFE2A4; background: #29363D; }
 .saved-chat .chat-position { font: 10px ui-monospace,monospace; color: #97C5C5; margin-left: 6px; }
 .sidebar-new-chat { color: #B9D4C9; padding: 7px 4px; text-align: left; font-size: 12px; }
-.sidebar-scroll { max-height: 60%; }
-.study-vignette { min-height: 150px; }
+.sidebar-scroll { max-height: none; }
+.study-vignette { flex: 0 1 110px; min-height: 70px; }
 #delete-chat-title { color: #423044; font: bold 25px/1.3 var(--heading-font); margin: 0; overflow-wrap: anywhere; }
 @media(max-width:980px) {
+  .sidebar-collapsed .sidebar { margin-left: 0; }
   .chat-deck.double .chat-panel { display: none; }
   .chat-deck.double .chat-panel.targeted { display: flex; }
   .chat-deck.double #chat-right { border-left: 0; }
@@ -422,7 +423,7 @@ dialog::backdrop { background: #080D1CC9; }
   .mode-controls button,.new-pair,.mobile-chat-tabs button { padding: 6px; }
   .panel-header { padding: 5px 7px; }
   .panel-header select { font-size: 16px; }
-  .chat-deck.double .feed { padding: 18px 12px; }
+  .chat-deck.double .feed { padding: 10px; }
   .layout-note { font-size: 10px; padding: 5px 9px; }
 }
 

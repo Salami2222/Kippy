@@ -53,7 +53,7 @@
   function notice(text) {$('notice-text').textContent=text;$('notice').hidden=!text;$('materials-error').textContent=text;$('materials-error').hidden=!text;}
   function remember(id) {try {if(id)localStorage.setItem('kippy.course',id);else localStorage.removeItem('kippy.course');}catch{/* Server storage remains authoritative. */}}
   function sidebar(visible) {
-    const mobile=matchMedia('(max-width: 760px)').matches;
+    const mobile=matchMedia('(max-width: 980px)').matches;
     if(mobile)document.body.classList.toggle('sidebar-visible',visible);
     else {state.collapsed=!visible;document.body.classList.toggle('sidebar-collapsed',!visible);}
     $('sidebar-shade').hidden=!(mobile&&visible);$('sidebar-open').hidden=!mobile&&!state.collapsed;
@@ -153,7 +153,7 @@
   async function refreshCourse() {if(state.course){const id=state.course.id;const course=await api(`/api/courses/${id}`);if(state.course?.id===id){state.course=course;restorePanel();await loadVisible(true);}}render();}
   async function openCourse(id) {
     if(working())return;busy(true);notice('');
-    try{const course=await api(`/api/courses/${id}`);state.course=course;restorePanel();remember(id);$('layout-note').hidden=true;await loadVisible(true);render();sidebar(!matchMedia('(max-width: 760px)').matches);$('message').focus();}
+    try{const course=await api(`/api/courses/${id}`);state.course=course;restorePanel();remember(id);$('layout-note').hidden=true;await loadVisible(true);render();sidebar(!matchMedia('(max-width: 980px)').matches);$('message').focus();}
     catch(e){notice(e.message);}finally{busy(false);}
   }
   function editCourse(editing=false, recover=false) {
@@ -171,7 +171,7 @@
     const data={name:$('course-name').value,code:$('course-code-input').value,description:$('course-description').value};
     if(!state.editing){data.legacy_conversation_id=$('legacy-conversation').value||null;data.legacy_material_ids=[...$('legacy-materials').querySelectorAll('input:checked')].map(n=>n.value);}
     busy(true);$('course-error').hidden=true;
-    try{state.course=await api(state.editing?`/api/courses/${state.course.id}`:'/api/courses',{method:'POST',body:data});remember(state.course.id);const index=state.courses.findIndex(c=>c.id===state.course.id);if(index<0)state.courses.push(state.course);else state.courses[index]=state.course;$('message').value='';$('course-dialog').close();render();sidebar(!matchMedia('(max-width: 760px)').matches);await Promise.all([loadCourses(),loadLegacy()]);}
+    try{state.course=await api(state.editing?`/api/courses/${state.course.id}`:'/api/courses',{method:'POST',body:data});remember(state.course.id);const index=state.courses.findIndex(c=>c.id===state.course.id);if(index<0)state.courses.push(state.course);else state.courses[index]=state.course;$('message').value='';$('course-dialog').close();render();sidebar(!matchMedia('(max-width: 980px)').matches);await Promise.all([loadCourses(),loadLegacy()]);}
     catch(error){if($('course-dialog').open){$('course-error').textContent=error.message;$('course-error').hidden=false;}else notice(error.message);}finally{busy(false);if(!$('course-dialog').open)$('message').focus();}
   });
   function closeCourseMenu(focus=false) {
@@ -265,8 +265,8 @@
   for(const chip of document.querySelectorAll('[data-prompt]'))chip.addEventListener('click',()=>{if(state.course&&!working()){const side=chip.closest('.chat-panel').id==='chat-right'?'right':'left';saveDraft(chatId(side),chip.dataset.prompt);view('message',side).value=chip.dataset.prompt;resize(side);view('message',side).focus();}});
   $('notice-close').addEventListener('click',()=>notice(''));$('sidebar-close').addEventListener('click',()=>sidebar(false));$('sidebar-open').addEventListener('click',()=>sidebar(true));$('sidebar-shade').addEventListener('click',()=>sidebar(false));
   document.addEventListener('click',e=>{if(!e.target.closest('.course-row'))closeCourseMenu();});
-  document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(state.menuId){e.preventDefault();closeCourseMenu(true);return;}if(!$('course-dialog').open&&!$('materials-dialog').open&&!$('delete-course-dialog').open&&!$('chat-dialog').open&&!$('delete-chat-dialog').open&&!$('final-delete-course-dialog').open&&matchMedia('(max-width: 760px)').matches){sidebar(false);$('sidebar-open').focus();}});
-  root.addEventListener('resize',()=>{sidebar(matchMedia('(max-width: 760px)').matches?document.body.classList.contains('sidebar-visible'):!state.collapsed);viewport();});root.visualViewport?.addEventListener('resize',viewport);root.visualViewport?.addEventListener('scroll',viewport);
+  document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(state.menuId){e.preventDefault();closeCourseMenu(true);return;}if(!$('course-dialog').open&&!$('materials-dialog').open&&!$('delete-course-dialog').open&&!$('chat-dialog').open&&!$('delete-chat-dialog').open&&!$('final-delete-course-dialog').open&&matchMedia('(max-width: 980px)').matches){sidebar(false);$('sidebar-open').focus();}});
+  root.addEventListener('resize',()=>{sidebar(matchMedia('(max-width: 980px)').matches?document.body.classList.contains('sidebar-visible'):!state.collapsed);viewport();});root.visualViewport?.addEventListener('resize',viewport);root.visualViewport?.addEventListener('scroll',viewport);
   function fileDrag(e){return !!e.dataTransfer&&(Array.from(e.dataTransfer.types||[]).includes('Files')||e.dataTransfer.files?.length>0);}
   function clearDrop(){dragDepth.clear();$('drop-hint').hidden=true;$('materials-drop-zone').classList.remove('drag-over');}
   function installDrop(host,isDrawer=false){
@@ -281,7 +281,7 @@
   // Refuse browser navigation for file drops outside either upload surface; normal text drags remain untouched.
   for(const type of ['dragover','drop'])document.addEventListener(type,e=>{if(fileDrag(e)){e.preventDefault();if(type==='drop')clearDrop();}});
   async function boot(){
-    busy(true);sidebar(!matchMedia('(max-width: 760px)').matches);viewport();
+    busy(true);sidebar(!matchMedia('(max-width: 980px)').matches);viewport();
     try{const s=await api('/api/status');state.maxBytes=s.max_upload_bytes;$('upload-limit').textContent=`${Math.round(state.maxBytes/1048576)} MB`;await Promise.all([loadCourses(),loadLegacy()]);let id;try{id=localStorage.getItem('kippy.course');}catch{}if(state.courses.length){const chosen=state.courses.some(c=>c.id===id)?id:state.courses[0].id;state.course=await api(`/api/courses/${chosen}`);restorePanel();await loadVisible();remember(chosen);}render();}
     catch(e){notice(`Could not load your saved courses: ${e.message}`);}finally{busy(false);}
     connection();setInterval(()=>{if(!document.hidden)connection();},30000);

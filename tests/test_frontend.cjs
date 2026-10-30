@@ -6,14 +6,15 @@ const {JSDOM} = require('jsdom');
 const {api,validateFile,sendTurn} = require('../kippy/static/app.js');
 const root=path.resolve(__dirname,'../kippy/static');
 const settle=async()=>{for(let i=0;i<8;i++)await new Promise(r=>setImmediate(r));};
-async function load({offline=false,mobile=false,initialCourses=[],legacy={conversations:[],materials:[]},selectedId=null}={}) {
+async function load({offline=false,mobile=false,initialCourses=[],legacy={conversations:[],materials:[]},selectedId=null,viewportHeight=null}={}) {
   const dom=new JSDOM(fs.readFileSync(path.join(root,'index.html'),'utf8'),{url:'http://localhost:8000',runScripts:'outside-only'});
   const w=dom.window,courses=structuredClone(initialCourses),requests=[],uploads=[];let serial=20;const chatResolvers=new Map();
   const freshChat=(name)=>({id:(++serial).toString(16).padStart(32,'b'),title:name,messages:[],material_ids:[]});
   function normalize(c){c.conversations=c.conversations||[c.conversation];c.workspace=c.workspace||{mode:'single',single_id:c.conversation.id,left_id:c.conversation.id,right_id:null,active_panel:'left',split_initialized:0};return c;}
   courses.forEach(normalize);
-  w.matchMedia=q=>({matches:mobile&&q.includes('760px')});w.requestAnimationFrame=cb=>cb();w.confirm=()=>true;
+  w.matchMedia=q=>({matches:mobile&&q.includes('980px')});w.requestAnimationFrame=cb=>cb();w.confirm=()=>true;
   w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+  if(viewportHeight!==null){const viewport=new w.EventTarget();viewport.height=viewportHeight;viewport.offsetTop=0;Object.defineProperty(w,'visualViewport',{value:viewport,configurable:true});}
   w.setInterval=()=>{};w.navigator.clipboard={writeText:async text=>{w.copied=text;}};
   if(selectedId)w.localStorage.setItem('kippy.course',selectedId);
   w.fetch=async(url,options={})=>{
@@ -304,4 +305,11 @@ test('ZIP drawer drop handles a partial batch response and never lists the ZIP a
 test('Browse Files advertises ZIP and rejected archives never create ready rows',async()=>{
  const a=await load();await a.create();assert.match(a.get('file-input').accept,/\.zip/);assert.match(a.get('materials-upload-help').textContent,/ZIP/);a.w.XMLHttpRequest=class{constructor(){this.upload={addEventListener:()=>{}};}open(){}setRequestHeader(){}send(){this.status=400;this.responseText=JSON.stringify({error:'Encrypted ZIP rejected; nothing imported.'});this.onload();}};
  fileEvent(a,'drop',[new a.w.File(['encrypted'],'locked.zip')]);await settle();assert.equal(a.get('saved-file-count').textContent,'0 files');assert.match(a.get('materials-error').textContent,/Encrypted ZIP rejected/);assert.match(a.get('upload-activity').textContent,/Failed/);assert.equal(a.get('archive-reports').hidden,true);a.dom.window.close();
+});
+
+test('visual viewport resizing keeps composer sizing and unsent chat state intact',async()=>{
+ const a=await load({mobile:true,viewportHeight:844});await a.create();typeDraft(a,'Keep this question');const id=a.get('chat-selector').value;
+ assert.equal(a.w.document.documentElement.style.getPropertyValue('--viewport-height'),'844px');a.w.visualViewport.height=420;a.w.visualViewport.offsetTop=12;a.w.visualViewport.dispatchEvent(new a.w.Event('resize'));
+ assert.equal(a.w.document.body.style.height,'420px');assert.equal(a.w.document.body.style.top,'12px');assert.equal(a.w.document.documentElement.style.getPropertyValue('--viewport-height'),'420px');assert.equal(a.get('message').value,'Keep this question');assert.equal(a.get('chat-selector').value,id);
+ a.w.visualViewport.height=844;a.w.visualViewport.offsetTop=0;a.w.visualViewport.dispatchEvent(new a.w.Event('resize'));assert.equal(a.w.document.body.style.height,'844px');assert.equal(a.get('message').value,'Keep this question');a.dom.window.close();
 });
